@@ -17,32 +17,22 @@
 <body>
   <div class="app-container">
     
-    <!-- HEADER -->
+    <!-- HEADER (Sleek, Uncluttered Mobile App Bar) -->
     <header class="app-header">
       <div class="brand-section">
         <div class="brand-icon">🔨</div>
         <div>
           <h1 class="brand-title">श्रम और साइट डायरी</h1>
           <p class="brand-subtitle">
-            <span id="currentDateDisplay">शनिवार, 12 सितम्बर 2026</span> • 
-            <span id="currentTimeDisplay">21:00</span>
+            <span id="currentDateDisplay">शनिवार, 12 सितम्बर 2026</span>
           </p>
         </div>
       </div>
       <div class="header-actions">
-        <button id="btnHeaderAddWorker" class="badge-reminder" style="background: rgba(16, 185, 129, 0.2); border-color: #10b981; color: #34d399; font-weight: 700; cursor: pointer;" title="नया कारीगर जोड़ें">
-          <span>👷 <strong>+ नया कारीगर</strong></span>
+        <button id="btnOpenReminderSettings" class="header-reminder-pill" title="शाम का रिमाइंडर बदलें">
+          <span class="bell-icon">⏰</span> <strong id="headerReminderTime">19:30</strong>
         </button>
-        <a href="https://github.com/zimpadorjekibber/site-diary-app/releases/download/v1.0.0/SiteDiary.apk" class="badge-reminder" style="text-decoration: none; background: rgba(52, 211, 153, 0.15); border-color: #34d399; color: #34d399;" title="Android APK डाउनलोड करें" target="_blank">
-          <span>📲 <strong>APK डाउनलोड</strong></span>
-        </a>
-        <button id="btnInstallApp" class="badge-reminder" style="display: none; background: rgba(245, 158, 11, 0.2); border-color: var(--amber-primary); color: var(--amber-light);" title="मोबाइल ऐप इनस्टॉल करें">
-          <span>📲 <strong>ऐप इनस्टॉल करें</strong></span>
-        </button>
-        <button id="btnOpenReminderSettings" class="badge-reminder" title="शाम का रिमाइंडर बदलें">
-          <span>⏰ शाम <strong id="headerReminderTime">19:30</strong> डायरी</span>
-        </button>
-        <button id="btnOpenSettings" class="btn-icon-header" title="सेटिंग्स व बैकअप">
+        <button id="btnOpenSettings" class="btn-icon-header" title="सेटिंग्स, बैकअप व APK">
           ⚙️
         </button>
       </div>
@@ -58,104 +48,116 @@
         </div>
       </div>
       <button id="btnEveningBannerOpen" class="btn-evening-alert">
-        डायरी पन्ना खोलें →
+        डायरी खोलें →
       </button>
     </div>
 
-    <!-- HERO ACTION CARD (VOICE & FAST LOGGING) -->
-    <section class="hero-action-card">
-      <div class="voice-centerpiece">
-        <div class="mic-button-wrapper">
-          <div class="mic-rings"></div>
-          <button id="btnVoiceMic" class="btn-mic-large" title="बोलकर नोट करें (Voice Note)">
-            🎙️
-          </button>
+    <!-- EXECUTIVE TODAY OVERVIEW CARD (Unified Modern Balance Widget) -->
+    <section class="overview-dashboard-card">
+      <div class="overview-top-row">
+        <div>
+          <div class="overview-eyebrow">आज का साइट खर्च (Total Spent Today)</div>
+          <div class="overview-main-amount" id="overviewTodayTotalDisplay">₹0</div>
         </div>
-        <div id="voiceStatusText" class="voice-status-text">बोलकर नोट करने के लिए माइक दबाएं</div>
-        <p class="voice-hint">
-          बोलें जैसे: <em>"रमेश मिस्त्री को 500 रुपये नकद दिए"</em> या <em>"बढ़ई ग्रुप के लिए 10 किलो आटा और 1 सिलेंडर दिया"</em> या <em>"मोहन हेल्पर का 299 का मोबाइल रिचार्ज किया"</em>
-        </p>
-
-        <!-- Live transcript preview -->
-        <div id="voiceTranscriptBox" class="voice-transcript-box" style="display: none;">
-          आपकी आवाज़ सुनी जा रही है...
+        <div class="overview-status-pill" id="statTodayDiaryStatus">
+          डायरी बाकी ⏳
         </div>
       </div>
 
-      <!-- QUICK ACTION BUTTONS -->
-      <div class="quick-buttons-row">
-        <button id="btnQuickAddWorker" class="btn-quick-action" style="background: rgba(16, 185, 129, 0.22); border-color: #10b981; color: #34d399; font-weight: 700;">
-          <span>👷</span> + नया कारीगर जोड़ें
-        </button>
-        <button id="btnQuickCash" class="btn-quick-action btn-action-cash">
-          <span>💵</span> नकद / पेशगी
-        </button>
-        <button id="btnQuickRation" class="btn-quick-action btn-action-ration">
-          <span>🍚</span> राशन
-        </button>
-        <button id="btnQuickRecharge" class="btn-quick-action btn-action-haziri">
-          <span>📱</span> रिचार्ज
-        </button>
-        <button id="btnQuickHaziri" class="btn-quick-action btn-action-haziri">
-          <span>📋</span> आज की हाजिरी
-        </button>
-        <button id="btnQuickMonthly" class="btn-quick-action" style="background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.4); color: var(--amber-light);">
-          <span>📊</span> पूरे महीने की हाजिरी
-        </button>
-        <button id="btnQuickDiary" class="btn-quick-action btn-action-diary">
-          <span>📖</span> शाम की डायरी
-        </button>
+      <div class="overview-metrics-grid">
+        <div class="overview-metric-item" id="metricCardCash">
+          <div class="metric-icon-bubble bubble-cash">💵</div>
+          <div class="metric-info">
+            <span class="metric-label">नकद पेशगी</span>
+            <strong class="metric-val" id="statTodayCash">₹0</strong>
+          </div>
+        </div>
+
+        <div class="overview-metric-item" id="metricCardRation">
+          <div class="metric-icon-bubble bubble-ration">🛒</div>
+          <div class="metric-info">
+            <span class="metric-label">ग्रुप राशन</span>
+            <strong class="metric-val" id="statTodayRation">₹0</strong>
+          </div>
+        </div>
+
+        <div class="overview-metric-item" id="metricCardHaziri">
+          <div class="metric-icon-bubble bubble-haziri">👷</div>
+          <div class="metric-info">
+            <span class="metric-label">आज हाजिरी</span>
+            <strong class="metric-val" id="statTodayHaziri">0 लोग</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- SLEEK VOICE & QUICK ENTRY BAR -->
+      <div class="voice-search-bar" id="btnVoiceMic" title="बोलकर नोट करने के लिए माइक दबाएं">
+        <div class="voice-mic-badge">
+          <span class="mic-glyph">🎙️</span>
+        </div>
+        <div class="voice-search-content">
+          <span id="voiceStatusText" class="voice-prompt-text">बोलकर तुरंत नोट करें... <em>(उदा. "रमेश मिस्त्री 500 नकद")</em></span>
+        </div>
+        <span class="voice-tap-hint">टैप करें ➔</span>
+      </div>
+      <div id="voiceTranscriptBox" class="voice-transcript-box" style="display: none;">
+        आपकी आवाज़ सुनी जा रही है...
       </div>
     </section>
 
-    <!-- STATS SUMMARY PILLS -->
-    <section class="stats-summary-bar">
-      <div class="stat-pill-card">
-        <div class="stat-icon-wrap stat-icon-cash">₹</div>
-        <div>
-          <div class="stat-pill-label">आज का नकद / पेशगी</div>
-          <div class="stat-pill-val" id="statTodayCash">₹0</div>
+    <!-- 4 PRIMARY QUICK ACTION TILES -->
+    <div class="primary-actions-grid">
+      <button id="btnQuickAddWorker" class="action-tile tile-add-worker">
+        <span class="tile-icon">👷</span>
+        <div class="tile-text">
+          <strong>+ नया कारीगर</strong>
+          <small>मिस्त्री / हेल्पर जोड़ें</small>
         </div>
-      </div>
-      <div class="stat-pill-card">
-        <div class="stat-icon-wrap stat-icon-ration">🛒</div>
-        <div>
-          <div class="stat-pill-label">आज का राशन / सामान</div>
-          <div class="stat-pill-val" id="statTodayRation">₹0</div>
+      </button>
+      <button id="btnQuickCash" class="action-tile tile-cash">
+        <span class="tile-icon">💵</span>
+        <div class="tile-text">
+          <strong>नकद / पेशगी</strong>
+          <small>व्यक्तिगत एडवांस</small>
         </div>
-      </div>
-      <div class="stat-pill-card">
-        <div class="stat-icon-wrap stat-icon-haziri">👷</div>
-        <div>
-          <div class="stat-pill-label">आज की कुल हाजिरी</div>
-          <div class="stat-pill-val" id="statTodayHaziri">0 लोग</div>
+      </button>
+      <button id="btnQuickRation" class="action-tile tile-ration">
+        <span class="tile-icon">🍚</span>
+        <div class="tile-text">
+          <strong>ग्रुप राशन</strong>
+          <small>आटा, चावल, सिलेंडर</small>
         </div>
-      </div>
-      <div class="stat-pill-card">
-        <div class="stat-icon-wrap stat-icon-total">📖</div>
-        <div>
-          <div class="stat-pill-label">शाम की डायरी स्थिति</div>
-          <div class="stat-pill-val" id="statTodayDiaryStatus" style="font-size: 1rem; color: #f59e0b;">बाकी है ⏳</div>
+      </button>
+      <button id="btnQuickRecharge" class="action-tile tile-recharge">
+        <span class="tile-icon">📱</span>
+        <div class="tile-text">
+          <strong>मोबाइल रिचार्ज</strong>
+          <small>कारीगर का रिचार्ज</small>
         </div>
-      </div>
-    </section>
+      </button>
+    </div>
 
-    <!-- NAVIGATION TABS -->
-    <nav class="nav-tabs-wrapper">
+    <!-- NAVIGATION TABS (DESKTOP TOP / MOBILE FIXED BOTTOM DOCK) -->
+    <nav class="nav-tabs-wrapper app-bottom-dock">
       <button class="nav-tab-btn active" data-tab="tab-timeline">
-        <span>🕒 आज का हिसाब</span>
+        <span class="nav-tab-icon">🕒</span>
+        <span class="nav-tab-label">लेन-देन</span>
       </button>
       <button class="nav-tab-btn" data-tab="tab-haziri">
-        <span>👷 आज की हाजिरी</span>
+        <span class="nav-tab-icon">📋</span>
+        <span class="nav-tab-label">दैनिक हाजिरी</span>
       </button>
       <button class="nav-tab-btn" data-tab="tab-monthly">
-        <span>📊 पूरे महीने की हाजिरी (Muster Roll)</span>
+        <span class="nav-tab-icon">📊</span>
+        <span class="nav-tab-label">मस्टर रोल</span>
       </button>
       <button class="nav-tab-btn" data-tab="tab-groups">
-        <span>👥 कारीगर व ग्रुप खाता (+ कारीगर जोड़ें)</span>
+        <span class="nav-tab-icon">👥</span>
+        <span class="nav-tab-label">कारीगर खाता</span>
       </button>
       <button class="nav-tab-btn" data-tab="tab-diary">
-        <span>📖 शाम की डायरी पन्ना</span>
+        <span class="nav-tab-icon">📖</span>
+        <span class="nav-tab-label">शाम डायरी</span>
       </button>
     </nav>
 

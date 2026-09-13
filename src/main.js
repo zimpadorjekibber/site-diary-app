@@ -164,6 +164,11 @@ class App {
     const statRationEl = document.getElementById('statTodayRation');
     if (statRationEl) statRationEl.textContent = `₹${rationTotal.toLocaleString('en-IN')}`;
 
+    // Overview Today Total
+    const todayTotal = cashTotal + rationTotal;
+    const overviewTotalEl = document.getElementById('overviewTodayTotalDisplay');
+    if (overviewTotalEl) overviewTotalEl.textContent = `₹${todayTotal.toLocaleString('en-IN')}`;
+
     // Haziri count
     let workerCount = 0;
     Object.values(haziri).forEach(h => {
@@ -177,11 +182,15 @@ class App {
     const statDiaryEl = document.getElementById('statTodayDiaryStatus');
     if (statDiaryEl) {
       if (isMarked) {
-        statDiaryEl.innerHTML = 'नोट किया गया ✓';
+        statDiaryEl.innerHTML = 'डायरी दर्ज ✓';
         statDiaryEl.style.color = '#10b981';
+        statDiaryEl.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+        statDiaryEl.style.background = 'rgba(16, 185, 129, 0.15)';
       } else {
-        statDiaryEl.innerHTML = 'बाकी है ⏳';
-        statDiaryEl.style.color = '#f59e0b';
+        statDiaryEl.innerHTML = 'डायरी बाकी ⏳';
+        statDiaryEl.style.color = '#fbbf24';
+        statDiaryEl.style.borderColor = 'rgba(245, 158, 11, 0.3)';
+        statDiaryEl.style.background = 'rgba(245, 158, 11, 0.15)';
       }
     }
   }
@@ -970,11 +979,33 @@ class App {
     const btnCash = document.getElementById('btnQuickCash');
     if (btnCash) btnCash.addEventListener('click', () => this.openAddTransactionModal({ type: 'cash', targetType: 'individual' }));
 
+    const metricCash = document.getElementById('metricCardCash');
+    if (metricCash) metricCash.addEventListener('click', () => this.openAddTransactionModal({ type: 'cash', targetType: 'individual' }));
+
     const btnRation = document.getElementById('btnQuickRation');
     if (btnRation) btnRation.addEventListener('click', () => this.openAddTransactionModal({ type: 'ration', targetType: 'group' }));
 
+    const metricRation = document.getElementById('metricCardRation');
+    if (metricRation) metricRation.addEventListener('click', () => this.openAddTransactionModal({ type: 'ration', targetType: 'group' }));
+
     const btnRecharge = document.getElementById('btnQuickRecharge');
     if (btnRecharge) btnRecharge.addEventListener('click', () => this.openAddTransactionModal({ type: 'recharge', targetType: 'individual' }));
+
+    const metricHaziri = document.getElementById('metricCardHaziri');
+    if (metricHaziri) {
+      metricHaziri.addEventListener('click', () => {
+        const haziriTab = document.querySelector('.nav-tab-btn[data-tab="tab-haziri"]');
+        if (haziriTab) haziriTab.click();
+      });
+    }
+
+    const pillDiary = document.getElementById('statTodayDiaryStatus');
+    if (pillDiary) {
+      pillDiary.addEventListener('click', () => {
+        const diaryTab = document.querySelector('.nav-tab-btn[data-tab="tab-diary"]');
+        if (diaryTab) diaryTab.click();
+      });
+    }
 
     const btnQuickHaziri = document.getElementById('btnQuickHaziri');
     if (btnQuickHaziri) {
