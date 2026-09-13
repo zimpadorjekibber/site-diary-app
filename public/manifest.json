@@ -1,0 +1,27 @@
+{
+  "name": "श्रम और साइट डायरी - Voice & Site Ledger",
+  "short_name": "साइट डायरी",
+  "description": "कंस्ट्रक्शन साइट दैनिक खर्च, ठेका-दिहाड़ी हाजिरी, राशन व शाम की खाता-बही डायरी",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0c0f17",
+  "theme_color": "#f59e0b",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "categories": ["business", "finance", "productivity"],
+  "lang": "hi"
+}

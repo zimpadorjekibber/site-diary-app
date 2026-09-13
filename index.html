@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>श्रम व साइट डायरी - Voice & Text Site Transactions & Evening Diary</title>
+  <meta name="theme-color" content="#f59e0b" />
+  <meta name="description" content="श्रम और साइट डायरी - Voice & Text Site Transactions, Muster Roll & Evening Diary" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+  <link rel="apple-touch-icon" href="/icon.svg" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- HEADER -->
+    <header class="app-header">
+      <div class="brand-section">
+        <div class="brand-icon">🔨</div>
+        <div>
+          <h1 class="brand-title">श्रम और साइट डायरी</h1>
+          <p class="brand-subtitle">
+            <span id="currentDateDisplay">शनिवार, 12 सितम्बर 2026</span> • 
+            <span id="currentTimeDisplay">21:00</span>
+          </p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="btnInstallApp" class="badge-reminder" style="display: none; background: rgba(245, 158, 11, 0.2); border-color: var(--amber-primary); color: var(--amber-light);" title="मोबाइल ऐप इनस्टॉल करें">
+          <span>📲 <strong>ऐप इनस्टॉल करें</strong></span>
+        </button>
+        <button id="btnOpenReminderSettings" class="badge-reminder" title="शाम का रिमाइंडर बदलें">
+          <span>⏰ शाम <strong id="headerReminderTime">19:30</strong> डायरी</span>
+        </button>
+        <button id="btnOpenSettings" class="btn-icon-header" title="सेटिंग्स व बैकअप">
+          ⚙️
+        </button>
+      </div>
+    </header>
+
+    <!-- EVENING ALERT BANNER (Visible in evening or toggleable) -->
+    <div id="eveningAlertBanner" class="evening-alert-banner" style="display: none;">
+      <div class="evening-alert-content">
+        <span class="evening-alert-icon">📖</span>
+        <div>
+          <div class="evening-alert-title">शाम हो गई है! आज का हिसाब अपनी डायरी में लिख लें</div>
+          <div class="evening-alert-desc" id="eveningAlertSummary">आज का लेनदेन और हाजिरी तैयार है।</div>
+        </div>
+      </div>
+      <button id="btnEveningBannerOpen" class="btn-evening-alert">
+        डायरी पन्ना खोलें →
+      </button>
+    </div>
+
+    <!-- HERO ACTION CARD (VOICE & FAST LOGGING) -->
+    <section class="hero-action-card">
+      <div class="voice-centerpiece">
+        <div class="mic-button-wrapper">
+          <div class="mic-rings"></div>
+          <button id="btnVoiceMic" class="btn-mic-large" title="बोलकर नोट करें (Voice Note)">
+            🎙️
+          </button>
+        </div>
+        <div id="voiceStatusText" class="voice-status-text">बोलकर नोट करने के लिए माइक दबाएं</div>
+        <p class="voice-hint">
+          बोलें जैसे: <em>"रमेश मिस्त्री को 500 रुपये नकद दिए"</em> या <em>"बढ़ई ग्रुप के लिए 10 किलो आटा और 1 सिलेंडर दिया"</em> या <em>"मोहन हेल्पर का 299 का मोबाइल रिचार्ज किया"</em>
+        </p>
+
+        <!-- Live transcript preview -->
+        <div id="voiceTranscriptBox" class="voice-transcript-box" style="display: none;">
+          आपकी आवाज़ सुनी जा रही है...
+        </div>
+      </div>
+
+      <!-- QUICK ACTION BUTTONS -->
+      <div class="quick-buttons-row">
+        <button id="btnQuickCash" class="btn-quick-action btn-action-cash">
+          <span>💵</span> नकद / पेशगी
+        </button>
+        <button id="btnQuickRation" class="btn-quick-action btn-action-ration">
+          <span>🍚</span> राशन
+        </button>
+        <button id="btnQuickRecharge" class="btn-quick-action btn-action-haziri">
+          <span>📱</span> रिचार्ज
+        </button>
+        <button id="btnQuickHaziri" class="btn-quick-action btn-action-haziri">
+          <span>📋</span> आज की हाजिरी
+        </button>
+        <button id="btnQuickMonthly" class="btn-quick-action" style="background: rgba(245, 158, 11, 0.15); border-color: rgba(245, 158, 11, 0.4); color: var(--amber-light);">
+          <span>📊</span> पूरे महीने की हाजिरी
+        </button>
+        <button id="btnQuickDiary" class="btn-quick-action btn-action-diary">
+          <span>📖</span> शाम की डायरी
+        </button>
+      </div>
+    </section>
+
+    <!-- STATS SUMMARY PILLS -->
+    <section class="stats-summary-bar">
+      <div class="stat-pill-card">
+        <div class="stat-icon-wrap stat-icon-cash">₹</div>
+        <div>
+          <div class="stat-pill-label">आज का नकद / पेशगी</div>
+          <div class="stat-pill-val" id="statTodayCash">₹0</div>
+        </div>
+      </div>
+      <div class="stat-pill-card">
+        <div class="stat-icon-wrap stat-icon-ration">🛒</div>
+        <div>
+          <div class="stat-pill-label">आज का राशन / सामान</div>
+          <div class="stat-pill-val" id="statTodayRation">₹0</div>
+        </div>
+      </div>
+      <div class="stat-pill-card">
+        <div class="stat-icon-wrap stat-icon-haziri">👷</div>
+        <div>
+          <div class="stat-pill-label">आज की कुल हाजिरी</div>
+          <div class="stat-pill-val" id="statTodayHaziri">0 लोग</div>
+        </div>
+      </div>
+      <div class="stat-pill-card">
+        <div class="stat-icon-wrap stat-icon-total">📖</div>
+        <div>
+          <div class="stat-pill-label">शाम की डायरी स्थिति</div>
+          <div class="stat-pill-val" id="statTodayDiaryStatus" style="font-size: 1rem; color: #f59e0b;">बाकी है ⏳</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- NAVIGATION TABS -->
+    <nav class="nav-tabs-wrapper">
+      <button class="nav-tab-btn active" data-tab="tab-timeline">
+        <span>🕒 आज का हिसाब</span>
+      </button>
+      <button class="nav-tab-btn" data-tab="tab-haziri">
+        <span>👷 आज की हाजिरी</span>
+      </button>
+      <button class="nav-tab-btn" data-tab="tab-monthly">
+        <span>📊 पूरे महीने की हाजिरी (Muster Roll)</span>
+      </button>
+      <button class="nav-tab-btn" data-tab="tab-groups">
+        <span>👥 कारीगर व ग्रुप खाता</span>
+      </button>
+      <button class="nav-tab-btn" data-tab="tab-diary">
+        <span>📖 शाम की डायरी पन्ना</span>
+      </button>
+    </nav>
+
+    <!-- TAB 1: TODAY'S TIMELINE -->
+    <section id="tab-timeline" class="tab-view active">
+      <!-- Filter chips -->
+      <div class="filter-bar" id="timelineFilters">
+        <button class="filter-chip active" data-filter-type="all">सभी लेन-देन (All)</button>
+        <button class="filter-chip" data-filter-type="cash">💵 नकद (Cash)</button>
+        <button class="filter-chip" data-filter-type="ration">🍚 राशन (Ration)</button>
+        <button class="filter-chip" data-filter-type="recharge">📱 रिचार्ज (Recharge)</button>
+        <button class="filter-chip" data-filter-trade="carpenter">बढ़ई (Carpenter)</button>
+        <button class="filter-chip" data-filter-trade="mason">राजमिस्त्री (Mason)</button>
+        <button class="filter-chip" data-filter-trade="plumber">प्लंबर (Plumber)</button>
+        <button class="filter-chip" data-filter-trade="painter">पेंटर (Painter)</button>
+      </div>
+
+      <!-- Transaction Cards List -->
+      <div class="timeline-list" id="timelineListContainer">
+        <!-- Injected via JavaScript -->
+      </div>
+    </section>
+
+    <!-- TAB 2: DAILY HAZIRI (ATTENDANCE) REGISTER -->
+    <section id="tab-haziri" class="tab-view">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <label style="font-size: 0.9rem; font-weight: 600; color: var(--text-muted);">तारीख चुनें:</label>
+          <input type="date" id="haziriDatePicker" class="form-input" style="width: auto; padding: 6px 12px;" />
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button id="btnSwitchToMonthlyTab" class="btn-secondary" style="font-size: 0.85rem;">
+            📊 पूरे महीने की हाजिरी देखें →
+          </button>
+          <button id="btnAddWorkerFromHaziri" class="btn-primary" style="padding: 8px 16px; font-size: 0.88rem;">
+            + नया कारीगर / हेल्पर जोड़ें
+          </button>
+        </div>
+      </div>
+
+      <div id="haziriTradesContainer">
+        <!-- Rendered per trade and role (Mistri / Helper) -->
+      </div>
+    </section>
+
+    <!-- TAB 3: MONTHLY MUSTER ROLL REGISTER (पूरे महीने का हाजिरी रजिस्टर) -->
+    <section id="tab-monthly" class="tab-view">
+      
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+        <div>
+          <h2 style="font-size: 1.25rem; font-weight: 700; color: #fff;">📊 पूरे महीने का हाजिरी रजिस्टर (Muster Roll)</h2>
+          <p style="font-size: 0.82rem; color: var(--text-muted);">
+            1 तारीख से 30/31 तारीख तक सभी कारीगरों (मिस्त्री, हेल्पर, ठेका) की पूरी हाजिरी, गैरहाजिरी और बकाया एक साथ देखें।
+          </p>
+        </div>
+        <button id="btnFillDemoMonth" class="btn-secondary" style="font-size: 0.82rem; border-color: var(--amber-primary); color: var(--amber-light);">
+          ✨ पूरे महीने का रिकॉर्ड भरें / रीसेट
+        </button>
+      </div>
+
+      <!-- Month Navigation Bar -->
+      <div class="monthly-nav-bar">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <button id="btnPrevMonth" class="btn-secondary" style="padding: 6px 12px; font-size: 0.84rem;">◀ पिछला महीना</button>
+          <h3 id="monthlyMonthTitle" style="font-size: 1.2rem; font-weight: 700; color: var(--amber-light); min-width: 150px; text-align: center;">
+            सितम्बर 2026
+          </h3>
+          <button id="btnNextMonth" class="btn-secondary" style="padding: 6px 12px; font-size: 0.84rem;">अगला महीना ▶</button>
+          <input type="month" id="monthlyPicker" class="form-input" style="width: auto; padding: 4px 8px; font-size: 0.82rem;" />
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button id="btnExportMonthlyCsv" class="btn-secondary" style="font-size: 0.82rem; padding: 7px 14px;">
+            📥 एक्सेल / CSV डाउनलोड
+          </button>
+          <button id="btnPrintMonthlySheet" class="btn-secondary" style="font-size: 0.82rem; padding: 7px 14px;">
+            🖨️ प्रिंट शीट
+          </button>
+        </div>
+      </div>
+
+      <!-- Legend / Info -->
+      <div class="muster-legend-bar">
+        <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-main);">हाजिरी संकेत:</span>
+        <span class="legend-chip legend-full">🟢 1.0 = पूरा दिन उपस्थित</span>
+        <span class="legend-chip legend-half">🟡 0.5 = आधा दिन</span>
+        <span class="legend-chip legend-absent">🔴 A = गैरहाजिर / काम बंद</span>
+        <span class="legend-chip legend-ot">🟣 OT = ओवरटाइम घंटे</span>
+        <span style="font-size: 0.78rem; color: #fde047; margin-left: auto;">👉 किसी भी तारीख के बॉक्स पर क्लिक करके सीधे हाजिरी बदल सकते हैं</span>
+      </div>
+
+      <!-- Monthly Grand Total KPI Banner -->
+      <div class="stats-summary-bar" id="monthlyGrandTotalsBar" style="margin-bottom: 16px;">
+        <div class="stat-pill-card">
+          <div class="stat-icon-wrap stat-icon-haziri">👷</div>
+          <div>
+            <div class="stat-pill-label">महीने की कुल हाजिरी योग (Total P)</div>
+            <div class="stat-pill-val" id="monthlyKpiTotalPresent" style="color: #34d399;">0 दिन</div>
+          </div>
+        </div>
+        <div class="stat-pill-card">
+          <div class="stat-icon-wrap" style="background: rgba(239, 68, 68, 0.15); color: #f87171;">⚠️</div>
+          <div>
+            <div class="stat-pill-label">कुल गैरहाजिरी योग (Total Absent)</div>
+            <div class="stat-pill-val" id="monthlyKpiTotalAbsent" style="color: #f87171;">0 दिन</div>
+          </div>
+        </div>
+        <div class="stat-pill-card">
+          <div class="stat-icon-wrap" style="background: rgba(168, 85, 247, 0.15); color: #c084fc;">⏰</div>
+          <div>
+            <div class="stat-pill-label">कुल ओवरटाइम योग (Total OT)</div>
+            <div class="stat-pill-val" id="monthlyKpiTotalOt" style="color: #c084fc;">0 घंटे</div>
+          </div>
+        </div>
+        <div class="stat-pill-card">
+          <div class="stat-icon-wrap stat-icon-cash">₹</div>
+          <div>
+            <div class="stat-pill-label">कुल देय कमाई / ठेका</div>
+            <div class="stat-pill-val" id="monthlyKpiTotalEarned">₹0</div>
+          </div>
+        </div>
+        <div class="stat-pill-card">
+          <div class="stat-icon-wrap stat-icon-total">⚖️</div>
+          <div>
+            <div class="stat-pill-label">महीने का शुद्ध बकाया (Due)</div>
+            <div class="stat-pill-val" id="monthlyKpiTotalDue" style="color: #fbbf24;">₹0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Monthly Matrix Table Wrap -->
+      <div class="muster-table-wrapper" id="monthlyMusterRollContainer">
+        <!-- Injected via JavaScript -->
+      </div>
+
+    </section>
+
+    <!-- TAB 3: WORKERS & GROUPS LEDGER -->
+    <section id="tab-groups" class="tab-view">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+        <div>
+          <h2 style="font-size: 1.15rem; font-weight: 700;">कारीगर ग्रुप और राशन खाता</h2>
+          <p style="font-size: 0.82rem; color: var(--text-muted);">हर ट्रेड के मिस्त्री, हेल्पर और ग्रुप राशन का पूरा ब्यौरा</p>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button id="btnAddTradeBtn" class="btn-secondary" style="font-size: 0.85rem;">
+            + नया कारीगर प्रकार (Trade)
+          </button>
+          <button id="btnAddWorkerBtn" class="btn-primary" style="font-size: 0.85rem;">
+            + नया कारीगर जोड़ें
+          </button>
+        </div>
+      </div>
+
+      <div class="groups-grid" id="groupsLedgerContainer">
+        <!-- Group cards injected via JS -->
+      </div>
+    </section>
+
+    <!-- TAB 4: AUTHENTIC EVENING DIARY SHEET (खाता बही पन्ना) -->
+    <section id="tab-diary" class="tab-view">
+      <div class="diary-view-container">
+        
+        <div class="diary-actions-top">
+          <div>
+            <span style="font-size: 0.85rem; color: var(--text-muted);">अपनी कागजी डायरी में लिखने के लिए आज का पूरा सारांश:</span>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button id="btnCopyDiaryText" class="btn-secondary" style="font-size: 0.85rem;">
+              📋 कॉपी करें (Copy)
+            </button>
+            <button id="btnPrintDiary" class="btn-secondary" style="font-size: 0.85rem;">
+              🖨️ प्रिंट / PDF
+            </button>
+          </div>
+        </div>
+
+        <!-- AUTHENTIC PAPER DIARY CARD -->
+        <div class="diary-paper" id="paperDiaryContent">
+          <div class="diary-header">
+            <div class="diary-date-row">
+              <span id="diaryPaperDate">12 सितम्बर 2026</span>
+              <span id="diaryPaperDay">शनिवार (Day Ledger)</span>
+            </div>
+            <h2 class="diary-title-main">दैनिक साइट डायरी व हिसाब</h2>
+          </div>
+
+          <div class="diary-content">
+            <!-- 1. HAZIRI (ATTENDANCE) SUMMARY -->
+            <div>
+              <div class="diary-section-heading">
+                <span>👷 1. आज की कुल हाजिरी (Attendance)</span>
+              </div>
+              <div class="diary-haziri-grid" id="diaryHaziriGrid">
+                <!-- Injected via JS -->
+              </div>
+            </div>
+
+            <!-- 2. CASH & RECHARGE PAYMENTS TO INDIVIDUALS -->
+            <div>
+              <div class="diary-section-heading">
+                <span>💵 2. नकद पेशगी व व्यक्तिगत खर्चे (Cash / Recharge)</span>
+              </div>
+              <table class="diary-table">
+                <thead>
+                  <tr>
+                    <th>व्यक्ति का नाम</th>
+                    <th>ट्रेड / पद</th>
+                    <th>विवरण</th>
+                    <th style="text-align: right;">रकम (₹)</th>
+                  </tr>
+                </thead>
+                <tbody id="diaryCashTableBody">
+                  <!-- Injected via JS -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- 3. GROUP RATION & SUPPLIES -->
+            <div>
+              <div class="diary-section-heading">
+                <span>🍚 3. ग्रुप राशन व चूल्हा खर्च (Ration / Gas / Groceries)</span>
+              </div>
+              <table class="diary-table">
+                <thead>
+                  <tr>
+                    <th>ग्रुप का नाम</th>
+                    <th>सामान (Item & Qty)</th>
+                    <th>नोट / विवरण</th>
+                    <th style="text-align: right;">लागत (₹)</th>
+                  </tr>
+                </thead>
+                <tbody id="diaryRationTableBody">
+                  <!-- Injected via JS -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- 4. GRAND TOTAL OF TODAY -->
+            <div class="diary-grand-total">
+              <span>आज का कुल खर्च (Total Expense):</span>
+              <span id="diaryGrandTotalVal">₹0</span>
+            </div>
+
+            <div class="diary-footer-note">
+              "हिसाब साफ, काम आसान।"
+            </div>
+          </div>
+        </div>
+
+        <!-- MARKED IN PHYSICAL DIARY TRACKER -->
+        <div class="marked-status-box">
+          <div>
+            <h3 style="font-size: 1.05rem; font-weight: 700; color: #fff;">क्या आपने इसे अपनी डायरी में नोट कर लिया?</h3>
+            <p style="font-size: 0.84rem; color: var(--text-muted);" id="markedStatusDesc">
+              डायरी में नोट करने के बाद नीचे बटन दबाएं ताकि शाम का रिमाइंडर शांत हो जाए।
+            </p>
+          </div>
+          <button id="btnMarkInDiary" class="btn-mark-diary">
+            <span>✓</span> डायरी में लिख लिया!
+          </button>
+        </div>
+
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ===================================================
+       MODAL 1: ADD TRANSACTION (CASH / RATION / RECHARGE)
+  =================================================== -->
+  <div id="modalAddTransaction" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modalTxTitle">नया लेनदेन / राशन दर्ज करें</h3>
+        <button class="btn-close-modal" data-close-modal>&times;</button>
+      </div>
+      <form id="formAddTransaction">
+        
+        <!-- Transaction Type Switcher -->
+        <div class="form-group">
+          <label class="form-label">प्रकार चुनें (Transaction Type):</label>
+          <div class="segmented-control" id="txTypeSwitcher">
+            <button type="button" class="segment-btn active" data-type="cash">💵 नकद / पेशगी</button>
+            <button type="button" class="segment-btn" data-type="ration">🍚 राशन (सामान)</button>
+            <button type="button" class="segment-btn" data-type="recharge">📱 मोबाइल रिचार्ज</button>
+          </div>
+        </div>
+
+        <!-- Trade Group Selector -->
+        <div class="form-group">
+          <label class="form-label">कारीगर ग्रुप (Trade):</label>
+          <select id="txTradeSelect" class="form-select" required>
+            <!-- Populated via JS -->
+          </select>
+        </div>
+
+        <!-- Target Type: Individual Worker vs Entire Group -->
+        <div class="form-group" id="targetTypeGroup">
+          <label class="form-label">किसके नाम लिखें:</label>
+          <div class="segmented-control" id="txTargetTypeSwitcher">
+            <button type="button" class="segment-btn active" data-target="individual">👤 किसी एक कारीगर के नाम</button>
+            <button type="button" class="segment-btn" data-target="group">👥 पूरे ग्रुप के लिए (सांझा)</button>
+          </div>
+        </div>
+
+        <!-- Worker Select (if Individual) -->
+        <div class="form-group" id="workerSelectGroup">
+          <label class="form-label">कारीगर / हेल्पर का नाम:</label>
+          <select id="txWorkerSelect" class="form-select">
+            <!-- Populated via JS based on selected trade -->
+          </select>
+        </div>
+
+        <!-- Ration Specific Fields (shown if type === 'ration') -->
+        <div id="rationFields" style="display: none;">
+          <div class="form-group">
+            <label class="form-label">राशन का सामान चुनें या लिखें:</label>
+            <select id="txRationItemPreset" class="form-select">
+              <option value="Atta (आटा)">Atta (आटा)</option>
+              <option value="Rice (चावल)">Rice (चावल)</option>
+              <option value="Gas Cylinder (गैस सिलेंडर)">Gas Cylinder (गैस सिलेंडर)</option>
+              <option value="Cooking Oil (तेल)">Cooking Oil (तेल)</option>
+              <option value="Dal (दाल)">Dal (दाल)</option>
+              <option value="Vegetables (सब्जी)">Vegetables (सब्जी)</option>
+              <option value="Other">अन्य सामान (Custom)</option>
+            </select>
+          </div>
+          <div class="form-group" id="customRationItemWrap" style="display: none;">
+            <input type="text" id="txCustomRationItem" class="form-input" placeholder="जैसे: चीनी, चायपत्ती, मसाला..." />
+          </div>
+          <div class="form-group">
+            <label class="form-label">मात्रा (Quantity):</label>
+            <input type="text" id="txQuantity" class="form-input" placeholder="जैसे: 10 kg, 1 सिलेंडर, 5 लीटर..." />
+          </div>
+        </div>
+
+        <!-- Amount Field -->
+        <div class="form-group">
+          <label class="form-label" id="txAmountLabel">रकम / खर्च (Amount in ₹):</label>
+          <input type="number" id="txAmount" class="form-input" placeholder="0" min="0" required />
+          <div class="quick-amount-chips">
+            <span class="amt-chip" data-add-amt="100">+100</span>
+            <span class="amt-chip" data-add-amt="200">+200</span>
+            <span class="amt-chip" data-add-amt="500">+500</span>
+            <span class="amt-chip" data-add-amt="1000">+1,000</span>
+            <span class="amt-chip" data-add-amt="2000">+2,000</span>
+          </div>
+        </div>
+
+        <!-- Note Field -->
+        <div class="form-group">
+          <label class="form-label">विवरण / नोट (Optional Memo):</label>
+          <input type="text" id="txNote" class="form-input" placeholder="जैसे: पेशगी दी, दुकान से मंगाया..." />
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" data-close-modal>रद्द करें</button>
+          <button type="submit" class="btn-primary">सुरक्षित करें (Save Entry)</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================================================
+       MODAL 2: ADD WORKER (MISTRI / HELPER)
+  =================================================== -->
+  <div id="modalAddWorker" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">नया कारीगर / हेल्पर जोड़ें</h3>
+        <button class="btn-close-modal" data-close-modal>&times;</button>
+      </div>
+      <form id="formAddWorker">
+        <!-- Worker Photo Upload / Capture -->
+        <div class="form-group" style="text-align: center; margin-bottom: 20px;">
+          <label class="form-label">कारीगर की फोटो (Photo):</label>
+          <div class="worker-photo-upload-wrap">
+            <div id="workerPhotoPreview" class="worker-photo-preview-box">
+              <span id="workerPhotoPlaceholder" style="font-size: 32px;">📷</span>
+              <img id="workerPhotoImg" src="" alt="Preview" style="display: none; width: 100%; height: 100%; object-fit: cover; border-radius: inherit;" />
+            </div>
+            <div class="photo-action-buttons">
+              <button type="button" id="btnPickPhoto" class="btn-secondary" style="font-size: 0.8rem; padding: 6px 12px;">
+                📷 फोटो चुनें / खींचें
+              </button>
+              <button type="button" id="btnRemovePhoto" class="btn-secondary" style="display: none; font-size: 0.8rem; padding: 6px 10px; color: var(--rose-danger);">
+                हटाएं
+              </button>
+            </div>
+            <input type="file" id="workerPhotoInput" accept="image/*" capture="environment" style="display: none;" />
+          </div>
+          <p style="font-size: 0.74rem; color: var(--text-muted); margin-top: 4px;">
+            फोन के कैमरे से फोटो ले सकते हैं या गैलरी से अपलोड कर सकते हैं।
+          </p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">कारीगर का नाम (Worker Name):</label>
+          <input type="text" id="workerNameInput" class="form-input" placeholder="जैसे: रमेश शर्मा" required />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">ट्रेड चुनें (Trade Group):</label>
+          <select id="workerTradeSelect" class="form-select" required>
+            <!-- Populated via JS -->
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">पद / भूमिका (Role):</label>
+          <div class="segmented-control" id="workerRoleSwitcher">
+            <button type="button" class="segment-btn active" data-role="mistri">मिस्त्री (Master/Craftsman)</button>
+            <button type="button" class="segment-btn" data-role="helper">हेल्पर (Mazdoor/Assistant)</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">काम का प्रकार / अनुबंध (Work Contract Type):</label>
+          <div class="segmented-control" id="workerContractSwitcher">
+            <button type="button" class="segment-btn active" data-contract="dihadi">👷 दिहाड़ी (Daily Wage)</button>
+            <button type="button" class="segment-btn" data-contract="theka">📜 ठेका (Contract)</button>
+          </div>
+        </div>
+
+        <!-- Dihadi Specific Field -->
+        <div class="form-group" id="dihadiRateGroup">
+          <label class="form-label">दैनिक दिहाड़ी / हाजिरी दर (Daily Rate in ₹):</label>
+          <input type="number" id="workerDailyRate" class="form-input" placeholder="जैसे: 900 (मिस्त्री) या 550 (हेल्पर)" required />
+        </div>
+
+        <!-- Theka Specific Fields -->
+        <div id="thekaDetailsGroup" style="display: none;">
+          <div class="form-group">
+            <label class="form-label">कुल तय ठेका राशि (Total Contract Amount in ₹):</label>
+            <input type="number" id="workerThekaAmount" class="form-input" placeholder="जैसे: 35000 या 50000" min="0" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">ठेके का काम व विवरण (Contract Scope):</label>
+            <input type="text" id="workerThekaDesc" class="form-input" placeholder="जैसे: पूरे घर का नल फिटिंग, 4 कमरों का पेंट..." />
+          </div>
+          <div style="background: rgba(168, 85, 247, 0.1); border: 1px dashed rgba(168, 85, 247, 0.3); border-radius: var(--radius-md); padding: 10px 12px; margin-bottom: 14px;">
+            <p style="font-size: 0.78rem; color: #d8b4fe; line-height: 1.4;">
+              📌 <strong>महत्वपूर्ण:</strong> ठेके वाले कारीगर की भी रोजाना हाजिरी दर्ज होगी। इससे अगर वह कई दिन काम पर नहीं आएगा, तो आपके पास <strong>गैरहाजिरी और काम में देरी का पक्का सबूत</strong> रहेगा!
+            </p>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">मोबाइल नंबर (Mobile Number):</label>
+          <input type="tel" id="workerPhone" class="form-input" placeholder="10 अंकों का मोबाइल नंबर (जैसे 9876543210)" pattern="[0-9]{10}" />
+          <p style="font-size: 0.74rem; color: var(--text-muted); margin-top: 4px;">
+            नंबर डालने पर आप सीधे ऐप से कॉल या व्हाट्सएप कर सकेंगे।
+          </p>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" data-close-modal>रद्द करें</button>
+          <button type="submit" class="btn-primary">कारीगर जोड़ें (Add Worker)</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================================================
+       MODAL 3: ADD CUSTOM TRADE CATEGORY
+  =================================================== -->
+  <div id="modalAddTrade" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">नया कारीगर प्रकार (Trade) जोड़ें</h3>
+        <button class="btn-close-modal" data-close-modal>&times;</button>
+      </div>
+      <form id="formAddTrade">
+        <div class="form-group">
+          <label class="form-label">ट्रेड का नाम (जैसे: Welder, Tile Mistri, POP...):</label>
+          <input type="text" id="tradeNameInput" class="form-input" placeholder="जैसे: Welder (वेल्डर)" required />
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" data-close-modal>रद्द करें</button>
+          <button type="submit" class="btn-primary">ट्रेड जोड़ें</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================================================
+       MODAL 4: EVENING REMINDER & SETTINGS
+  =================================================== -->
+  <div id="modalSettings" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">शाम का रिमाइंडर और सेटिंग्स</h3>
+        <button class="btn-close-modal" data-close-modal>&times;</button>
+      </div>
+      <form id="formSettings">
+        <div class="form-group">
+          <label class="form-label">शाम को घर पहुँचने पर डायरी याद दिलाने का समय:</label>
+          <input type="time" id="settingReminderTime" class="form-input" value="19:30" />
+          <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;">
+            इस समय पर आपको नोटिफिकेशन और मधुर घंटी की आवाज से याद दिलाया जाएगा।
+          </p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>ब्राउज़र पुश नोटिफिकेशन (Browser Push Notification):</span>
+            <input type="checkbox" id="settingNotifToggle" checked />
+          </label>
+          <button type="button" id="btnRequestNotifPerm" class="btn-secondary" style="font-size: 0.8rem; margin-top: 6px;">
+            🔔 नोटिफिकेशन अनुमति दें (Enable Notifications)
+          </button>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>मधुर घंटी की आवाज (Evening Audio Chime):</span>
+            <input type="checkbox" id="settingSoundToggle" checked />
+          </label>
+        </div>
+
+        <div style="background: rgba(245, 158, 11, 0.08); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+          <button type="button" id="btnTestReminderNow" class="btn-secondary" style="width: 100%; border-color: var(--amber-primary); color: var(--amber-light);">
+            🔔 अभी टेस्ट करें (Test Reminder Chime & Alert)
+          </button>
+        </div>
+
+        <div class="form-group" style="border-top: 1px solid var(--border-card); padding-top: 14px;">
+          <label class="form-label">डेटा बैकअप (Data Backup):</label>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" id="btnExportData" class="btn-secondary" style="flex: 1; font-size: 0.8rem;">
+              📥 बैकअप डाउनलोड (Export)
+            </button>
+            <button type="button" id="btnImportData" class="btn-secondary" style="flex: 1; font-size: 0.8rem;">
+              📤 बैकअप रीस्टोर (Import)
+            </button>
+            <input type="file" id="fileImportInput" accept=".json" style="display: none;" />
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" data-close-modal>बंद करें</button>
+          <button type="submit" class="btn-primary">सेटिंग्स सेव करें</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
