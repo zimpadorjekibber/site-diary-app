@@ -160,8 +160,8 @@ export class Store {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed && parsed.workers && parsed.trades) {
-          // If existing haziri has less than 5 dates, merge with seed so full month is visible
-          if (!parsed.haziri || Object.keys(parsed.haziri).length < 5) {
+          // If existing haziri has less than 5 dates and not clean-started, merge with seed
+          if (!parsed.isCleanStarted && (!parsed.haziri || Object.keys(parsed.haziri).length < 5)) {
             parsed.haziri = { ...getInitialSeedHaziri(), ...(parsed.haziri || {}) };
             this.save(parsed);
           }
@@ -191,6 +191,20 @@ export class Store {
     } catch (e) {
       console.error('Failed to save to localStorage:', e);
     }
+  }
+
+  resetToClean() {
+    this.data = {
+      trades: DEFAULT_TRADES,
+      workers: [],
+      transactions: [],
+      haziri: {},
+      diaryNotedDates: {},
+      settings: DEFAULT_SETTINGS,
+      isCleanStarted: true
+    };
+    this.save();
+    return this.data;
   }
 
   // --- TRADES ---
