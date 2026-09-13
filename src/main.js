@@ -289,6 +289,23 @@ class App {
       datePicker.value = date;
     }
 
+    const allWorkers = this.store.getWorkers();
+    if (allWorkers.length === 0) {
+      container.innerHTML = `
+        <div style="background: rgba(245, 158, 11, 0.08); border: 2px dashed rgba(245, 158, 11, 0.35); border-radius: 14px; padding: 40px 20px; text-align: center; margin: 20px 0;">
+          <div style="font-size: 3rem; margin-bottom: 12px;">👷‍♂️</div>
+          <h3 style="font-size: 1.25rem; font-weight: 700; color: #fff; margin-bottom: 8px;">अभी आपकी साइट पर कोई कारीगर नहीं जुड़ा है</h3>
+          <p style="font-size: 0.88rem; color: var(--text-muted); max-width: 480px; margin: 0 auto 20px;">
+            हाजिरी और हिसाब शुरू करने के लिए नीचे दिए गए बटन पर टैप करके अपने मिस्त्री, हेल्पर या ठेकेदार को जोड़ें।
+          </p>
+          <button class="btn-primary btn-add-first-worker" style="font-size: 0.95rem; padding: 12px 28px;">
+            👷 + पहला कारीगर जोड़ें (Add Worker)
+          </button>
+        </div>
+      `;
+      return;
+    }
+
     container.innerHTML = trades.map(trade => {
       const workers = this.store.getWorkers(trade.id);
       if (workers.length === 0) return '';
@@ -410,6 +427,22 @@ class App {
     const picker = document.getElementById('monthlyPicker');
     if (picker) {
       picker.value = `${this.monthlyYear}-${String(this.monthlyMonth).padStart(2, '0')}`;
+    }
+
+    if (data.rows.length === 0) {
+      container.innerHTML = `
+        <div style="background: rgba(245, 158, 11, 0.08); border: 2px dashed rgba(245, 158, 11, 0.35); border-radius: 14px; padding: 40px 20px; text-align: center; margin: 20px 0;">
+          <div style="font-size: 3rem; margin-bottom: 12px;">📊</div>
+          <h3 style="font-size: 1.25rem; font-weight: 700; color: #fff; margin-bottom: 8px;">मस्टर रोल अभी खाली है</h3>
+          <p style="font-size: 0.88rem; color: var(--text-muted); max-width: 480px; margin: 0 auto 20px;">
+            महीने की 1 से 30 तारीख की हाजिरी रजिस्टर देखने के लिए पहले अपनी साइट का कारीगर जोड़ें।
+          </p>
+          <button class="btn-primary btn-add-first-worker" style="font-size: 0.95rem; padding: 12px 28px;">
+            👷 + नया कारीगर जोड़ें (Add Worker)
+          </button>
+        </div>
+      `;
+      return;
     }
 
     const daysHeaderHtml = data.days.map(d => {
@@ -1303,8 +1336,23 @@ class App {
     const btnAddWorker = document.getElementById('btnAddWorkerBtn');
     if (btnAddWorker) btnAddWorker.addEventListener('click', () => this.openAddWorkerModal());
 
+    const btnQuickAddWorker = document.getElementById('btnQuickAddWorker');
+    if (btnQuickAddWorker) btnQuickAddWorker.addEventListener('click', () => this.openAddWorkerModal());
+
+    const btnHeaderAddWorker = document.getElementById('btnHeaderAddWorker');
+    if (btnHeaderAddWorker) btnHeaderAddWorker.addEventListener('click', () => this.openAddWorkerModal());
+
+    const btnAddWorkerFromMonthly = document.getElementById('btnAddWorkerFromMonthly');
+    if (btnAddWorkerFromMonthly) btnAddWorkerFromMonthly.addEventListener('click', () => this.openAddWorkerModal());
+
     const btnAddWorkerFromHz = document.getElementById('btnAddWorkerFromHaziri');
     if (btnAddWorkerFromHz) btnAddWorkerFromHz.addEventListener('click', () => this.openAddWorkerModal());
+
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('.btn-add-first-worker')) {
+        this.openAddWorkerModal();
+      }
+    });
 
     document.addEventListener('click', (e) => {
       const tradeWorkerBtn = e.target.closest('.btn-add-worker-to-trade');

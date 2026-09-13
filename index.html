@@ -30,6 +30,9 @@
         </div>
       </div>
       <div class="header-actions">
+        <button id="btnHeaderAddWorker" class="badge-reminder" style="background: rgba(16, 185, 129, 0.2); border-color: #10b981; color: #34d399; font-weight: 700; cursor: pointer;" title="नया कारीगर जोड़ें">
+          <span>👷 <strong>+ नया कारीगर</strong></span>
+        </button>
         <a href="https://github.com/zimpadorjekibber/site-diary-app/releases/download/v1.0.0/SiteDiary.apk" class="badge-reminder" style="text-decoration: none; background: rgba(52, 211, 153, 0.15); border-color: #34d399; color: #34d399;" title="Android APK डाउनलोड करें" target="_blank">
           <span>📲 <strong>APK डाउनलोड</strong></span>
         </a>
@@ -81,6 +84,9 @@
 
       <!-- QUICK ACTION BUTTONS -->
       <div class="quick-buttons-row">
+        <button id="btnQuickAddWorker" class="btn-quick-action" style="background: rgba(16, 185, 129, 0.22); border-color: #10b981; color: #34d399; font-weight: 700;">
+          <span>👷</span> + नया कारीगर जोड़ें
+        </button>
         <button id="btnQuickCash" class="btn-quick-action btn-action-cash">
           <span>💵</span> नकद / पेशगी
         </button>
@@ -146,7 +152,7 @@
         <span>📊 पूरे महीने की हाजिरी (Muster Roll)</span>
       </button>
       <button class="nav-tab-btn" data-tab="tab-groups">
-        <span>👥 कारीगर व ग्रुप खाता</span>
+        <span>👥 कारीगर व ग्रुप खाता (+ कारीगर जोड़ें)</span>
       </button>
       <button class="nav-tab-btn" data-tab="tab-diary">
         <span>📖 शाम की डायरी पन्ना</span>
@@ -205,9 +211,14 @@
             1 तारीख से 30/31 तारीख तक सभी कारीगरों (मिस्त्री, हेल्पर, ठेका) की पूरी हाजिरी, गैरहाजिरी और बकाया एक साथ देखें।
           </p>
         </div>
-        <button id="btnFillDemoMonth" class="btn-secondary" style="font-size: 0.82rem; border-color: var(--amber-primary); color: var(--amber-light);">
-          ✨ पूरे महीने का रिकॉर्ड भरें / रीसेट
-        </button>
+        <div style="display: flex; gap: 8px;">
+          <button id="btnAddWorkerFromMonthly" class="btn-primary" style="font-size: 0.85rem; padding: 7px 16px;">
+            👷 + नया कारीगर जोड़ें
+          </button>
+          <button id="btnFillDemoMonth" class="btn-secondary" style="font-size: 0.82rem; border-color: var(--amber-primary); color: var(--amber-light);">
+            ✨ पूरे महीने का रिकॉर्ड भरें / रीसेट
+          </button>
+        </div>
       </div>
 
       <!-- Month Navigation Bar -->
