@@ -39,28 +39,73 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
-      - name: Build Debug APK
+      # The signing key is stored as a base64 GitHub Secret and only ever exists
+      # on disk inside the runner. Skipped automatically until the secret is set,
+      # so the workflow keeps working before the keystore is created.
+      - name: Decode release keystore
+        id: keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > android/release.jks
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Release keystore decoded."
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "No RELEASE_KEYSTORE_BASE64 secret set — falling back to a debug build."
+          fi
+
+      - name: Build signed release APK
+        if: steps.keystore.outputs.available == 'true'
+        env:
+          RELEASE_STORE_FILE: ${{ github.workspace }}/android/release.jks
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          cd android
+          ./gradlew assembleRelease --no-daemon \
+            -PappVersionCode=${{ github.run_number }} \
+            -PappVersionName=1.0.${{ github.run_number }}
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/out/SiteDiary.apk"
+
+      # Fallback until the keystore secret exists: an installable but debug-signed
+      # build. It cannot be upgraded to a signed release later without uninstalling.
+      - name: Build debug APK (no signing key configured)
+        if: steps.keystore.outputs.available != 'true'
         run: |
           cd android
           ./gradlew assembleDebug --no-daemon \
             -PappVersionCode=${{ github.run_number }} \
             -PappVersionName=1.0.${{ github.run_number }}
+          mkdir -p "$GITHUB_WORKSPACE/out"
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/out/SiteDiary.apk"
+
+      - name: Remove keystore from runner
+        if: always()
+        run: rm -f android/release.jks
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: site-diary-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: out/SiteDiary.apk
 
       - name: Release APK
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
           tag_name: v1.0.${{ github.run_number }}
-          name: "Shram & Site Diary v1.0.${{ github.run_number }} APK"
-          body: "Android APK for Shram & Site Diary App. Download app-debug.apk directly to your Android device."
+          name: "Shram & Site Diary v1.0.${{ github.run_number }}"
+          body: |
+            श्रम व साइट डायरी — Android APK
+
+            फ़ोन में डाउनलोड करके इंस्टॉल करें।
+            ${{ steps.keystore.outputs.available == 'true' && 'Signed release build.' || 'Debug-signed build — set RELEASE_KEYSTORE_BASE64 to publish signed releases.' }}
           draft: false
           prerelease: false
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          files: out/SiteDiary.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

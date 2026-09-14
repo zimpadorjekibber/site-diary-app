@@ -35,3 +35,8 @@ android/local.properties
 
 # Build output committed by mistake earlier
 *.apk
+
+# Android release signing — never commit keystores or their passwords
+android/keystore.properties
+*.jks
+*.keystore

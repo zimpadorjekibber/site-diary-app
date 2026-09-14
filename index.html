@@ -850,6 +850,9 @@
             <button type="button" id="btnRequestNotifPerm" class="btn-secondary" style="font-size: 0.78rem; margin-top: 4px; padding: 5px 10px;">
               🔔 नोटिफिकेशन अनुमति दें
             </button>
+            <!-- On the APK the alarm is held by Android, so it fires with the app
+                 closed. In a browser tab it can only fire while the page is open. -->
+            <p id="reminderModeNote" style="font-size: 0.72rem; color: var(--text-muted); margin-top: 8px; line-height: 1.4;"></p>
           </div>
 
           <div style="margin-bottom: 12px;">

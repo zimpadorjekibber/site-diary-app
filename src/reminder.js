@@ -2,6 +2,13 @@
 // Evening Diary Reminder Engine (Web Notifications + Web Audio API Chime + In-App Banner)
 
 import { getTodayString } from './storage.js';
+import {
+  isNativeReminderSupported,
+  requestNativePermission,
+  getNativePermission,
+  syncNativeReminders,
+  onNativeReminderTapped
+} from './native-reminder.js';
 
 const LAST_TRIGGER_KEY = 'site_diary_last_reminder_date';
 
@@ -12,6 +19,9 @@ export class ReminderManager {
     this.audioCtx = null;
     this.timerId = null;
     this.lastTriggeredDate = null;
+    // Inside the APK the OS holds the alarm, so the in-page timer is only a
+    // nicety for when the app happens to be open.
+    this.isNative = isNativeReminderSupported();
     this.init();
   }
 
@@ -19,9 +29,34 @@ export class ReminderManager {
     this.checkReminder();
     // Check every 30 seconds
     this.timerId = setInterval(() => this.checkReminder(), 30000);
+
+    if (this.isNative) {
+      onNativeReminderTapped(() => {
+        if (this.onTriggerEveningDiary) this.onTriggerEveningDiary();
+      });
+      this.syncScheduledReminders();
+    }
+  }
+
+  /* Re-registers the OS alarms. Called on start, when the reminder time or
+     toggle changes, and when a day is marked done so it stops nagging. */
+  async syncScheduledReminders() {
+    if (!this.isNative) return { supported: false };
+    const settings = this.store.getSettings();
+    return syncNativeReminders({
+      time: settings.eveningReminderTime || '19:30',
+      enabled: settings.reminderEnabled !== false,
+      isDateDone: (key) => this.store.isDateMarkedInDiary(key),
+      lang: settings.language === 'en' || settings.language === 'en-IN' ? 'en' : 'hi'
+    });
   }
 
   async requestPermission() {
+    if (this.isNative) {
+      const res = await requestNativePermission();
+      if (res === 'granted') await this.syncScheduledReminders();
+      return res;
+    }
     if (!('Notification' in window)) {
       return 'unsupported';
     }
@@ -30,6 +65,12 @@ export class ReminderManager {
     }
     const result = await Notification.requestPermission();
     return result;
+  }
+
+  async getPermissionState() {
+    if (this.isNative) return getNativePermission();
+    if (!('Notification' in window)) return 'unsupported';
+    return Notification.permission === 'granted' ? 'granted' : Notification.permission;
   }
 
   isPermissionGranted() {
@@ -133,7 +174,9 @@ export class ReminderManager {
 
     const body = `आज कुल ${txsToday.length} लेनदेन दर्ज हैं और ${workerCount} कारीगर/हेल्पर काम पर थे। रात को डायरी में लिख लें।`;
 
-    if (this.isPermissionGranted()) {
+    // In the APK the OS alarm already delivers the notification; firing a second
+    // WebView Notification here would double up (and often silently fails).
+    if (!this.isNative && this.isPermissionGranted()) {
       try {
         const notif = new Notification(title, {
           body,

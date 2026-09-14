@@ -404,14 +404,32 @@ class App {
       pending: this.currentLang === 'en' ? 'Saving…' : 'सेव हो रहा…',
       syncing: this.currentLang === 'en' ? 'Saving…' : 'सेव हो रहा…',
       synced: this.currentLang === 'en' ? 'Saved' : 'सुरक्षित',
-      error: this.currentLang === 'en' ? 'Not saved' : 'सेव नहीं हुआ'
+      error: this.currentLang === 'en' ? 'Not saved' : 'सेव नहीं हुआ',
+      idle: this.currentLang === 'en' ? 'Not saved yet' : 'अभी सेव नहीं'
     };
-    const key = state || 'synced';
-    el.className = `sync-chip sync-${key === 'pending' ? 'syncing' : key}`;
-    el.innerHTML = `<span class="sync-dot"></span><span>${labels[key] || labels.synced}</span>`;
-    el.title = key === 'error' && this.syncErrorMessage
-      ? this.syncErrorMessage
-      : (this.currentLang === 'en' ? 'Cloud backup' : 'क्लाउड बैकअप');
+
+    /* Never claim "saved" without evidence. With no explicit state, report what
+       actually happened: a failed sync stays failed, and a session that has not
+       synced yet says so rather than defaulting to the reassuring label. */
+    let key = state;
+    if (!key) {
+      if (this.syncErrorMessage) key = 'error';
+      else if (s.lastFirebaseSync) key = 'synced';
+      else key = 'idle';
+    }
+
+    const variant = key === 'pending' ? 'syncing' : (key === 'idle' ? 'off' : key);
+    el.className = `sync-chip sync-${variant}`;
+    el.innerHTML = `<span class="sync-dot"></span><span>${labels[key] || labels.idle}</span>`;
+
+    if (key === 'error' && this.syncErrorMessage) {
+      el.title = this.syncErrorMessage;
+    } else if (key === 'synced' && s.lastFirebaseSync) {
+      const t = new Date(s.lastFirebaseSync).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      el.title = this.currentLang === 'en' ? `Cloud backup — last saved ${t}` : `क्लाउड बैकअप — अंतिम सेव ${t}`;
+    } else {
+      el.title = this.currentLang === 'en' ? 'Cloud backup' : 'क्लाउड बैकअप';
+    }
   }
 
   startClock() {
@@ -2853,6 +2871,9 @@ class App {
         this.renderDiarySheet();
         this.scheduleSync('haziri');
         this.checkEveningBanner();
+        // Cancels tonight's OS alarm once the diary is written (or puts it back
+        // if the user un-marks the day).
+        this.reminderManager.syncScheduledReminders();
 
         if (newStatus) {
           confetti({
@@ -2892,6 +2913,20 @@ class App {
       document.getElementById('settingSoundToggle').checked = s.soundEnabled !== false;
       const otHoursInput = document.getElementById('settingOtHours');
       if (otHoursInput) otHoursInput.value = s.otHoursPerDay || 8;
+
+      // Tell the user honestly whether the reminder survives closing the app.
+      const modeNote = document.getElementById('reminderModeNote');
+      if (modeNote) {
+        if (this.reminderManager.isNative) {
+          this.reminderManager.syncScheduledReminders().then(info => {
+            modeNote.textContent = info && info.scheduled > 0
+              ? `✅ ऐप बंद होने पर भी रिमाइंडर बजेगा — अगले ${info.scheduled} दिन का अलार्म सेट है।`
+              : 'रिमाइंडर के लिए ऊपर "नोटिफिकेशन अनुमति दें" दबाएं।';
+          });
+        } else {
+          modeNote.textContent = 'ब्राउज़र में रिमाइंडर तभी बजेगा जब ऐप खुला हो। ऐप बंद होने पर भी याद दिलाने के लिए APK इंस्टॉल करें।';
+        }
+      }
 
       // 1. Populate Worker select in Settings
       const workerSelect = document.getElementById('settingsWorkerSelect');
@@ -3262,6 +3297,10 @@ class App {
           this.initFirebaseIntegration();
         }
 
+        // A new reminder time or an off switch has to reach the OS alarms too,
+        // otherwise the APK keeps buzzing at the old time.
+        this.reminderManager.syncScheduledReminders();
+
         this.closeModals();
         this.renderAll();
         alert('सेटिंग्स सुरक्षित कर दी गई हैं!');
@@ -3274,9 +3313,14 @@ class App {
       btnReqNotif.addEventListener('click', async () => {
         const res = await this.reminderManager.requestPermission();
         if (res === 'granted') {
-          alert('सूचना: ब्राउज़र पुश नोटिफिकेशन सक्षम हो गया है!');
+          const info = await this.reminderManager.syncScheduledReminders();
+          alert(info && info.supported
+            ? `✅ रिमाइंडर चालू हो गया!\n\nअगले ${info.scheduled} दिन का अलार्म सेट कर दिया गया है — ऐप बंद हो तब भी बजेगा।`
+            : '✅ नोटिफिकेशन चालू हो गया!');
+        } else if (res === 'unsupported') {
+          alert('इस डिवाइस पर नोटिफिकेशन उपलब्ध नहीं है।');
         } else {
-          alert('ब्राउज़र नोटिफिकेशन अनुमति नहीं मिली या ब्लॉक की गई है।');
+          alert('नोटिफिकेशन की अनुमति नहीं मिली।\n\nफ़ोन की Settings → Apps → श्रम व साइट डायरी → Notifications में जाकर चालू करें।');
         }
       });
     }

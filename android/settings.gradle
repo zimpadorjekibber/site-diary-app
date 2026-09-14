@@ -1,3 +1,10 @@
+// Lets Gradle fetch the JDK the Android plugins ask for (21) instead of failing
+// on whatever JDK happens to be installed. CI pins Java 21 explicitly; this keeps
+// local builds working without every developer installing that exact version.
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '1.0.0'
+}
+
 include ':app'
 include ':capacitor-cordova-android-plugins'
 project(':capacitor-cordova-android-plugins').projectDir = new File('./capacitor-cordova-android-plugins/')

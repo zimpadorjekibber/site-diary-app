@@ -16,10 +16,44 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    /* Release signing.
+     *
+     * The keystore is never committed. Credentials come from either:
+     *   - android/keystore.properties  (local builds; gitignored), or
+     *   - the RELEASE_STORE_* environment variables (CI, from GitHub Secrets).
+     *
+     * If neither is present the release build falls back to the debug key, so a
+     * fresh clone still builds — it just produces an APK you cannot ship.
+     */
+    signingConfigs {
+        release {
+            def props = new Properties()
+            def propsFile = rootProject.file('keystore.properties')
+            if (propsFile.exists()) {
+                propsFile.withInputStream { props.load(it) }
+            }
+
+            def resolvedStoreFile = props['storeFile'] ?: System.getenv('RELEASE_STORE_FILE')
+            def resolvedStorePassword = props['storePassword'] ?: System.getenv('RELEASE_STORE_PASSWORD')
+            def resolvedKeyAlias = props['keyAlias'] ?: System.getenv('RELEASE_KEY_ALIAS')
+            def resolvedKeyPassword = props['keyPassword'] ?: System.getenv('RELEASE_KEY_PASSWORD')
+
+            if (resolvedStoreFile && file(resolvedStoreFile).exists()) {
+                storeFile file(resolvedStoreFile)
+                storePassword resolvedStorePassword
+                keyAlias resolvedKeyAlias
+                keyPassword resolvedKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release.storeFile != null
+                ? signingConfigs.release
+                : signingConfigs.debug
         }
     }
 }
