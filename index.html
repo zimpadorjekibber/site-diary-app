@@ -193,9 +193,15 @@
       <!-- Filter chips -->
       <div class="filter-bar" id="timelineFilters">
         <button class="filter-chip active" data-filter-type="all">सभी प्रकार (All)</button>
-        <button class="filter-chip" data-filter-type="cash">💵 नकद (Cash)</button>
-        <button class="filter-chip" data-filter-type="ration">🍚 राशन (Ration)</button>
-        <button class="filter-chip" data-filter-type="recharge">📱 रिचार्ज (Recharge)</button>
+        <button class="filter-chip" data-filter-type="cash">💵 नकद</button>
+        <button class="filter-chip" data-filter-type="ration">🍚 राशन</button>
+        <button class="filter-chip" data-filter-type="recharge">📱 रिचार्ज</button>
+        <button class="filter-chip" data-filter-type="cylinder">🔥 सिलेंडर</button>
+        <button class="filter-chip" data-filter-type="diesel">⛽ डीजल</button>
+        <button class="filter-chip" data-filter-type="material">🧱 सामान</button>
+        <button class="filter-chip" data-filter-type="other">📝 अन्य</button>
+        <!-- Custom filter chips will be appended here by JS -->
+        <button class="filter-chip" id="btnAddFilterType" style="border-style: dashed; color: var(--amber-light); border-color: var(--amber-primary);">+ जोड़ें</button>
       </div>
 
       <!-- Transaction Cards List -->
@@ -474,10 +480,14 @@
         <!-- Transaction Type Switcher -->
         <div class="form-group">
           <label class="form-label">प्रकार चुनें (Transaction Type):</label>
-          <div class="segmented-control" id="txTypeSwitcher">
+          <div class="segmented-control" id="txTypeSwitcher" style="flex-wrap: wrap; gap: 6px;">
             <button type="button" class="segment-btn active" data-type="cash">💵 नकद / पेशगी</button>
-            <button type="button" class="segment-btn" data-type="ration">🍚 राशन (सामान)</button>
-            <button type="button" class="segment-btn" data-type="recharge">📱 मोबाइल रिचार्ज</button>
+            <button type="button" class="segment-btn" data-type="ration">🍚 राशन</button>
+            <button type="button" class="segment-btn" data-type="recharge">📱 रिचार्ज</button>
+            <button type="button" class="segment-btn" data-type="cylinder">🔥 सिलेंडर</button>
+            <button type="button" class="segment-btn" data-type="diesel">⛽ डीजल</button>
+            <button type="button" class="segment-btn" data-type="material">🧱 सामान / मटेरियल</button>
+            <button type="button" class="segment-btn" data-type="other">📝 अन्य</button>
           </div>
         </div>
 

@@ -1385,21 +1385,84 @@ class App {
     });
 
     // Timeline Filters
-    document.querySelectorAll('#timelineFilters .filter-chip').forEach(chip => {
-      chip.addEventListener('click', () => {
-        document.querySelectorAll('#timelineFilters .filter-chip').forEach(c => c.classList.remove('active'));
-        chip.classList.add('active');
-
-        if (chip.hasAttribute('data-filter-type')) {
+    const bindFilterChips = () => {
+      document.querySelectorAll('#timelineFilters .filter-chip[data-filter-type]').forEach(chip => {
+        chip.addEventListener('click', () => {
+          document.querySelectorAll('#timelineFilters .filter-chip').forEach(c => c.classList.remove('active'));
+          chip.classList.add('active');
           this.activeFilterType = chip.getAttribute('data-filter-type');
           this.activeFilterTrade = null;
-        } else if (chip.hasAttribute('data-filter-trade')) {
-          this.activeFilterType = 'all';
-          this.activeFilterTrade = chip.getAttribute('data-filter-trade');
-        }
-        this.renderTimeline();
+          this.renderTimeline();
+        });
       });
-    });
+    };
+    bindFilterChips();
+
+    // "+ जोड़ें" button to add custom transaction types
+    const btnAddFilterType = document.getElementById('btnAddFilterType');
+    if (btnAddFilterType) {
+      btnAddFilterType.addEventListener('click', () => {
+        const name = prompt('नया लेन-देन प्रकार का नाम लिखें:\n(जैसे: बिजली बिल, ठेका, चाय-पानी, दवाई आदि)');
+        if (!name || !name.trim()) return;
+        const typeName = name.trim();
+        const typeId = typeName.toLowerCase().replace(/\s+/g, '_');
+
+        // Save to localStorage
+        let customTypes = [];
+        try { customTypes = JSON.parse(localStorage.getItem('custom_tx_types') || '[]'); } catch(e) {}
+        if (!customTypes.find(t => t.id === typeId)) {
+          customTypes.push({ id: typeId, label: typeName });
+          localStorage.setItem('custom_tx_types', JSON.stringify(customTypes));
+        }
+
+        // Add filter chip
+        const chip = document.createElement('button');
+        chip.className = 'filter-chip';
+        chip.setAttribute('data-filter-type', typeId);
+        chip.textContent = '🏷️ ' + typeName;
+        btnAddFilterType.parentNode.insertBefore(chip, btnAddFilterType);
+
+        // Add to txTypeSwitcher in modal
+        const txTypeSwitcher = document.getElementById('txTypeSwitcher');
+        if (txTypeSwitcher) {
+          const segBtn = document.createElement('button');
+          segBtn.type = 'button';
+          segBtn.className = 'segment-btn';
+          segBtn.setAttribute('data-type', typeId);
+          segBtn.textContent = '🏷️ ' + typeName;
+          txTypeSwitcher.appendChild(segBtn);
+        }
+
+        // Rebind
+        bindFilterChips();
+        alert(`✅ "${typeName}" प्रकार जोड़ दिया गया!`);
+      });
+
+      // Load saved custom types on startup
+      try {
+        const customTypes = JSON.parse(localStorage.getItem('custom_tx_types') || '[]');
+        customTypes.forEach(t => {
+          // Add filter chip
+          const chip = document.createElement('button');
+          chip.className = 'filter-chip';
+          chip.setAttribute('data-filter-type', t.id);
+          chip.textContent = '🏷️ ' + t.label;
+          btnAddFilterType.parentNode.insertBefore(chip, btnAddFilterType);
+
+          // Add to txTypeSwitcher
+          const txTypeSwitcher = document.getElementById('txTypeSwitcher');
+          if (txTypeSwitcher) {
+            const segBtn = document.createElement('button');
+            segBtn.type = 'button';
+            segBtn.className = 'segment-btn';
+            segBtn.setAttribute('data-type', t.id);
+            segBtn.textContent = '🏷️ ' + t.label;
+            txTypeSwitcher.appendChild(segBtn);
+          }
+        });
+        bindFilterChips();
+      } catch(e) {}
+    }
 
     // Timeline Search & Date Mode Switcher
     const timelinePreset = document.getElementById('timelineDatePreset');
