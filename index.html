@@ -802,6 +802,46 @@
           </p>
         </div>
 
+        <!-- Google Firebase Cloud Integration -->
+        <div class="form-group" style="border-top: 1px solid var(--border-card); padding-top: 14px; background: rgba(245, 158, 11, 0.05); padding: 14px; border-radius: var(--radius-md); border: 1px solid rgba(245, 158, 11, 0.2); margin-top: 14px;">
+          <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
+            <strong style="color: #fbbf24; display: flex; align-items: center; gap: 6px;">
+              🔥 Google Firebase (लाइफटाइम फ्री डेटाबेस):
+            </strong>
+            <span id="firebaseStatusBadge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); color: var(--text-muted);">कनेक्ट नहीं है</span>
+          </label>
+
+          <div style="margin-top: 8px;">
+            <label style="font-size: 0.76rem; color: var(--text-muted);">साइट / डायरी का नाम (Site ID):</label>
+            <input type="text" id="firebaseSiteIdInput" class="form-input" placeholder="जैसे: my-site या khalen-dairy" style="margin-bottom: 8px; font-size: 0.85rem;" />
+          </div>
+
+          <div>
+            <label style="font-size: 0.76rem; color: var(--text-muted);">Firebase Web Config (JSON पेस्ट करें):</label>
+            <textarea id="firebaseConfigInput" class="form-textarea" rows="3" placeholder='{"apiKey": "AIza...", "projectId": "my-diary-...", "appId": "..."}' style="font-family: monospace; font-size: 0.75rem; margin-bottom: 8px;"></textarea>
+          </div>
+
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <button type="button" id="btnConnectFirebase" class="btn-primary" style="flex: 1; font-size: 0.8rem; padding: 8px 12px;">
+              🔥 टेस्ट व कनेक्ट करें
+            </button>
+            <button type="button" id="btnPushToFirebase" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: #f59e0b; color: #f59e0b; font-weight: 700; padding: 8px 12px;">
+              📤 Firebase पर सेव करें
+            </button>
+            <button type="button" id="btnPullFromFirebase" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: #38bdf8; color: #38bdf8; font-weight: 700; padding: 8px 12px;">
+              📥 Firebase से लाएं
+            </button>
+          </div>
+
+          <label style="display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: var(--text-main); margin-top: 10px; cursor: pointer;">
+            <input type="checkbox" id="firebaseAutoSyncToggle" />
+            <span>🔄 हर लेन-देन व हाजिरी पर अपने आप Firebase में सिंक करें (Auto-Sync)</span>
+          </label>
+          <p style="font-size: 0.72rem; color: var(--text-dim); margin-top: 4px;" id="firebaseLastSyncNote">
+            गूगल के ऑफिशियल डेटाबेस (Firestore) पर आपका डेटा जीवनभर सुरक्षित और निजी रहता है।
+          </p>
+        </div>
+
         <div class="form-group" style="border-top: 1px solid var(--border-card); padding-top: 14px;">
           <label class="form-label">लोकल फ़ाइल बैकअप (JSON Backup):</label>
           <div style="display: flex; gap: 8px;">

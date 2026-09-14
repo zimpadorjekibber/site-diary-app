@@ -5,6 +5,7 @@ import { store, getTodayString } from './storage.js';
 import { VoiceManager } from './speech.js';
 import { ReminderManager } from './reminder.js';
 import confetti from 'canvas-confetti';
+import { initFirebase, isFirebaseReady, saveToFirebase, loadFromFirebase, enableRealtimeSync } from './firebase.js';
 
 const ICON_MAP = {
   'hammer': '🔨',
@@ -113,6 +114,31 @@ class App {
     this.renderAll();
     this.startClock();
     this.checkEveningBanner();
+    this.initFirebaseIntegration();
+  }
+
+  initFirebaseIntegration() {
+    const s = this.store.getSettings();
+    if (s.firebaseConfig) {
+      try {
+        const ok = initFirebase(s.firebaseConfig);
+        if (ok && s.firebaseAutoSync) {
+          enableRealtimeSync(s.firebaseSiteId || 'khalen-dairy', (remoteData) => {
+            console.log('Realtime sync from Firebase received');
+          });
+        }
+      } catch (err) {
+        console.warn('Firebase init on start failed:', err);
+      }
+    }
+  }
+
+  triggerFirebaseAutoSync() {
+    const s = this.store.getSettings();
+    if (s.firebaseAutoSync && isFirebaseReady()) {
+      const siteId = s.firebaseSiteId || 'khalen-dairy';
+      saveToFirebase(siteId, this.store.data).catch(e => console.warn('AutoSync error:', e));
+    }
   }
 
   startClock() {
@@ -171,6 +197,7 @@ class App {
     this.renderGroupsLedger();
     this.renderDiarySheet();
     this.checkEveningBanner();
+    this.triggerFirebaseAutoSync();
   }
 
   renderHeaderInfo() {
@@ -2272,11 +2299,160 @@ class App {
         }
       }
 
+      // Populate Firebase Settings UI
+      const fbSiteIdInput = document.getElementById('firebaseSiteIdInput');
+      if (fbSiteIdInput) fbSiteIdInput.value = s.firebaseSiteId || 'khalen-dairy';
+
+      const fbConfigInput = document.getElementById('firebaseConfigInput');
+      if (fbConfigInput) {
+        fbConfigInput.value = s.firebaseConfig ? JSON.stringify(s.firebaseConfig, null, 2) : '';
+      }
+
+      const fbAutoSyncToggle = document.getElementById('firebaseAutoSyncToggle');
+      if (fbAutoSyncToggle) fbAutoSyncToggle.checked = !!s.firebaseAutoSync;
+
+      const fbBadge = document.getElementById('firebaseStatusBadge');
+      const fbNote = document.getElementById('firebaseLastSyncNote');
+      if (fbBadge) {
+        if (isFirebaseReady()) {
+          fbBadge.textContent = '🟢 कनेक्टेड (Live)';
+          fbBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+          fbBadge.style.color = '#34d399';
+          if (fbNote && s.lastFirebaseSync) {
+            const fbDateStr = new Date(s.lastFirebaseSync).toLocaleDateString('hi-IN', { day: 'numeric', month: 'short' });
+            const fbTimeStr = new Date(s.lastFirebaseSync).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            fbNote.textContent = `अंतिम Firebase सिंक: ${fbDateStr} ${fbTimeStr} पर सुरक्षित किया गया।`;
+          }
+        } else {
+          fbBadge.textContent = '⚪ कनेक्ट नहीं है';
+          fbBadge.style.background = 'rgba(255, 255, 255, 0.08)';
+          fbBadge.style.color = 'var(--text-muted)';
+        }
+      }
+
       modalSettings.classList.add('open');
     };
 
     if (btnOpenSettings) btnOpenSettings.addEventListener('click', openSettings);
     if (btnOpenReminder) btnOpenReminder.addEventListener('click', openSettings);
+
+    // Firebase Connect & Sync Button Handlers
+    const btnConnectFb = document.getElementById('btnConnectFirebase');
+    if (btnConnectFb) {
+      btnConnectFb.addEventListener('click', async () => {
+        const cfgStr = document.getElementById('firebaseConfigInput')?.value.trim();
+        const siteId = document.getElementById('firebaseSiteIdInput')?.value.trim() || 'khalen-dairy';
+        if (!cfgStr) {
+          alert('कृपया पहले अपना Firebase Web Config JSON पेस्ट करें।\n\nउदा: {"apiKey": "...", "projectId": "...", "appId": "..."}');
+          return;
+        }
+        try {
+          let cfg;
+          try {
+            cfg = JSON.parse(cfgStr);
+          } catch {
+            throw new Error('अमान्य JSON प्रारूप! कृपया सही Firebase Config JSON पेस्ट करें।');
+          }
+          btnConnectFb.disabled = true;
+          btnConnectFb.textContent = '⏳ कनेक्ट हो रहा है...';
+
+          const ok = initFirebase(cfg);
+          if (!ok) throw new Error('Firebase प्रारंभ करने में त्रुटि आई। कृपया apiKey और projectId जांचें।');
+
+          // Save test snapshot
+          await saveToFirebase(siteId, this.store.data);
+          this.store.updateSettings({
+            firebaseConfig: cfg,
+            firebaseSiteId: siteId,
+            lastFirebaseSync: Date.now()
+          });
+
+          const fbBadge = document.getElementById('firebaseStatusBadge');
+          if (fbBadge) {
+            fbBadge.textContent = '🟢 कनेक्टेड (Live)';
+            fbBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+            fbBadge.style.color = '#34d399';
+          }
+
+          alert('✅ Google Firebase सफलतापूर्वक कनेक्ट हो गया और साइट डायरी का बैकअप सुरक्षित हो गया!');
+        } catch (err) {
+          alert('Firebase कनेक्शन त्रुटि: ' + err.message);
+        } finally {
+          btnConnectFb.disabled = false;
+          btnConnectFb.textContent = '🔥 टेस्ट व कनेक्ट करें';
+        }
+      });
+    }
+
+    const btnPushFb = document.getElementById('btnPushToFirebase');
+    if (btnPushFb) {
+      btnPushFb.addEventListener('click', async () => {
+        const siteId = document.getElementById('firebaseSiteIdInput')?.value.trim() || this.store.getSettings().firebaseSiteId || 'khalen-dairy';
+        if (!isFirebaseReady()) {
+          const cfg = this.store.getSettings().firebaseConfig;
+          if (cfg) initFirebase(cfg);
+          else {
+            alert('कृपया पहले Firebase Config दर्ज करके "टेस्ट व कनेक्ट करें" दबाएं।');
+            return;
+          }
+        }
+        btnPushFb.disabled = true;
+        btnPushFb.textContent = '⏳ सेव हो रहा है...';
+        try {
+          await saveToFirebase(siteId, this.store.data);
+          this.store.updateSettings({ lastFirebaseSync: Date.now() });
+          alert('✅ पूरा हिसाब Google Firebase पर सफलतापूर्वक सुरक्षित हो गया!');
+        } catch (err) {
+          alert('Firebase बैकअप विफल: ' + err.message);
+        } finally {
+          btnPushFb.disabled = false;
+          btnPushFb.textContent = '📤 Firebase पर सेव करें';
+        }
+      });
+    }
+
+    const btnPullFb = document.getElementById('btnPullFromFirebase');
+    if (btnPullFb) {
+      btnPullFb.addEventListener('click', async () => {
+        const siteId = document.getElementById('firebaseSiteIdInput')?.value.trim() || this.store.getSettings().firebaseSiteId || 'khalen-dairy';
+        if (!isFirebaseReady()) {
+          const cfg = this.store.getSettings().firebaseConfig;
+          if (cfg) initFirebase(cfg);
+          else {
+            alert('कृपया पहले Firebase Config दर्ज करें।');
+            return;
+          }
+        }
+        if (!confirm('चेतावनी: Firebase से डेटा लाने पर मौजूदा लोकल डेटा बदल जाएगा। क्या आप जारी रखना चाहते हैं?')) {
+          return;
+        }
+        btnPullFb.disabled = true;
+        btnPullFb.textContent = '⏳ लोड हो रहा है...';
+        try {
+          const remoteData = await loadFromFirebase(siteId);
+          if (remoteData && remoteData.workers && remoteData.trades) {
+            this.store.data = {
+              trades: remoteData.trades,
+              workers: remoteData.workers,
+              transactions: remoteData.transactions || [],
+              haziri: remoteData.haziri || {},
+              diaryNotedDates: remoteData.diaryNotedDates || {},
+              settings: { ...this.store.getSettings(), ...(remoteData.settings || {}) }
+            };
+            this.store.save();
+            alert('✅ Google Firebase से डेटा सफलतापूर्वक आ गया!');
+            location.reload();
+          } else {
+            throw new Error('अमान्य डेटा संरचना');
+          }
+        } catch (err) {
+          alert('Firebase से डेटा लाना विफल: ' + err.message);
+        } finally {
+          btnPullFb.disabled = false;
+          btnPullFb.textContent = '📥 Firebase से लाएं';
+        }
+      });
+    }
 
     const formSettings = document.getElementById('formSettings');
     if (formSettings) {
@@ -2286,12 +2462,16 @@ class App {
         const reminderEnabled = document.getElementById('settingNotifToggle').checked;
         const soundEnabled = document.getElementById('settingSoundToggle').checked;
         const cloudSyncKey = document.getElementById('settingCloudSyncKey') ? document.getElementById('settingCloudSyncKey').value.trim() : '';
+        const firebaseSiteId = document.getElementById('firebaseSiteIdInput') ? document.getElementById('firebaseSiteIdInput').value.trim() : 'khalen-dairy';
+        const firebaseAutoSync = document.getElementById('firebaseAutoSyncToggle') ? document.getElementById('firebaseAutoSyncToggle').checked : false;
 
         this.store.updateSettings({
           eveningReminderTime: time,
           reminderEnabled,
           soundEnabled,
-          cloudSyncKey
+          cloudSyncKey,
+          firebaseSiteId,
+          firebaseAutoSync
         });
 
         this.closeModals();
