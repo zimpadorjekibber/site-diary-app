@@ -1,6 +1,6 @@
 // public/sw.js
 // Service Worker with Network-First strategy for HTML and cache-busting
-const CACHE_NAME = 'site-diary-v4';
+const CACHE_NAME = 'site-diary-v5';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
@@ -60,21 +60,40 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For other static assets, cache first, fallback to network
+  const url = new URL(event.request.url);
+
+  // Never cache cross-origin traffic (Firestore, fonts) — a stale ledger response
+  // would be worse than no response.
+  if (url.origin !== self.location.origin) return;
+
+  // Vite fingerprints build output (index-A1b2C3.js), so those files are safe to
+  // serve from cache forever. Everything else is revalidated against the network
+  // with the cache only as an offline fallback — cache-first on unversioned files
+  // was pinning users to an old build until they cleared site data.
+  const isHashedAsset = /\/assets\/.+-[A-Za-z0-9_-]{8,}\.(js|css|woff2?)$/.test(url.pathname);
+
+  if (isHashedAsset) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => cached || fetch(event.request).then((res) => {
+        if (res && res.status === 200) {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+        }
+        return res;
+      }))
+    );
+    return;
+  }
+
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(event.request).then((networkResponse) => {
+    fetch(event.request)
+      .then((networkResponse) => {
         if (networkResponse && networkResponse.status === 200) {
           const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
-          });
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, responseToCache));
         }
         return networkResponse;
-      });
-    })
+      })
+      .catch(() => caches.match(event.request))
   );
 });

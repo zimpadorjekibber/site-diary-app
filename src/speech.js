@@ -48,11 +48,14 @@ export class VoiceManager {
         if (this.onStatusChangeCallback) this.onStatusChangeCallback(false, `आवाज़ पहचानने में समस्या (${event.error})`);
       };
 
-      this.recognition.onend = () => {
+      this.recognition.onend = async () => {
         this.isListening = false;
-        this.stopAudioRecording();
+        // MediaRecorder.stop() and the FileReader that encodes the clip are both
+        // async. The old code read this.currentAudioDataUrl on the very next line,
+        // so it was always still null and every voice backup was silently lost.
+        const audioDataUrl = await this.stopAudioRecording();
         const parsed = this.parseTranscript(this.transcript);
-        if (this.onResultCallback) this.onResultCallback(this.transcript, true, parsed, this.currentAudioDataUrl);
+        if (this.onResultCallback) this.onResultCallback(this.transcript, true, parsed, audioDataUrl);
         if (this.onStatusChangeCallback) this.onStatusChangeCallback(false, 'रुक गया (Completed)');
       };
     }
@@ -83,8 +86,21 @@ export class VoiceManager {
             const reader = new FileReader();
             reader.onloadend = () => {
               this.currentAudioDataUrl = reader.result;
+              if (this._resolveAudio) {
+                this._resolveAudio(reader.result);
+                this._resolveAudio = null;
+              }
+            };
+            reader.onerror = () => {
+              if (this._resolveAudio) {
+                this._resolveAudio(null);
+                this._resolveAudio = null;
+              }
             };
             reader.readAsDataURL(blob);
+          } else if (this._resolveAudio) {
+            this._resolveAudio(null);
+            this._resolveAudio = null;
           }
           // Stop stream tracks
           stream.getTracks().forEach(t => t.stop());
@@ -118,14 +134,28 @@ export class VoiceManager {
     this.isListening = false;
   }
 
+  // Resolves once the recorded clip has actually finished encoding to a data URL.
   stopAudioRecording() {
-    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+    if (!this.mediaRecorder || this.mediaRecorder.state === 'inactive') {
+      return Promise.resolve(this.currentAudioDataUrl || null);
+    }
+    return new Promise((resolve) => {
+      this._resolveAudio = resolve;
+      // Never hang the entry flow waiting on the encoder.
+      setTimeout(() => {
+        if (this._resolveAudio) {
+          this._resolveAudio(this.currentAudioDataUrl || null);
+          this._resolveAudio = null;
+        }
+      }, 3000);
       try {
         this.mediaRecorder.stop();
       } catch (e) {
         console.warn(e);
+        resolve(null);
+        this._resolveAudio = null;
       }
-    }
+    });
   }
 
   // Smart Parser for Hindi/Hinglish/English voice notes
@@ -162,17 +192,46 @@ export class VoiceManager {
       }
     }
 
-    // 2. Check for Worker Names
-    for (const worker of workers) {
-      const wNameLower = worker.name.toLowerCase();
-      const parts = wNameLower.split(' ');
-      if (lower.includes(wNameLower) || parts.some(p => p.length > 2 && lower.includes(p))) {
-        detectedWorker = worker;
-        if (!detectedTrade) {
-          detectedTrade = trades.find(t => t.id === worker.tradeId);
+    // Trades the user created themselves were never matched, because only the six
+    // built-in ids had keywords. Match on the trade's own name too.
+    if (!detectedTrade) {
+      for (const trade of trades) {
+        const words = String(trade.name).toLowerCase().match(/[\p{L}]{3,}/gu) || [];
+        if (words.some(w => lower.includes(w))) {
+          detectedTrade = trade;
+          break;
         }
-        break;
       }
+    }
+
+    // 2. Check for Worker Names — scored, not first-match.
+    // `includes()` with first-match meant a worker called "Ram" was picked when
+    // the contractor said "Ramesh", and a shared surname like "Lal" or "Singh"
+    // matched whichever worker happened to be earlier in the list.
+    let bestScore = 0;
+    for (const worker of workers) {
+      const wNameLower = String(worker.name).toLowerCase().trim();
+      let score = 0;
+
+      if (lower.includes(wNameLower)) {
+        score = 100 + wNameLower.length; // full name spoken — strongest signal
+      } else {
+        const parts = wNameLower.split(/\s+/).filter(p => p.length > 2);
+        for (const part of parts) {
+          // Word-boundary match so "ram" does not fire inside "ramesh".
+          const re = new RegExp(`(^|[^\\p{L}])${part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^\\p{L}]|$)`, 'u');
+          if (re.test(lower)) score = Math.max(score, 40 + part.length);
+        }
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        detectedWorker = worker;
+      }
+    }
+
+    if (detectedWorker && !detectedTrade) {
+      detectedTrade = trades.find(t => t.id === detectedWorker.tradeId);
     }
 
     // 3. Check for Mistri vs Helper mention

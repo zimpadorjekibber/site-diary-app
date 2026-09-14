@@ -3,6 +3,8 @@
 
 import { getTodayString } from './storage.js';
 
+const LAST_TRIGGER_KEY = 'site_diary_last_reminder_date';
+
 export class ReminderManager {
   constructor(store, onTriggerEveningDiary) {
     this.store = store;
@@ -72,6 +74,23 @@ export class ReminderManager {
     }
   }
 
+  // Persisted, so reopening the app does not re-fire a reminder already shown.
+  // Previously this lived only in memory and re-triggered on every reload.
+  getLastTriggeredDate() {
+    try {
+      return localStorage.getItem(LAST_TRIGGER_KEY);
+    } catch {
+      return this.lastTriggeredDate;
+    }
+  }
+
+  setLastTriggeredDate(date) {
+    this.lastTriggeredDate = date;
+    try {
+      localStorage.setItem(LAST_TRIGGER_KEY, date);
+    } catch { /* private mode — fall back to the in-memory value */ }
+  }
+
   checkReminder() {
     const settings = this.store.getSettings();
     if (!settings.reminderEnabled) return;
@@ -86,10 +105,10 @@ export class ReminderManager {
     const targetMinutes = targetH * 60 + targetM;
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
-    // Trigger if current time is within 60 mins after target time and hasn't triggered today yet
+    // Fire once, any time in the two hours after the chosen reminder time.
     if (currentMinutes >= targetMinutes && currentMinutes <= targetMinutes + 120) {
-      if (this.lastTriggeredDate !== today) {
-        this.lastTriggeredDate = today;
+      if (this.getLastTriggeredDate() !== today) {
+        this.setLastTriggeredDate(today);
         this.triggerReminder();
       }
     }
@@ -118,7 +137,8 @@ export class ReminderManager {
       try {
         const notif = new Notification(title, {
           body,
-          icon: '/favicon.ico',
+          icon: './icon-192.png',
+          badge: './icon-192.png',
           tag: 'site-diary-evening-reminder',
           requireInteraction: true
         });

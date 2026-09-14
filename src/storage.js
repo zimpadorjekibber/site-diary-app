@@ -41,19 +41,102 @@ const DEFAULT_FIREBASE_CONFIG = {
   measurementId: "G-XE1YCNYJRB"
 };
 
+const SITE_ID_KEY = 'site_diary_site_id_v1';
+const DEVICE_ID_KEY = 'site_diary_device_id_v1';
+
+function randomCode(len = 4) {
+  // Avoids look-alike characters (0/O, 1/I) so a contractor can read it off a screen aloud.
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let out = '';
+  for (let i = 0; i < len; i++) out += chars.charAt(Math.floor(Math.random() * chars.length));
+  return out;
+}
+
+// Every install gets its OWN cloud document. Previously all installs shared one
+// hardcoded id, so each site silently overwrote every other site's ledger.
+function getOrCreateSiteId() {
+  try {
+    const existing = localStorage.getItem(SITE_ID_KEY);
+    if (existing) return existing;
+    const fresh = `site-${randomCode(4)}-${randomCode(4)}`;
+    localStorage.setItem(SITE_ID_KEY, fresh);
+    return fresh;
+  } catch {
+    return `site-${randomCode(4)}-${randomCode(4)}`;
+  }
+}
+
+// Identifies this phone/browser so realtime sync can ignore the echo of its own writes.
+export function getDeviceId() {
+  try {
+    const existing = localStorage.getItem(DEVICE_ID_KEY);
+    if (existing) return existing;
+    const fresh = `dev-${randomCode(6)}-${Date.now().toString(36)}`;
+    localStorage.setItem(DEVICE_ID_KEY, fresh);
+    return fresh;
+  } catch {
+    return `dev-${randomCode(6)}`;
+  }
+}
+
 const DEFAULT_SETTINGS = {
   eveningReminderTime: '19:30', // 7:30 PM
   reminderEnabled: true,
   soundEnabled: true,
   currency: '₹',
   language: 'hi-IN', // for speech recognition
-  cloudSyncKey: '',
-  lastCloudSync: null,
+  otHoursPerDay: 8, // divisor used to convert a daily rate into an hourly OT rate
   firebaseConfig: DEFAULT_FIREBASE_CONFIG,
-  firebaseSiteId: 'khalen-dairy',
+  firebaseSiteId: '', // filled from getOrCreateSiteId() on first load
   firebaseAutoSync: true,
   lastFirebaseSync: null
 };
+
+/* ===================================================
+   TRANSACTION TYPES — single source of truth
+   Every screen (stats, diary slip, ledger, filters) reads this list, so adding a
+   type here makes it count everywhere instead of being silently dropped.
+=================================================== */
+export const TX_TYPES = [
+  { id: 'cash',     icon: '💵', hi: 'नकद पेशगी',    en: 'Cash Advance',  scope: 'worker' },
+  { id: 'recharge', icon: '📱', hi: 'मोबाइल रिचार्ज', en: 'Recharge',      scope: 'worker' },
+  { id: 'ration',   icon: '🍚', hi: 'राशन',          en: 'Ration',        scope: 'site'   },
+  { id: 'cylinder', icon: '🔥', hi: 'गैस सिलेंडर',    en: 'Gas Cylinder',  scope: 'site'   },
+  { id: 'diesel',   icon: '⛽', hi: 'डीजल',          en: 'Diesel',        scope: 'site'   },
+  { id: 'material', icon: '🧱', hi: 'सामान',         en: 'Material',      scope: 'site'   },
+  { id: 'other',    icon: '📝', hi: 'अन्य खर्च',      en: 'Other',         scope: 'site'   }
+];
+
+export function getCustomTxTypes() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('custom_tx_types') || '[]');
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
+
+export function getAllTxTypes() {
+  const custom = getCustomTxTypes().map(t => ({
+    id: t.id || t.type,
+    icon: t.icon || '🏷️',
+    hi: t.name || t.label || t.id,
+    en: t.name || t.label || t.id,
+    scope: 'site',
+    custom: true
+  }));
+  return [...TX_TYPES, ...custom.filter(c => c.id && !TX_TYPES.some(b => b.id === c.id))];
+}
+
+export function getTxTypeMeta(typeId) {
+  return getAllTxTypes().find(t => t.id === typeId)
+    || { id: typeId, icon: '🏷️', hi: typeId, en: typeId, scope: 'site' };
+}
+
+export function getTxTypeLabel(typeId, lang = 'hi') {
+  const meta = getTxTypeMeta(typeId);
+  return lang === 'en' ? meta.en : meta.hi;
+}
 
 // Seed initial sample transactions for today to give the user immediate interactive context
 function getInitialSeedTransactions() {
@@ -165,9 +248,24 @@ function getInitialSeedHaziri() {
   return haziriMap;
 }
 
+/* Anything logged against a named worker counts as money that worker received —
+   cash, recharge, or a bag of cement bought in their name. The old code only
+   counted cash+recharge in the ledger but counted everything in the muster roll,
+   so the same worker showed two different balances on two screens. */
+function sumWorkerPayments(txs) {
+  return txs
+    .filter(t => t.targetType !== 'group')
+    .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+}
+
 export class Store {
   constructor() {
     this.data = this.load();
+  }
+
+  getOtHoursPerDay() {
+    const n = Number(this.data?.settings?.otHoursPerDay);
+    return n > 0 ? n : 8;
   }
 
   load() {
@@ -182,12 +280,25 @@ export class Store {
             this.save(parsed);
           }
           parsed.settings = { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) };
+          let needsSave = false;
           if (!parsed.settings.firebaseConfig || !parsed.settings.firebaseConfig.apiKey) {
             parsed.settings.firebaseConfig = DEFAULT_FIREBASE_CONFIG;
-            parsed.settings.firebaseSiteId = 'khalen-dairy';
             parsed.settings.firebaseAutoSync = true;
-            this.save(parsed);
+            needsSave = true;
           }
+          // Migration: installs created before per-site ids all pointed at the same
+          // shared document. Move them onto their own, keeping a custom id if set.
+          if (!parsed.settings.firebaseSiteId || parsed.settings.firebaseSiteId === 'khalen-dairy') {
+            parsed.settings.firebaseSiteId = getOrCreateSiteId();
+            needsSave = true;
+          }
+          // A restored-from-cloud payload used to lose this flag, which let the demo
+          // seed below re-inject 8 fake workers into a real site's register.
+          if (parsed.workers.length > 0 && !parsed.workers.some(w => String(w.id).startsWith('w') && w.id.length <= 3)) {
+            parsed.isCleanStarted = true;
+            needsSave = true;
+          }
+          if (needsSave) this.save(parsed);
           return parsed;
         }
       }
@@ -201,18 +312,76 @@ export class Store {
       transactions: getInitialSeedTransactions(),
       haziri: getInitialSeedHaziri(),
       diaryNotedDates: {}, // { "2026-09-12": timestamp }
-      settings: DEFAULT_SETTINGS
+      settings: { ...DEFAULT_SETTINGS, firebaseSiteId: getOrCreateSiteId() }
     };
     this.save(initial);
     return initial;
+  }
+
+  // Called with a user-facing message whenever a write could not be persisted.
+  // Silently swallowing these was losing entries once the 5MB quota filled up.
+  onSaveError(handler) {
+    this._saveErrorHandler = handler;
   }
 
   save(data = this.data) {
     this.data = data;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      this._lastSaveFailed = false;
+      return true;
     } catch (e) {
       console.error('Failed to save to localStorage:', e);
+      // Quota is the realistic failure here: voice clips and worker photos are
+      // stored inline as base64. Drop the heaviest optional data and retry once
+      // so the ledger itself — the part that matters — still gets written.
+      const recovered = this.trySaveAfterFreeingSpace(data);
+      if (!recovered && this._saveErrorHandler && !this._lastSaveFailed) {
+        this._lastSaveFailed = true;
+        this._saveErrorHandler(e);
+      }
+      return recovered;
+    }
+  }
+
+  trySaveAfterFreeingSpace(data) {
+    try {
+      let freedAudio = 0;
+      (data.transactions || []).forEach(tx => {
+        if (tx.audioDataUrl) {
+          tx.audioDataUrl = null;
+          freedAudio++;
+        }
+      });
+      if (freedAudio === 0) return false;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      if (this._saveErrorHandler) {
+        this._saveErrorHandler(null, {
+          recovered: true,
+          droppedAudio: freedAudio
+        });
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  // Rough byte size of the stored payload, used by the Settings storage meter.
+  getStorageUsage() {
+    try {
+      const bytes = new Blob([JSON.stringify(this.data)]).size;
+      const limit = 5 * 1024 * 1024; // browsers typically allow ~5MB per origin
+      return {
+        bytes,
+        limit,
+        percent: Math.min(100, Math.round((bytes / limit) * 100)),
+        readable: bytes > 1024 * 1024
+          ? `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+          : `${Math.round(bytes / 1024)} KB`
+      };
+    } catch {
+      return { bytes: 0, limit: 0, percent: 0, readable: '—' };
     }
   }
 
@@ -246,8 +415,26 @@ export class Store {
     return this.data.trades.find(t => t.id === id) || { id, name: 'Unknown Trade', color: '#64748b' };
   }
 
+  // Refuses to orphan workers. Deleting a trade used to leave its workers pointing
+  // at a trade that no longer exists, so they showed up as "Unknown Trade" while
+  // still being counted in every total.
   deleteTrade(id) {
+    const attached = this.getWorkers(id);
+    if (attached.length > 0) {
+      return { ok: false, reason: 'has_workers', workers: attached };
+    }
     this.data.trades = this.data.trades.filter(t => t.id !== id);
+    this.save();
+    return { ok: true };
+  }
+
+  moveTradeWorkers(fromTradeId, toTradeId) {
+    this.data.workers.forEach(w => {
+      if (w.tradeId === fromTradeId) w.tradeId = toTradeId;
+    });
+    (this.data.transactions || []).forEach(tx => {
+      if (tx.tradeId === fromTradeId) tx.tradeId = toTradeId;
+    });
     this.save();
   }
 
@@ -302,7 +489,22 @@ export class Store {
     return null;
   }
 
+  // Keeps the money history (it really happened) but stamps the name onto each
+  // transaction first, so the timeline shows "Ramesh Sharma (हटाया गया)" instead
+  // of "Unknown Worker", and clears the attendance rows that can no longer be read.
   deleteWorker(id) {
+    const worker = this.getWorker(id);
+    if (worker) {
+      (this.data.transactions || []).forEach(tx => {
+        if (tx.workerId === id && !tx.workerName) tx.workerName = worker.name;
+      });
+    }
+    Object.keys(this.data.haziri || {}).forEach(date => {
+      if (this.data.haziri[date] && this.data.haziri[date][id]) {
+        delete this.data.haziri[date][id];
+        if (Object.keys(this.data.haziri[date]).length === 0) delete this.data.haziri[date];
+      }
+    });
     this.data.workers = this.data.workers.filter(w => w.id !== id);
     this.save();
   }
@@ -392,7 +594,28 @@ export class Store {
       status: Number(status), // 1.0 (full), 0.5 (half), 0 (absent)
       otHours: Number(otHours) || 0
     };
+    if (!this.data.haziriMeta) this.data.haziriMeta = {};
+    this.data.haziriMeta[date] = { savedAt: Date.now(), deviceId: getDeviceId() };
     this.save();
+  }
+
+  // Backs the "already saved — editing will overwrite" notice on the attendance
+  // screen. Returns null for a date nobody has marked yet.
+  getHaziriSavedAt(date) {
+    const meta = this.data.haziriMeta && this.data.haziriMeta[date];
+    const hasRows = this.data.haziri[date] && Object.keys(this.data.haziri[date]).length > 0;
+    if (!hasRows) return null;
+
+    if (!meta) return { savedAt: null, byLabel: '' };
+
+    const when = new Date(meta.savedAt);
+    const time = when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const sameDevice = meta.deviceId === getDeviceId();
+    return {
+      savedAt: meta.savedAt,
+      sameDevice,
+      byLabel: sameDevice ? `(${time})` : `(${time}, दूसरे फ़ोन से)`
+    };
   }
 
   // --- MONTHLY HAZIRI / MUSTER ROLL ---
@@ -435,20 +658,24 @@ export class Store {
       });
 
       const isTheka = worker.contractType === 'theka';
+      const otDivisor = this.getOtHoursPerDay();
       let totalEarnedMonth = 0;
       if (!isTheka) {
         totalEarnedMonth = totalPresent * (worker.dailyRate || 0);
         if (totalOtHours > 0) {
-          totalEarnedMonth += totalOtHours * ((worker.dailyRate || 0) / 8);
+          totalEarnedMonth += totalOtHours * ((worker.dailyRate || 0) / otDivisor);
         }
-      } else {
-        totalEarnedMonth = worker.thekaAmount || 0;
       }
+      // A theka worker earns one lump sum for the whole job, not that sum again
+      // every month — so the monthly column stays 0 and the contract is settled
+      // against lifetime payments below.
 
-      // Payments made in this month
+      // Payments made in this month. Uses the same "what counts as paid to this
+      // worker" rule as getWorkerLedger() so the two screens can never disagree.
       const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
       const workerMonthTxs = this.data.transactions.filter(t => t.workerId === worker.id && t.date.startsWith(monthPrefix));
-      const totalPaidMonth = workerMonthTxs.reduce((sum, t) => sum + (t.amount || 0), 0);
+      const totalPaidMonth = sumWorkerPayments(workerMonthTxs);
+      const totalPaidLifetime = sumWorkerPayments(this.data.transactions.filter(t => t.workerId === worker.id));
 
       return {
         worker,
@@ -460,7 +687,11 @@ export class Store {
         totalOtHours,
         totalEarnedMonth,
         totalPaidMonth,
-        netBalance: isTheka ? ((worker.thekaAmount || 0) - totalPaidMonth) : (totalEarnedMonth - totalPaidMonth)
+        totalPaidLifetime,
+        thekaAmount: worker.thekaAmount || 0,
+        netBalance: isTheka
+          ? ((worker.thekaAmount || 0) - totalPaidLifetime)
+          : (totalEarnedMonth - totalPaidMonth)
       };
     });
 
@@ -519,7 +750,7 @@ export class Store {
           if (!isTheka) {
             totalEarned += record.status * (worker.dailyRate || 0);
             if (record.otHours > 0) {
-              const hourlyRate = (worker.dailyRate || 0) / 8;
+              const hourlyRate = (worker.dailyRate || 0) / this.getOtHoursPerDay();
               totalEarned += record.otHours * hourlyRate;
             }
           }
@@ -534,7 +765,9 @@ export class Store {
       totalEarned = worker.thekaAmount || 0;
     }
 
-    // Individual transactions (Cash + Recharge)
+    // Everything charged to this worker by name — cash, recharge, diesel, material,
+    // anything. Restricting this to cash+recharge was hiding real payments from the
+    // balance, so a worker paid ₹2,000 in material still showed the full amount due.
     const workerTxs = this.data.transactions.filter(t => t.workerId === workerId);
     const totalCashPaid = workerTxs
       .filter(t => t.type === 'cash')
@@ -542,7 +775,14 @@ export class Store {
     const totalRechargePaid = workerTxs
       .filter(t => t.type === 'recharge')
       .reduce((sum, t) => sum + (t.amount || 0), 0);
-    const totalIndividualGiven = totalCashPaid + totalRechargePaid;
+    const totalIndividualGiven = sumWorkerPayments(workerTxs);
+    const totalOtherPaid = totalIndividualGiven - totalCashPaid - totalRechargePaid;
+
+    // Per-type breakdown so the statement screen can itemise "अन्य" honestly.
+    const paidByType = {};
+    workerTxs.filter(t => t.targetType !== 'group').forEach(t => {
+      paidByType[t.type] = (paidByType[t.type] || 0) + (Number(t.amount) || 0);
+    });
 
     const balanceDue = totalEarned - totalIndividualGiven;
 
@@ -562,6 +802,8 @@ export class Store {
       totalEarned,
       totalCashPaid,
       totalRechargePaid,
+      totalOtherPaid,
+      paidByType,
       totalIndividualGiven,
       balanceDue,
       transactions: workerTxs
@@ -576,6 +818,14 @@ export class Store {
     const totalGroupRationCost = groupTxs
       .filter(t => t.type === 'ration')
       .reduce((sum, t) => sum + (t.amount || 0), 0);
+
+    // Every shared cost for this group, not just ration — a cylinder or a diesel
+    // run booked to the group was previously invisible on this screen.
+    const totalGroupSpend = groupTxs.reduce((sum, t) => sum + (t.amount || 0), 0);
+    const groupSpendByType = {};
+    groupTxs.forEach(t => {
+      groupSpendByType[t.type] = (groupSpendByType[t.type] || 0) + (Number(t.amount) || 0);
+    });
 
     const rationItemsBreakdown = {};
     groupTxs.filter(t => t.type === 'ration').forEach(t => {
@@ -594,6 +844,8 @@ export class Store {
       mistriCount: workers.filter(w => w.role === 'mistri').length,
       helperCount: workers.filter(w => w.role === 'helper').length,
       totalGroupRationCost,
+      totalGroupSpend,
+      groupSpendByType,
       rationItemsBreakdown,
       groupTransactions: groupTxs
     };
@@ -617,45 +869,22 @@ export class Store {
     return false;
   }
 
-  generateSyncKey() {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-    let key = 'SD-';
-    for (let i = 0; i < 4; i++) key += chars.charAt(Math.floor(Math.random() * chars.length));
-    key += '-';
-    for (let i = 0; i < 4; i++) key += chars.charAt(Math.floor(Math.random() * chars.length));
-    return key;
-  }
-
-  async pushToCloud(syncKey) {
-    if (!syncKey) throw new Error('सिंक की (Sync Key) दर्ज करें');
-    const payload = JSON.stringify(this.data);
-    const url = `https://kvdb.io/A9L2d93eE1iZc82z5f9kL3/${encodeURIComponent(syncKey)}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: payload
-    });
-    if (!res.ok) throw new Error(`क्लाउड सेव विफल (${res.status})`);
-    this.updateSettings({ cloudSyncKey: syncKey, lastCloudSync: Date.now() });
+  // Local file backup replaces the old kvdb.io sync: that pushed the entire
+  // unencrypted ledger to a public key-value bucket whose id shipped in the
+  // source, so anyone who guessed a sync key could read or overwrite a site.
+  // Cloud sync now goes through Firebase only.
+  downloadBackupFile() {
+    const stamp = getTodayString();
+    const blob = new Blob([this.exportData()], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `site-diary-backup-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
     return true;
-  }
-
-  async pullFromCloud(syncKey) {
-    if (!syncKey) throw new Error('सिंक की (Sync Key) दर्ज करें');
-    const url = `https://kvdb.io/A9L2d93eE1iZc82z5f9kL3/${encodeURIComponent(syncKey)}`;
-    const res = await fetch(url);
-    if (!res.ok) {
-      if (res.status === 404) throw new Error('इस सिंक की (Sync Key) पर कोई डेटा नहीं मिला।');
-      throw new Error(`क्लाउड से डेटा लाना विफल (${res.status})`);
-    }
-    const data = await res.json();
-    if (data && data.workers && data.trades) {
-      this.data = data;
-      this.updateSettings({ cloudSyncKey: syncKey, lastCloudSync: Date.now() });
-      this.save();
-      return true;
-    }
-    throw new Error('अमान्य क्लाउड डेटा प्रारूप');
   }
 }
 

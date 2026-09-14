@@ -1,12 +1,30 @@
 // src/main.js
 // Main Application Controller for Shram & Site Diary
 
-import { store, getTodayString } from './storage.js';
+import { store, getTodayString, getDeviceId, getAllTxTypes, getTxTypeMeta, getTxTypeLabel } from './storage.js';
 import { VoiceManager } from './speech.js';
 import { ReminderManager } from './reminder.js';
 import confetti from 'canvas-confetti';
-import { initFirebase, isFirebaseReady, saveToFirebase, loadFromFirebase, enableRealtimeSync, parseFirebaseConfig } from './firebase.js';
+import { initFirebase, isFirebaseReady, saveToFirebase, loadFromFirebase, enableRealtimeSync, parseFirebaseConfig } from './firebase-lazy.js';
 import { translations } from './i18n.js';
+
+/* Every list in this app is built with innerHTML from data a user typed — worker
+   names, notes, trade names — and that data also arrives from cloud sync, i.e.
+   from another device. Without escaping, a name like `<img onerror=...>` runs as
+   markup on every phone that syncs the site. */
+function esc(value) {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function inr(n) {
+  return `₹${(Number(n) || 0).toLocaleString('en-IN')}`;
+}
 
 const ICON_MAP = {
   'hammer': '🔨',
@@ -41,6 +59,18 @@ function getWhatsAppUrl(phone, text = '') {
   return `https://wa.me/${digits}${query}`;
 }
 
+function formatShortDate(dateStr, lang = 'hi') {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const d = parseInt(parts[2], 10);
+  const m = parseInt(parts[1], 10);
+  const monthsHi = ['जन', 'फ़र', 'मार्च', 'अप्रै', 'मई', 'जून', 'जुला', 'अग', 'सितं', 'अक्टू', 'नवं', 'दिसं'];
+  const monthsEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const months = (lang === 'en') ? monthsEn : monthsHi;
+  return `${d} ${months[m - 1] || ''}`;
+}
+
 class App {
   constructor() {
     this.store = store;
@@ -48,6 +78,7 @@ class App {
     this.activeFilterType = 'all';
     this.activeFilterTrade = null;
     this.selectedHaziriDate = getTodayString();
+    this.activeHaziriTradeId = null; // Trade tab for attendance (e.g. 'carpenter', 'mason')
 
     // Monthly Muster Roll state
     this.haziriSubView = 'daily'; // 'daily' | 'monthly'
@@ -91,7 +122,43 @@ class App {
     const savedLang = this.store.getSettings().language;
     this.currentLang = (savedLang === 'en' || savedLang === 'en-IN') ? 'en' : 'hi';
 
+    // Cloud sync state
+    this.deviceId = getDeviceId();
+    this.lastKnownRemoteStamp = 0;
+    this.pendingRemoteData = null;
+    this.suppressNextSync = false;
+    this.syncErrorMessage = null;
+
+    // A write that cannot be persisted must reach the user, not just the console.
+    this.store.onSaveError((err, info) => {
+      if (info && info.recovered) {
+        this.showToast(this.currentLang === 'en'
+          ? `Storage full — ${info.droppedAudio} old voice clip(s) removed to save your ledger`
+          : `मेमोरी भर गई — हिसाब बचाने के लिए ${info.droppedAudio} पुरानी आवाज़ रिकॉर्डिंग हटाई गईं`, 6000);
+        return;
+      }
+      alert(this.currentLang === 'en'
+        ? 'Could not save! Phone storage is full. Download a backup from Settings and clear old photos/voice notes.'
+        : 'सेव नहीं हो पाया! फ़ोन की मेमोरी भर गई है।\n\nसेटिंग्स से बैकअप फ़ाइल डाउनलोड करें और पुरानी फ़ोटो / आवाज़ नोट हटाएँ।');
+    });
+
     this.init();
+  }
+
+  showToast(message, duration = 2200) {
+    let toast = document.getElementById('appGlobalToast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'appGlobalToast';
+      toast.className = 'app-global-toast';
+      document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.add('show');
+    clearTimeout(this._toastTimeout);
+    this._toastTimeout = setTimeout(() => {
+      toast.classList.remove('show');
+    }, duration);
   }
 
   // Compress image file to a lightweight data URL for efficient storage & instant display
@@ -213,28 +280,138 @@ class App {
     this.setLanguage(nextLang);
   }
 
-  initFirebaseIntegration() {
+  async initFirebaseIntegration() {
     const s = this.store.getSettings();
-    if (s.firebaseConfig) {
-      try {
-        const ok = initFirebase(s.firebaseConfig);
-        if (ok && s.firebaseAutoSync) {
-          enableRealtimeSync(s.firebaseSiteId || 'khalen-dairy', (remoteData) => {
-            console.log('Realtime sync from Firebase received');
-          });
-        }
-      } catch (err) {
-        console.warn('Firebase init on start failed:', err);
+    if (!s.firebaseConfig) return;
+    try {
+      const ok = await initFirebase(s.firebaseConfig);
+      if (ok && s.firebaseAutoSync) {
+        await enableRealtimeSync(s.firebaseSiteId, (remoteData) => this.onRemoteData(remoteData));
       }
+      this.updateSyncIndicator();
+    } catch (err) {
+      console.warn('Firebase init on start failed:', err);
+      this.updateSyncIndicator();
     }
   }
 
-  triggerFirebaseAutoSync() {
-    const s = this.store.getSettings();
-    if (s.firebaseAutoSync && isFirebaseReady()) {
-      const siteId = s.firebaseSiteId || 'khalen-dairy';
-      saveToFirebase(siteId, this.store.data).catch(e => console.warn('AutoSync error:', e));
+  // The realtime callback used to only console.log, so an incoming update was
+  // thrown away while this device kept uploading — one-way sync that silently
+  // overwrote the other phone. Now remote changes are actually applied.
+  onRemoteData(remoteData) {
+    if (!remoteData || !remoteData.workers || !remoteData.trades) return;
+
+    // Ignore the echo of our own write.
+    if (remoteData.lastWriterDeviceId && remoteData.lastWriterDeviceId === this.deviceId) {
+      this.lastKnownRemoteStamp = remoteData.timestamp || 0;
+      this.updateSyncIndicator('synced');
+      return;
     }
+
+    const remoteStamp = Number(remoteData.timestamp) || 0;
+    if (remoteStamp && remoteStamp <= (this.lastKnownRemoteStamp || 0)) return;
+
+    // A remote edit arriving while the user is mid-entry would yank the screen
+    // out from under them, so ask rather than overwrite.
+    if (this.hasOpenModal()) {
+      this.pendingRemoteData = remoteData;
+      return;
+    }
+
+    this.lastKnownRemoteStamp = remoteStamp;
+    this.applyRemoteData(remoteData);
+  }
+
+  applyRemoteData(remoteData) {
+    this.store.data = {
+      trades: remoteData.trades || this.store.data.trades,
+      workers: remoteData.workers || [],
+      transactions: remoteData.transactions || [],
+      haziri: remoteData.haziri || {},
+      haziriMeta: remoteData.haziriMeta || {},
+      diaryNotedDates: remoteData.diaryNotedDates || {},
+      isCleanStarted: remoteData.isCleanStarted === true || this.store.data.isCleanStarted === true,
+      // Device-local settings (this phone's Firebase config, its site id) must not
+      // be replaced by another device's copy.
+      settings: {
+        ...this.store.getSettings(),
+        ...(remoteData.settings || {})
+      }
+    };
+    this.store.save();
+    this.suppressNextSync = true; // rendering the result must not bounce it back
+    this.renderAll();
+    this.updateSyncIndicator('synced');
+    this.showToast(this.currentLang === 'en'
+      ? 'Updated from another device'
+      : 'दूसरे फ़ोन से नया हिसाब आ गया');
+  }
+
+  hasOpenModal() {
+    return !!document.querySelector('.modal-overlay.active, .modal-backdrop.active');
+  }
+
+  /* Sync used to run inside renderAll(), so every tab switch and every toggle
+     wrote the whole database to Firestore. It now runs only when data actually
+     changed, and is debounced so a burst of edits collapses into one write. */
+  scheduleSync(reason = 'edit') {
+    if (this.suppressNextSync) {
+      this.suppressNextSync = false;
+      return;
+    }
+    const s = this.store.getSettings();
+    if (!s.firebaseAutoSync || !isFirebaseReady()) return;
+
+    this.updateSyncIndicator('pending');
+    clearTimeout(this._syncTimer);
+    this._syncTimer = setTimeout(() => this.runSync(reason), 2500);
+  }
+
+  async runSync(reason = 'edit') {
+    const s = this.store.getSettings();
+    if (!s.firebaseAutoSync || !isFirebaseReady()) return;
+
+    this.updateSyncIndicator('syncing');
+    try {
+      await saveToFirebase(s.firebaseSiteId, this.store.data, this.deviceId);
+      this.store.updateSettings({ lastFirebaseSync: Date.now() });
+      this.syncErrorMessage = null;
+      this.updateSyncIndicator('synced');
+    } catch (err) {
+      // A failed backup must be visible. Previously this was a console.warn, so a
+      // site could go weeks believing it had a cloud copy that never existed.
+      this.syncErrorMessage = err.message || String(err);
+      this.updateSyncIndicator('error');
+      console.warn('AutoSync error:', err);
+    }
+  }
+
+  updateSyncIndicator(state = null) {
+    const el = document.getElementById('syncStatusChip');
+    if (!el) return;
+
+    const s = this.store.getSettings();
+    if (!s.firebaseAutoSync || !isFirebaseReady()) {
+      el.className = 'sync-chip sync-off';
+      el.innerHTML = `<span class="sync-dot"></span><span>${this.currentLang === 'en' ? 'Offline' : 'ऑफ़लाइन'}</span>`;
+      el.title = this.currentLang === 'en'
+        ? 'Cloud backup is off. Turn it on in Settings.'
+        : 'क्लाउड बैकअप बंद है। सेटिंग्स में चालू करें।';
+      return;
+    }
+
+    const labels = {
+      pending: this.currentLang === 'en' ? 'Saving…' : 'सेव हो रहा…',
+      syncing: this.currentLang === 'en' ? 'Saving…' : 'सेव हो रहा…',
+      synced: this.currentLang === 'en' ? 'Saved' : 'सुरक्षित',
+      error: this.currentLang === 'en' ? 'Not saved' : 'सेव नहीं हुआ'
+    };
+    const key = state || 'synced';
+    el.className = `sync-chip sync-${key === 'pending' ? 'syncing' : key}`;
+    el.innerHTML = `<span class="sync-dot"></span><span>${labels[key] || labels.synced}</span>`;
+    el.title = key === 'error' && this.syncErrorMessage
+      ? this.syncErrorMessage
+      : (this.currentLang === 'en' ? 'Cloud backup' : 'क्लाउड बैकअप');
   }
 
   startClock() {
@@ -292,8 +469,15 @@ class App {
     this.renderMonthlyHaziri();
     this.renderGroupsLedger();
     this.renderDiarySheet();
+    this.scheduleSync('haziri');
     this.checkEveningBanner();
-    this.triggerFirebaseAutoSync();
+    this.updateSyncIndicator();
+  }
+
+  // Call this after anything that CHANGES data (not after merely re-rendering).
+  commit(reason = 'edit') {
+    this.renderAll();
+    this.scheduleSync(reason);
   }
 
   renderHeaderInfo() {
@@ -309,10 +493,12 @@ class App {
     const txs = this.store.getTransactions(today);
     const haziri = this.store.getHaziri(today);
 
-    // Cash
+    /* Same worker/site split the ledger and the diary slip use, so all three
+       screens tell the same story. Tile 1 is everything charged to a named
+       worker (cash, recharge, an advance in material) — not just type 'cash'. */
     const cashTotal = txs
-      .filter(t => t.type === 'cash')
-      .reduce((sum, t) => sum + (t.amount || 0), 0);
+      .filter(t => t.targetType !== 'group' && t.workerId)
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
     const statCashEl = document.getElementById('statTodayCash');
     if (statCashEl) statCashEl.textContent = `₹${cashTotal.toLocaleString('en-IN')}`;
 
@@ -323,8 +509,14 @@ class App {
     const statRationEl = document.getElementById('statTodayRation');
     if (statRationEl) statRationEl.textContent = `₹${rationTotal.toLocaleString('en-IN')}`;
 
-    // Overview Today Total
-    const todayTotal = cashTotal + rationTotal;
+    // Every type counts toward the headline figure. Summing only cash+ration meant
+    // a ₹5,000 diesel or material entry showed the day's total as ₹0.
+    const todayTotal = txs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const otherTotal = todayTotal - cashTotal - rationTotal;
+    const statOtherEl = document.getElementById('statTodayOther');
+    if (statOtherEl) statOtherEl.textContent = inr(otherTotal);
+    const otherCard = document.getElementById('metricCardOther');
+    if (otherCard) otherCard.style.display = otherTotal > 0 ? '' : 'none';
     const overviewTotalEl = document.getElementById('overviewTodayTotalDisplay');
     if (overviewTotalEl) overviewTotalEl.textContent = `₹${todayTotal.toLocaleString('en-IN')}`;
 
@@ -428,19 +620,20 @@ class App {
       const isGroup = tx.targetType === 'group';
       const worker = !isGroup ? this.store.getWorker(tx.workerId) : null;
 
-      let icon = '💵';
-      let iconBg = 'rgba(16, 185, 129, 0.15)';
-      let amountClass = 'cash';
-
-      if (tx.type === 'ration') {
-        icon = '🍚';
-        iconBg = 'rgba(245, 158, 11, 0.15)';
-        amountClass = 'ration';
-      } else if (tx.type === 'recharge') {
-        icon = '📱';
-        iconBg = 'rgba(56, 189, 248, 0.15)';
-        amountClass = 'recharge';
-      }
+      // Icon and colour come from the shared type registry, so cylinder/diesel/
+      // material/custom types no longer all render as a generic cash entry.
+      const typeMeta = getTxTypeMeta(tx.type);
+      const icon = typeMeta.icon;
+      const TYPE_TINTS = {
+        cash: ['rgba(16, 185, 129, 0.15)', 'cash'],
+        recharge: ['rgba(56, 189, 248, 0.15)', 'recharge'],
+        ration: ['rgba(245, 158, 11, 0.15)', 'ration'],
+        cylinder: ['rgba(249, 115, 22, 0.15)', 'cylinder'],
+        diesel: ['rgba(139, 92, 246, 0.15)', 'diesel'],
+        material: ['rgba(100, 116, 139, 0.15)', 'material'],
+        other: ['rgba(148, 163, 184, 0.15)', 'other']
+      };
+      const [iconBg, amountClass] = TYPE_TINTS[tx.type] || ['rgba(148, 163, 184, 0.15)', 'other'];
 
       const roleBadge = worker
         ? `<span class="tag-badge ${worker.role === 'mistri' ? 'tag-mistri' : 'tag-helper'}">${worker.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'}</span>`
@@ -448,7 +641,7 @@ class App {
 
       const targetDisplayName = isGroup
         ? `${trade.name} (सांझा ग्रुप)`
-        : (worker ? worker.name : 'Unknown Worker');
+        : (worker ? worker.name : (tx.workerName ? `${tx.workerName} (हटाया गया)` : 'साइट खर्च'));
 
       return `
         <div class="tx-card" data-tx-id="${tx.id}">
@@ -458,12 +651,12 @@ class App {
             </div>
             <div class="tx-info">
               <div class="tx-target-row">
-                <span class="tx-target-name">${targetDisplayName}</span>
+                <span class="tx-target-name">${esc(targetDisplayName)}</span>
                 ${roleBadge}
-                <span style="font-size: 0.76rem; color: var(--text-dim);">${trade.name}</span>
+                <span style="font-size: 0.76rem; color: var(--text-dim);">${esc(trade.name)}</span>
               </div>
-              ${tx.rationItem ? `<div style="font-size: 0.85rem; font-weight: 600; color: var(--amber-light);">${tx.rationItem} ${tx.quantity ? `(${tx.quantity})` : ''}</div>` : ''}
-              ${tx.note ? `<div class="tx-note">${tx.note}</div>` : ''}
+              ${tx.rationItem ? `<div style="font-size: 0.85rem; font-weight: 600; color: var(--amber-light);">${esc(tx.rationItem)} ${tx.quantity ? `(${esc(tx.quantity)})` : ''}</div>` : ''}
+              ${tx.note ? `<div class="tx-note">${esc(tx.note)}</div>` : ''}
               <div class="tx-meta">
                 <span>📅 ${tx.date}</span>
                 <span>🕒 ${tx.time}</span>
@@ -473,7 +666,7 @@ class App {
           </div>
           <div class="tx-right">
             <div class="tx-amount ${amountClass}">₹${(tx.amount || 0).toLocaleString('en-IN')}</div>
-            ${tx.quantity && tx.type === 'ration' ? `<span class="tx-item-qty">${tx.quantity}</span>` : ''}
+            ${tx.quantity && tx.type === 'ration' ? `<span class="tx-item-qty">${esc(tx.quantity)}</span>` : ''}
             <div class="tx-actions-row">
               <button class="btn-icon-action btn-edit-tx" data-edit-tx="${tx.id}" title="सुधारें">
                 ✏️
@@ -496,20 +689,31 @@ class App {
     const date = this.selectedHaziriDate || getTodayString();
     const trades = this.store.getTrades();
     const haziriRecord = this.store.getHaziri(date);
+    const allWorkers = this.store.getWorkers();
 
+    // 1. Update Date Display and native input
+    const dateDisplay = document.getElementById('haziriDateDisplay');
+    if (dateDisplay) {
+      dateDisplay.textContent = formatShortDate(date, this.currentLang);
+    }
     const datePicker = document.getElementById('haziriDatePicker');
-    if (datePicker && !datePicker.value) {
+    if (datePicker && datePicker.value !== date) {
       datePicker.value = date;
     }
 
-    const allWorkers = this.store.getWorkers();
+    // If no workers exist on site
     if (allWorkers.length === 0) {
+      const groupTabsEl = document.getElementById('haziriGroupTabs');
+      if (groupTabsEl) groupTabsEl.innerHTML = '';
+      const countBadge = document.getElementById('haziriActiveGroupCount');
+      if (countBadge) countBadge.textContent = '0';
+
       container.innerHTML = `
         <div style="background: rgba(245, 158, 11, 0.08); border: 2px dashed rgba(245, 158, 11, 0.35); border-radius: 14px; padding: 40px 20px; text-align: center; margin: 20px 0;">
           <div style="font-size: 3rem; margin-bottom: 12px;">👷‍♂️</div>
-          <h3 style="font-size: 1.25rem; font-weight: 700; color: #fff; margin-bottom: 8px;">अभी आपकी साइट पर कोई कारीगर नहीं जुड़ा है</h3>
+          <h3 style="font-size: 1.25rem; font-weight: 700; color: var(--text-main); margin-bottom: 8px;">अभी आपकी साइट पर कोई कारीगर नहीं जुड़ा है</h3>
           <p style="font-size: 0.88rem; color: var(--text-muted); max-width: 480px; margin: 0 auto 20px;">
-            हाजिरी और हिसाब शुरू करने के लिए नीचे दिए गए बटन पर टैप करके अपने मिस्त्री, हेल्पर या ठेकेदार को जोड़ें।
+            हाजिरी लगाने के लिए पहले अपने मिस्त्री, हेल्पर या ठेकेदार को जोड़ें।
           </p>
           <button class="btn-primary btn-add-first-worker" style="font-size: 0.95rem; padding: 12px 28px;">
             👷 + पहला कारीगर जोड़ें (Add Worker)
@@ -519,110 +723,210 @@ class App {
       return;
     }
 
-    container.innerHTML = trades.map(trade => {
-      const workers = this.store.getWorkers(trade.id);
-      if (workers.length === 0) return '';
+    // Active trade determination
+    const tradesWithWorkers = trades.filter(t => this.store.getWorkers(t.id).length > 0);
+    if (!this.activeHaziriTradeId || (this.activeHaziriTradeId !== 'all' && !trades.some(t => t.id === this.activeHaziriTradeId))) {
+      this.activeHaziriTradeId = tradesWithWorkers.length > 0 ? tradesWithWorkers[0].id : (trades[0]?.id || 'all');
+    }
 
-      const mistris = workers.filter(w => w.role === 'mistri');
-      const helpers = workers.filter(w => w.role === 'helper');
-
-      const renderWorkerRow = (worker) => {
-        const record = haziriRecord[worker.id] || { status: 0, otHours: 0 };
-        const status = record.status;
-        const initials = worker.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-
-        const avatarHtml = worker.photoUrl
-          ? `<div class="worker-avatar"><img src="${worker.photoUrl}" alt="${worker.name}" /></div>`
-          : `<div class="worker-avatar">${initials}</div>`;
-
-        const contactPills = worker.phone
-          ? `
-            <span class="contact-quick-pills">
-              <a href="${getPhoneDialerHref(worker.phone)}" class="btn-contact-pill btn-pill-call" title="कॉल करें">📞 ${worker.phone}</a>
-              <a href="${getWhatsAppUrl(worker.phone)}" target="_blank" class="btn-contact-pill btn-pill-wa" title="व्हाट्सएप">💬 चैट</a>
-            </span>
-          `
-          : '';
-
-        const contractBadge = worker.contractType === 'theka'
-          ? `<span class="tag-badge tag-theka">📜 ठेका</span>`
-          : `<span class="tag-badge tag-dihadi">👷 दिहाड़ी</span>`;
-
-        const rateOrThekaLine = worker.contractType === 'theka'
-          ? `<span>📜 ठेका: ₹${(worker.thekaAmount || 0).toLocaleString('en-IN')} ${worker.thekaDescription ? `(${worker.thekaDescription})` : ''} • <strong style="color:#d8b4fe;">उपस्थिति रिकॉर्ड</strong></span>`
-          : `<span>दर: ₹${worker.dailyRate}/दिन</span>`;
-
+    // 2. Render Horizontal Group / Trade Tabs
+    const groupTabsEl = document.getElementById('haziriGroupTabs');
+    if (groupTabsEl) {
+      let tabsHtml = trades.map(trade => {
+        const count = this.store.getWorkers(trade.id).length;
+        const isActive = this.activeHaziriTradeId === trade.id;
+        const shortName = trade.name.split(' ')[0];
         return `
-          <div class="worker-haziri-row" data-worker-id="${worker.id}">
-            <div class="worker-identity">
-              ${avatarHtml}
-              <div>
-                <div class="worker-name-line">
-                  ${worker.name}
-                  <span class="tag-badge ${worker.role === 'mistri' ? 'tag-mistri' : 'tag-helper'}">
-                    ${worker.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'}
-                  </span>
-                  ${contractBadge}
-                  <button type="button" class="btn-worker-mini-edit" data-open-edit-worker="${worker.id}" title="कारीगर में सुधार करें (ट्रेड, नाम, दर बदलें)" style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 4px; color: var(--amber-light); font-size: 0.74rem; font-weight: 600; padding: 2px 7px; cursor: pointer; margin-left: 6px; display: inline-flex; align-items: center; gap: 2px;">
-                    ✏️ सुधारें
-                  </button>
-                </div>
-                <div class="worker-rate-line">
-                  ${rateOrThekaLine}
-                  ${contactPills}
-                </div>
-              </div>
-            </div>
-            <div class="haziri-buttons-group">
-              <button type="button" class="btn-hz-toggle ${status === 1.0 ? 'active-full' : ''}" data-hz-val="1.0" data-worker="${worker.id}" title="पूरी हाजिरी">
-                1.0 Full
-              </button>
-              <button type="button" class="btn-hz-toggle ${status === 0.5 ? 'active-half' : ''}" data-hz-val="0.5" data-worker="${worker.id}" title="आधी हाजिरी">
-                0.5 Half
-              </button>
-              <button type="button" class="btn-hz-toggle ${status === 0 ? 'active-absent' : ''}" data-hz-val="0" data-worker="${worker.id}" title="गैरहाजिर">
-                0 Absent
-              </button>
-              <button type="button" class="btn-hz-toggle ${record.otHours > 0 ? 'active-ot' : ''}" data-hz-ot="${worker.id}" title="ओवरटाइम दर्ज करें">
-                ${record.otHours > 0 ? `+${record.otHours}h OT` : '+OT'}
-              </button>
-            </div>
-          </div>
+          <button type="button" class="attendance-trade-tab ${isActive ? 'active' : ''}" data-trade-id="${esc(trade.id)}" title="${esc(trade.name)} (${count} कारीगर)">
+            ${isActive ? '<span class="tab-check">✓</span> ' : ''}${getTradeIcon(trade.icon)} ${shortName} <span class="tab-count">(${count})</span>
+          </button>
         `;
-      };
+      }).join('');
 
-      return `
-        <div class="haziri-trade-section">
-          <div class="trade-header-row">
-            <div class="trade-title">
-              <span>${getTradeIcon(trade.icon)}</span>
-              <span>${trade.name}</span>
-            </div>
-            <span style="font-size: 0.82rem; color: var(--text-muted);">
-              कुल ${workers.length} (मिस्त्री: ${mistris.length}, हेल्पर: ${helpers.length})
-            </span>
-          </div>
+      const isAllActive = this.activeHaziriTradeId === 'all';
+      tabsHtml += `
+        <button type="button" class="attendance-trade-tab ${isAllActive ? 'active' : ''}" data-trade-id="all" title="सभी कारीगर (${allWorkers.length})">
+          ${isAllActive ? '<span class="tab-check">✓</span> ' : ''}📂 सभी <span class="tab-count">(${allWorkers.length})</span>
+        </button>
+      `;
+      groupTabsEl.innerHTML = tabsHtml;
+    }
 
-          ${mistris.length > 0 ? `
-            <div class="role-subgroup">
-              <div class="role-subgroup-title">
-                <span>👑 मिस्त्री (Masters / Mistris)</span>
-              </div>
-              ${mistris.map(renderWorkerRow).join('')}
-            </div>
-          ` : ''}
+    // 3. Workers for Active Group
+    let currentWorkers = [];
+    let groupTitle = '';
+    let groupIcon = '👷';
+    let activeTradeObj = null;
 
-          ${helpers.length > 0 ? `
-            <div class="role-subgroup">
-              <div class="role-subgroup-title">
-                <span>🤝 हेल्पर (Helpers / Mazdoors)</span>
-              </div>
-              ${helpers.map(renderWorkerRow).join('')}
-            </div>
-          ` : ''}
+    if (this.activeHaziriTradeId === 'all') {
+      currentWorkers = allWorkers;
+      groupTitle = this.currentLang === 'en' ? 'All Workers' : 'सभी कारीगर';
+      groupIcon = '📂';
+    } else {
+      activeTradeObj = this.store.getTrade(this.activeHaziriTradeId);
+      currentWorkers = this.store.getWorkers(this.activeHaziriTradeId);
+      groupTitle = activeTradeObj ? activeTradeObj.name : 'कारीगर ग्रुप';
+      groupIcon = activeTradeObj ? getTradeIcon(activeTradeObj.icon) : '🔨';
+    }
+
+    // Update group count badge
+    const countBadge = document.getElementById('haziriActiveGroupCount');
+    if (countBadge) {
+      countBadge.textContent = currentWorkers.length;
+    }
+
+    // Calculate Group Stats
+    let presentCount = 0;
+    let halfCount = 0;
+    let absentCount = 0;
+    let otTotalHours = 0;
+
+    currentWorkers.forEach(w => {
+      const rec = haziriRecord[w.id];
+      if (!rec || !rec.status || rec.status === 0) {
+        absentCount++;
+      } else if (rec.status === 1.0) {
+        presentCount++;
+      } else if (rec.status === 0.5) {
+        halfCount++;
+      }
+      if (rec && rec.otHours > 0) {
+        otTotalHours += rec.otHours;
+      }
+    });
+
+    if (currentWorkers.length === 0) {
+      container.innerHTML = `
+        <div class="attendance-card" style="padding: 24px; text-align: center;">
+          <div style="font-size: 2.2rem; margin-bottom: 8px;">🏷️</div>
+          <h4 style="color: var(--text-main); margin-bottom: 6px;">इस ट्रेड (${esc(groupTitle)}) में कोई कारीगर नहीं है</h4>
+          <p style="color: var(--text-muted); font-size: 0.82rem; margin-bottom: 14px;">
+            इस ग्रुप में काम करने वाले मिस्त्री या हेल्पर को जोड़ें:
+          </p>
+          <button class="btn-primary" id="btnQuickAddWorkerToTrade" data-trade-id="${this.activeHaziriTradeId}" style="font-size: 0.85rem; padding: 8px 18px;">
+            + ${esc(groupTitle)} में कारीगर जोड़ें
+          </button>
         </div>
       `;
-    }).join('');
+      return;
+    }
+
+    // Warn before an edit silently replaces attendance that was already recorded
+    // for this date — on a shared site another phone may have marked it.
+    const savedAt = this.store.getHaziriSavedAt(date);
+    const savedNotice = savedAt
+      ? `<div class="attendance-saved-notice">
+           <span class="notice-icon">⚠️</span>
+           <span>${this.currentLang === 'en'
+             ? `Already saved ${esc(savedAt.byLabel)} — editing will overwrite.`
+             : `यह हाजिरी पहले ही सेव हो चुकी है ${esc(savedAt.byLabel)} — बदलने पर पुरानी मिट जाएगी।`}</span>
+         </div>`
+      : '';
+
+    // 4. Render Group Header + Compact Worker Rows + Bottom Summary Dock
+    container.innerHTML = `
+      ${savedNotice}
+      <div class="attendance-card">
+        <!-- Group Header Row with '✓ All Present' Button (Exact Reference Screenshot Style) -->
+        <div class="attendance-group-header">
+          <div class="group-header-info">
+            <span class="group-header-name">${groupIcon} ${esc(groupTitle)}</span>
+            <span class="group-header-count">· ${currentWorkers.length} ${this.currentLang === 'en' ? 'workers' : 'सदस्य'}</span>
+          </div>
+          <button type="button" class="btn-all-present" id="btnMarkAllPresent" title="इस ग्रुप के सभी कारीगरों को उपस्थित करें">
+            <span class="btn-check-icon">✓</span>
+            <span>${this.currentLang === 'en' ? 'All Present' : 'सब उपस्थित'}</span>
+          </button>
+        </div>
+
+        <!-- Ultra-Compact Worker List: Entire group fits on 1 mobile screen without scrolling -->
+        <div class="attendance-list-rows">
+          ${currentWorkers.map((worker, idx) => {
+            const rec = haziriRecord[worker.id] || { status: 0, otHours: 0 };
+            const isPresent = rec.status > 0;
+            const isFull = rec.status === 1.0;
+            const isHalf = rec.status === 0.5;
+            const numStr = String(idx + 1).padStart(2, '0');
+
+            const statusText = isFull
+              ? (this.currentLang === 'en' ? 'Present' : 'उपस्थित')
+              : (isHalf
+                  ? (this.currentLang === 'en' ? 'Half Day' : '½ हाफ डे')
+                  : (this.currentLang === 'en' ? 'Absent' : 'अनुपस्थित'));
+
+            const statusClass = isFull ? 'st-full' : (isHalf ? 'st-half' : 'st-absent');
+            const otText = rec.otHours > 0 ? ` • +${rec.otHours}h OT` : '';
+
+            return `
+              <div class="attendance-row ${isPresent ? 'is-present' : 'is-absent'}${isHalf ? ' is-half' : ''}" data-worker-id="${esc(worker.id)}">
+                <!-- Number circle badge (01, 02, 03... Vibrant Green when present) -->
+                <div class="attendance-num-badge ${isPresent ? 'badge-green' : 'badge-gray'}">
+                  ${numStr}
+                </div>
+
+                <!-- Worker Name & Status Details -->
+                <div class="attendance-info-col">
+                  <div class="attendance-worker-title">
+                    <span class="attendance-worker-name">${esc(worker.name)}</span>
+                    <span class="tag-badge ${worker.role === 'mistri' ? 'tag-mistri' : 'tag-helper'}">
+                      ${worker.role === 'mistri' ? (this.currentLang === 'en' ? 'Mistri' : 'मिस्त्री') : (this.currentLang === 'en' ? 'Helper' : 'हेल्पर')}
+                    </span>
+                    ${worker.contractType === 'theka' ? `<span class="tag-badge tag-theka">${this.currentLang === 'en' ? 'Theka' : 'ठेका'}</span>` : ''}
+                  </div>
+
+                  <div class="attendance-status-line">
+                    <span class="attendance-status-text ${statusClass}">${statusText}${otText}</span>
+                    
+                    <!-- Micro-actions for rare Half-day / OT / Quick Edit without consuming vertical height -->
+                    <div class="attendance-micro-actions">
+                      <button type="button" class="btn-micro-pill ${isHalf ? 'active' : ''}" data-hz-half="${worker.id}" title="आधा दिन दर्ज करें">
+                        ½
+                      </button>
+                      <button type="button" class="btn-micro-pill ${rec.otHours > 0 ? 'active' : ''}" data-hz-ot="${worker.id}" title="ओवरटाइम दर्ज करें">
+                        ${rec.otHours > 0 ? `+${rec.otHours}h` : '+OT'}
+                      </button>
+                      <button type="button" class="btn-micro-pill" data-open-edit-worker="${worker.id}" title="कारीगर सुधारें">
+                        ✏️
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Sleek iOS Toggle Switch (Reference Screenshot Style) -->
+                <div class="attendance-toggle-wrap">
+                  <label class="ios-toggle-switch">
+                    <input type="checkbox" class="attendance-toggle-input" data-worker-id="${worker.id}" ${isPresent ? 'checked' : ''} />
+                    <span class="ios-toggle-slider"></span>
+                  </label>
+                </div>
+              </div>
+            `;
+          }).join('')}
+
+          <button type="button" class="attendance-add-row" id="btnAddWorkerFromHaziri">
+            <span class="add-row-plus">+</span>
+            <span>${this.currentLang === 'en'
+              ? `Add a worker to ${esc(groupTitle)}`
+              : `${esc(groupTitle)} में कारीगर जोड़ें`}</span>
+          </button>
+        </div>
+
+        <!-- Bottom Summary & Update Dock (Reference Screenshot Style: P 6, A 0, Update Button) -->
+        <div class="attendance-bottom-bar">
+          <div class="attendance-stat-badges">
+            <span class="stat-badge-pill stat-p" title="उपस्थित कारीगर">P ${presentCount}</span>
+            <span class="stat-badge-pill stat-a" title="अनुपस्थित">A ${absentCount}</span>
+            ${halfCount > 0 ? `<span class="stat-badge-pill stat-half" title="हाफ डे">½ ${halfCount}</span>` : ''}
+            ${otTotalHours > 0 ? `<span class="stat-badge-pill stat-ot" title="कुल ओवरटाइम">OT ${otTotalHours}h</span>` : ''}
+          </div>
+
+          <button type="button" class="btn-attendance-update${savedAt ? ' is-saved' : ''}" id="btnHaziriSaveUpdate" title="हाजिरी अपने आप सुरक्षित हो जाती है">
+            <span class="save-icon">💾</span>
+            <span>${this.currentLang === 'en' ? 'Update' : 'अपडेट'}</span>
+          </button>
+        </div>
+      </div>
+    `;
   }
 
   // --- MONTHLY MUSTER ROLL REGISTER ---
@@ -649,7 +953,7 @@ class App {
       container.innerHTML = `
         <div style="background: rgba(245, 158, 11, 0.08); border: 2px dashed rgba(245, 158, 11, 0.35); border-radius: 14px; padding: 40px 20px; text-align: center; margin: 20px 0;">
           <div style="font-size: 3rem; margin-bottom: 12px;">📊</div>
-          <h3 style="font-size: 1.25rem; font-weight: 700; color: #fff; margin-bottom: 8px;">मस्टर रोल अभी खाली है</h3>
+          <h3 style="font-size: 1.25rem; font-weight: 700; color: var(--text-main); margin-bottom: 8px;">मस्टर रोल अभी खाली है</h3>
           <p style="font-size: 0.88rem; color: var(--text-muted); max-width: 480px; margin: 0 auto 20px;">
             महीने की 1 से 30 तारीख की हाजिरी रजिस्टर देखने के लिए पहले अपनी साइट का कारीगर जोड़ें।
           </p>
@@ -670,7 +974,7 @@ class App {
       const w = row.worker;
       const initials = w.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
       const avatarThumb = w.photoUrl
-        ? `<div class="worker-avatar" style="width: 26px; height: 26px; border-radius: 6px;"><img src="${w.photoUrl}" alt="${w.name}" /></div>`
+        ? `<div class="worker-avatar" style="width: 26px; height: 26px; border-radius: 6px;"><img src="${esc(w.photoUrl)}" alt="${esc(w.name)}" /></div>`
         : `<div class="worker-avatar" style="width: 26px; height: 26px; border-radius: 6px; font-size: 0.7rem;">${initials}</div>`;
 
       const contractBadge = row.isTheka
@@ -698,7 +1002,7 @@ class App {
         const tdClass = d.isSunday ? 'td-sunday' : '';
         return `
           <td class="${tdClass}">
-            <span class="muster-cell ${cellClass}" data-matrix-worker="${w.id}" data-matrix-date="${d.dateStr}" title="${w.name} (${d.dateStr}): क्लिक करके हाजिरी बदलें">
+            <span class="muster-cell ${cellClass}" data-matrix-worker="${w.id}" data-matrix-date="${d.dateStr}" title="${esc(w.name)} (${d.dateStr}): क्लिक करके हाजिरी बदलें">
               ${cellContent}
             </span>
           </td>
@@ -711,10 +1015,10 @@ class App {
             <div style="display: flex; align-items: center; gap: 8px;">
               ${avatarThumb}
               <div>
-                <div style="font-weight: 700; color: #fff; font-size: 0.82rem; white-space: nowrap; display: flex; align-items: center; gap: 4px;">
-                  <span>${w.name}</span>
+                <div style="font-weight: 700; color: var(--text-main); font-size: 0.82rem; white-space: nowrap; display: flex; align-items: center; gap: 4px;">
+                  <span>${esc(w.name)}</span>
                   ${contractBadge}
-                  <button type="button" data-open-edit-worker="${w.id}" title="कारीगर में सुधार करें (ट्रेड, नाम बदलें)" style="background: none; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: var(--amber-light); cursor: pointer; font-size: 0.72rem; padding: 1px 4px;">✏️</button>
+                  <button type="button" data-open-edit-worker="${w.id}" title="कारीगर में सुधार करें (ट्रेड, नाम बदलें)" style="background: none; border: 1px solid rgba(15, 23, 42, 0.14); border-radius: 4px; color: var(--amber-light); cursor: pointer; font-size: 0.72rem; padding: 1px 4px;">✏️</button>
                 </div>
                 <div style="font-size: 0.72rem; color: var(--text-dim);">
                   ${getTradeIcon(row.trade.icon)} ${row.trade.name} (${w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'})
@@ -827,7 +1131,7 @@ class App {
         const ledger = this.store.getWorkerLedger(w.id);
         const initials = w.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
         const avatarThumb = w.photoUrl
-          ? `<div class="worker-avatar" style="width: 32px; height: 32px; border-radius: 8px;"><img src="${w.photoUrl}" alt="${w.name}" /></div>`
+          ? `<div class="worker-avatar" style="width: 32px; height: 32px; border-radius: 8px;"><img src="${esc(w.photoUrl)}" alt="${esc(w.name)}" /></div>`
           : `<div class="worker-avatar" style="width: 32px; height: 32px; border-radius: 8px; font-size: 0.8rem;">${initials}</div>`;
 
         const contactPills = w.phone
@@ -879,7 +1183,7 @@ class App {
                 ${avatarThumb}
                 <div>
                   <div class="worker-name-line">
-                    <strong style="color: #fff; text-decoration: underline dotted var(--amber-primary);">${w.name}</strong>
+                    <strong style="color: var(--text-main); text-decoration: underline dotted var(--amber-primary);">${esc(w.name)}</strong>
                     <span class="tag-badge ${w.role === 'mistri' ? 'tag-mistri' : 'tag-helper'}">
                       ${w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'}
                     </span>
@@ -918,7 +1222,7 @@ class App {
           <div class="group-card-header">
             <div class="group-card-title">
               <span>${getTradeIcon(trade.icon)}</span>
-              <span>${trade.name}</span>
+              <span>${esc(trade.name)}</span>
             </div>
             <span style="font-size: 0.8rem; color: var(--text-muted);">
               ${workers.length} कारीगर
@@ -929,7 +1233,7 @@ class App {
           <div class="group-ration-summary">
             <div class="group-ration-title">
               <span>🍚 ग्रुप राशन व सामान खर्च:</span>
-              <strong style="color: #fff; margin-left: auto;">₹${groupData.totalGroupRationCost.toLocaleString('en-IN')}</strong>
+              <strong style="color: var(--text-main); margin-left: auto;">₹${groupData.totalGroupRationCost.toLocaleString('en-IN')}</strong>
             </div>
             <div class="ration-items-pills">
               ${rationPills.length > 0 ? rationPills : '<span style="font-size: 0.75rem; color: var(--text-dim);">अभी कोई सांझा राशन नहीं जुड़ा</span>'}
@@ -999,15 +1303,16 @@ class App {
 
         return `
           <div class="diary-haziri-item">
-            <span><strong>${trade.name}:</strong></span>
+            <span><strong>${esc(trade.name)}:</strong></span>
             <span>${attendanceStr}</span>
           </div>
         `;
       }).join('');
     }
 
-    // 3. Cash & Recharge Table
-    const cashTxs = txs.filter(t => t.type === 'cash' || t.type === 'recharge');
+    // 3. Worker payments table — anything booked against a named worker, not just
+    // cash and recharge, so a material advance shows up on the day's slip too.
+    const cashTxs = txs.filter(t => t.targetType !== 'group' && t.workerId);
     const cashBody = document.getElementById('diaryCashTableBody');
     if (cashBody) {
       if (cashTxs.length === 0) {
@@ -1018,23 +1323,25 @@ class App {
           const trade = this.store.getTrade(t.tradeId);
           const roleText = worker ? (worker.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर') : 'कारीगर';
           const contractText = worker && worker.contractType === 'theka' ? ' [ठेका पेशगी]' : '';
-          const typeName = t.type === 'recharge' ? 'मोबाइल रिचार्ज' : 'नकद पेशगी';
+          const typeName = getTxTypeLabel(t.type, 'hi');
           const noteText = t.note ? ` - ${t.note}` : '';
+          const displayName = worker ? worker.name : (t.workerName ? `${t.workerName} (हटाया गया)` : 'कारीगर');
 
           return `
             <tr>
-              <td><strong>${worker ? worker.name : 'Unknown'}</strong></td>
-              <td>${trade.name} (${roleText})${contractText}</td>
-              <td>${typeName}${noteText}</td>
-              <td style="text-align: right; font-weight: 700; color: #047857;">₹${(t.amount || 0).toLocaleString('en-IN')}</td>
+              <td><strong>${esc(displayName)}</strong></td>
+              <td>${esc(trade.name)} (${roleText})${contractText}</td>
+              <td>${esc(typeName)}${esc(noteText)}</td>
+              <td style="text-align: right; font-weight: 700; color: #047857;">${inr(t.amount)}</td>
             </tr>
           `;
         }).join('');
       }
     }
 
-    // 4. Ration Table
-    const rationTxs = txs.filter(t => t.type === 'ration');
+    // 4. Shared site costs — ration plus cylinder, diesel, material and any custom
+    // type booked to a group. Filtering on 'ration' alone hid the rest.
+    const rationTxs = txs.filter(t => t.targetType === 'group' || !t.workerId);
     const rationBody = document.getElementById('diaryRationTableBody');
     if (rationBody) {
       if (rationTxs.length === 0) {
@@ -1042,12 +1349,14 @@ class App {
       } else {
         rationBody.innerHTML = rationTxs.map(t => {
           const trade = this.store.getTrade(t.tradeId);
+          const meta = getTxTypeMeta(t.type);
+          const itemLabel = t.rationItem || meta.hi;
           return `
             <tr>
-              <td><strong>${trade.name} ग्रुप</strong></td>
-              <td>${t.rationItem || 'राशन'} ${t.quantity ? `(${t.quantity})` : ''}</td>
-              <td>${t.note || '-'}</td>
-              <td style="text-align: right; font-weight: 700; color: #b45309;">₹${(t.amount || 0).toLocaleString('en-IN')}</td>
+              <td><strong>${esc(trade.name)} ग्रुप</strong></td>
+              <td>${meta.icon} ${esc(itemLabel)} ${t.quantity ? `(${esc(t.quantity)})` : ''}</td>
+              <td>${esc(t.note || '-')}</td>
+              <td style="text-align: right; font-weight: 700; color: #b45309;">${inr(t.amount)}</td>
             </tr>
           `;
         }).join('');
@@ -1085,7 +1394,7 @@ class App {
     const editWorkerTrade = document.getElementById('editWorkerTrade');
     const editTxTradeSelect = document.getElementById('editTxTradeSelect');
 
-    const optionsHtml = trades.map(t => `<option value="${t.id}">${getTradeIcon(t.icon)} ${t.name}</option>`).join('');
+    const optionsHtml = trades.map(t => `<option value="${esc(t.id)}">${getTradeIcon(t.icon)} ${esc(t.name)}</option>`).join('');
 
     if (tradeSelect) tradeSelect.innerHTML = optionsHtml;
     if (workerTradeSelect) workerTradeSelect.innerHTML = optionsHtml;
@@ -1110,7 +1419,7 @@ class App {
 
     workerSelect.innerHTML = workers.map(w => {
       const roleText = w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर';
-      return `<option value="${w.id}">${w.name} (${roleText}) - दर: ₹${w.dailyRate}</option>`;
+      return `<option value="${esc(w.id)}">${esc(w.name)} (${roleText}) - दर: ₹${w.dailyRate}</option>`;
     }).join('');
   }
 
@@ -1210,7 +1519,7 @@ class App {
       const workerCount = this.store.getWorkers(t.id).length;
       return `
         <div class="trade-tag-chip">
-          <span>${getTradeIcon(t.icon)} ${t.name}</span>
+          <span>${getTradeIcon(t.icon)} ${esc(t.name)}</span>
           <span class="worker-badge-count">${workerCount} कारीगर</span>
           ${workerCount === 0 ? `<button type="button" class="btn-del-custom-trade" data-del-trade-id="${t.id}" title="ट्रेड हटाएं">✕</button>` : ''}
         </div>
@@ -1301,46 +1610,57 @@ class App {
       });
     }
 
-    const btnSwitchToMonthlyTab = document.getElementById('btnSwitchToMonthlyTab');
-    if (btnSwitchToMonthlyTab) {
-      btnSwitchToMonthlyTab.addEventListener('click', () => {
-        document.querySelector('.nav-tab-btn[data-tab="tab-monthly"]').click();
-      });
-    }
+    // The old "📊 महीना" pill was removed from the attendance bar — the bottom
+    // nav's "मस्टर रोल" tab already goes there, and the bar needed the width.
 
     const btnFillDemoMonth = document.getElementById('btnFillDemoMonth');
     if (btnFillDemoMonth) {
       btnFillDemoMonth.addEventListener('click', () => {
-        // Populate September days
+        /* This used to overwrite the whole month with randomised attendance, with
+           no confirmation — on a live site that silently destroys the register the
+           wages are calculated from. It now only fills dates nobody has marked,
+           marks everyone present, and asks first. */
         const d = new Date();
-        const year = d.getFullYear();
-        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = this.monthlyYear;
+        const monthNum = this.monthlyMonth;
+        const month = String(monthNum).padStart(2, '0');
         const workers = this.store.getWorkers();
-
-        for (let day = 1; day <= 30; day++) {
-          const dayStr = String(day).padStart(2, '0');
-          const dateKey = `${year}-${month}-${dayStr}`;
-          const dayOfWeek = new Date(year, d.getMonth(), day).getDay();
-
-          if (!this.store.data.haziri[dateKey]) {
-            this.store.data.haziri[dateKey] = {};
-          }
-
-          workers.forEach((w, idx) => {
-            if (dayOfWeek === 0) {
-              this.store.data.haziri[dateKey][w.id] = { status: 0, otHours: 0 };
-            } else {
-              const isHalf = (day + idx) % 7 === 0;
-              const isAbsent = (day + idx) % 9 === 0;
-              const ot = (day + idx) % 5 === 0 ? 1 : 0;
-              const status = isAbsent ? 0 : (isHalf ? 0.5 : 1.0);
-              this.store.data.haziri[dateKey][w.id] = { status, otHours: ot };
-            }
-          });
+        if (workers.length === 0) {
+          alert('पहले कम से कम एक कारीगर जोड़ें।');
+          return;
         }
+
+        const daysInMonth = new Date(year, monthNum, 0).getDate();
+        const today = getTodayString();
+        const emptyDates = [];
+        for (let day = 1; day <= daysInMonth; day++) {
+          const dateKey = `${year}-${month}-${String(day).padStart(2, '0')}`;
+          if (dateKey > today) continue; // never pre-fill the future
+          const existing = this.store.data.haziri[dateKey];
+          if (!existing || Object.keys(existing).length === 0) emptyDates.push(dateKey);
+        }
+
+        if (emptyDates.length === 0) {
+          alert('इस महीने की हर तारीख की हाजिरी पहले से भरी हुई है — कुछ बदला नहीं गया।');
+          return;
+        }
+
+        if (!confirm(
+          `${emptyDates.length} खाली तारीखों में सभी ${workers.length} कारीगरों की हाजिरी "उपस्थित" लगा दी जाएगी ` +
+          `(रविवार को छुट्टी)।\n\nजिन तारीखों की हाजिरी पहले से भरी है, वे नहीं बदलेंगी।\n\nजारी रखें?`
+        )) return;
+
+        emptyDates.forEach(dateKey => {
+          const day = Number(dateKey.split('-')[2]);
+          const isSunday = new Date(year, monthNum - 1, day).getDay() === 0;
+          this.store.data.haziri[dateKey] = {};
+          workers.forEach(w => {
+            this.store.data.haziri[dateKey][w.id] = { status: isSunday ? 0 : 1.0, otHours: 0 };
+          });
+        });
         this.store.save();
-        this.renderAll();
-        alert('पूरे सितम्बर महीने की 1 से 30 तारीख की हाजिरी सफलतापूर्वक भर दी गई है!');
+        this.commit();
+        alert(`${emptyDates.length} खाली तारीखों की हाजिरी भर दी गई। जो पहले से भरी थीं, वे सुरक्षित हैं।`);
       });
     }
 
@@ -1458,7 +1778,7 @@ class App {
         });
 
         this.closeModals();
-        this.renderAll();
+        this.commit();
       });
     }
 
@@ -1469,7 +1789,7 @@ class App {
         const txId = delBtn.getAttribute('data-delete-tx');
         if (confirm('क्या आप इस लेन-देन को हटाना चाहते हैं?')) {
           this.store.deleteTransaction(txId);
-          this.renderAll();
+          this.commit();
         }
       }
     });
@@ -1646,7 +1966,7 @@ class App {
           this.store.deleteWorker(workerId);
           this.closeModals();
           this.populateSelects();
-          this.renderAll();
+          this.commit();
         }
       }
     });
@@ -1801,7 +2121,7 @@ class App {
 
         this.closeModals();
         this.populateSelects();
-        this.renderAll();
+        this.commit();
         alert('कारीगर की जानकारी सफलतापूर्वक अपडेट कर दी गई!');
       });
     }
@@ -1816,7 +2136,7 @@ class App {
           this.store.deleteWorker(workerId);
           this.closeModals();
           this.populateSelects();
-          this.renderAll();
+          this.commit();
         }
       });
     }
@@ -1853,7 +2173,7 @@ class App {
         if (workerSelect) {
           const workers = this.store.getWorkers(e.target.value);
           workerSelect.innerHTML = workers.map(w => `
-            <option value="${w.id}">${w.name} (${w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'})</option>
+            <option value="${esc(w.id)}">${esc(w.name)} (${w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'})</option>
           `).join('');
         }
       });
@@ -1888,7 +2208,7 @@ class App {
         });
 
         this.closeModals();
-        this.renderAll();
+        this.commit();
         if (this.activeStatementWorkerId) {
           this.openWorkerStatementModal(this.activeStatementWorkerId);
         }
@@ -1902,7 +2222,7 @@ class App {
         if (confirm('क्या आप इस लेन-देन को हटाना चाहते हैं?')) {
           this.store.deleteTransaction(txId);
           this.closeModals();
-          this.renderAll();
+          this.commit();
           if (this.activeStatementWorkerId) {
             this.openWorkerStatementModal(this.activeStatementWorkerId);
           }
@@ -1910,79 +2230,73 @@ class App {
       });
     }
 
-    // Cloud Sync Buttons in Settings
-    const btnGenKey = document.getElementById('btnGenerateSyncKey');
-    if (btnGenKey) {
-      btnGenKey.addEventListener('click', () => {
-        const newKey = this.store.generateSyncKey();
-        const keyInput = document.getElementById('settingCloudSyncKey');
-        if (keyInput) keyInput.value = newKey;
-      });
-    }
-
+    /* The kvdb.io sync these buttons drove is gone — it pushed the whole
+       unencrypted ledger to a public bucket whose id shipped in the source.
+       Firebase covers cloud sync; these now do a local file backup/restore,
+       which needs no third party at all. */
     const btnPushCloud = document.getElementById('btnPushToCloud');
     if (btnPushCloud) {
-      btnPushCloud.addEventListener('click', async () => {
-        const keyInput = document.getElementById('settingCloudSyncKey');
-        let key = keyInput ? keyInput.value.trim() : '';
-        if (!key) {
-          key = this.store.generateSyncKey();
-          if (keyInput) keyInput.value = key;
-        }
-        btnPushCloud.disabled = true;
-        btnPushCloud.textContent = '⏳ सेव हो रहा है...';
+      btnPushCloud.addEventListener('click', () => {
         try {
-          await this.store.pushToCloud(key);
-          alert(`✅ डेटा क्लाउड पर सफलतापूर्वक सुरक्षित हो गया!\n\nआपकी सिंक की (Sync Key): ${key}\n\nइसे संभाल कर रखें, दूसरे फोन में यही की डालकर अपना खाता पा सकते हैं।`);
-          const badge = document.getElementById('cloudSyncStatusBadge');
-          if (badge) {
-            badge.textContent = `सिंक: अभी`;
-            badge.style.background = 'rgba(16, 185, 129, 0.15)';
-            badge.style.color = '#34d399';
-          }
+          this.store.downloadBackupFile();
+          this.showToast(this.currentLang === 'en'
+            ? 'Backup file downloaded'
+            : 'बैकअप फ़ाइल डाउनलोड हो गई');
         } catch (err) {
-          alert('क्लाउड सेव विफल: ' + err.message);
-        } finally {
-          btnPushCloud.disabled = false;
-          btnPushCloud.textContent = '📤 क्लाउड पर सेव करें';
+          alert('बैकअप विफल: ' + err.message);
         }
       });
     }
 
     const btnPullCloud = document.getElementById('btnPullFromCloud');
     if (btnPullCloud) {
-      btnPullCloud.addEventListener('click', async () => {
-        const keyInput = document.getElementById('settingCloudSyncKey');
-        const key = keyInput ? keyInput.value.trim() : '';
-        if (!key) {
-          alert('कृपया अपनी सिंक की (Sync Key) दर्ज करें!');
-          return;
-        }
-        if (!confirm('चेतावनी: क्लाउड से डेटा लाने पर मौजूदा लोकल डेटा बदल जाएगा। क्या आप जारी रखना चाहते हैं?')) {
-          return;
-        }
-        btnPullCloud.disabled = true;
-        btnPullCloud.textContent = '⏳ लोड हो रहा है...';
-        try {
-          await this.store.pullFromCloud(key);
-          alert('✅ क्लाउड से डेटा सफलतापूर्वक आ गया!');
-          location.reload();
-        } catch (err) {
-          alert('क्लाउड से डेटा लाना विफल: ' + err.message);
-        } finally {
-          btnPullCloud.disabled = false;
-          btnPullCloud.textContent = '📥 क्लाउड से लाएं';
-        }
+      btnPullCloud.addEventListener('click', () => {
+        const picker = document.createElement('input');
+        picker.type = 'file';
+        picker.accept = 'application/json,.json';
+        picker.addEventListener('change', async () => {
+          const file = picker.files && picker.files[0];
+          if (!file) return;
+          if (!confirm('चेतावनी: बैकअप फ़ाइल से डेटा लाने पर मौजूदा हिसाब बदल जाएगा। जारी रखें?')) return;
+          try {
+            const text = await file.text();
+            if (this.store.importData(text)) {
+              alert('✅ बैकअप फ़ाइल से पूरा हिसाब वापस आ गया!');
+              location.reload();
+            } else {
+              alert('यह फ़ाइल साइट डायरी का बैकअप नहीं लगती।');
+            }
+          } catch (err) {
+            alert('फ़ाइल पढ़ने में दिक्कत: ' + err.message);
+          }
+        });
+        picker.click();
       });
     }
 
-    // Haziri Date Picker
+    // Haziri Date Picker & Chip Wrap
     const haziriDate = document.getElementById('haziriDatePicker');
+    const haziriDateWrap = document.getElementById('haziriDateWrap');
     if (haziriDate) {
       haziriDate.value = this.selectedHaziriDate;
       haziriDate.addEventListener('change', (e) => {
         this.selectedHaziriDate = e.target.value;
         this.renderHaziri();
+        this.renderStats();
+        this.renderDiarySheet();
+        this.scheduleSync('haziri');
+      });
+    }
+    if (haziriDateWrap && haziriDate) {
+      haziriDateWrap.addEventListener('click', (e) => {
+        if (e.target !== haziriDate) {
+          if (typeof haziriDate.showPicker === 'function') {
+            haziriDate.showPicker();
+          } else {
+            haziriDate.focus();
+            haziriDate.click();
+          }
+        }
       });
     }
 
@@ -2080,10 +2394,122 @@ class App {
           this.renderHaziri();
           this.renderStats();
           this.renderDiarySheet();
+          this.scheduleSync('haziri');
         }
       });
 
-      // Daily Haziri Attendance Toggle Buttons (1.0, 0.5, 0, OT)
+      // Attendance: Trade Tab click
+      document.addEventListener('click', (e) => {
+        const tabBtn = e.target.closest('.attendance-trade-tab');
+        if (tabBtn) {
+          const tradeId = tabBtn.getAttribute('data-trade-id');
+          if (tradeId) {
+            this.activeHaziriTradeId = tradeId;
+            this.renderHaziri();
+          }
+        }
+      });
+
+      // Attendance: One-Tap '✓ All Present' (Marks all workers in active group present 1.0)
+      document.addEventListener('click', (e) => {
+        if (e.target.closest('#btnMarkAllPresent')) {
+          const date = this.selectedHaziriDate || getTodayString();
+          let currentWorkers = [];
+          if (this.activeHaziriTradeId === 'all') {
+            currentWorkers = this.store.getWorkers();
+          } else {
+            currentWorkers = this.store.getWorkers(this.activeHaziriTradeId);
+          }
+          currentWorkers.forEach(w => {
+            const currentRecord = this.store.getHaziri(date)[w.id] || { status: 0, otHours: 0 };
+            this.store.setWorkerHaziri(date, w.id, 1.0, currentRecord.otHours);
+          });
+          this.renderHaziri();
+          this.renderMonthlyHaziri();
+          this.renderStats();
+          this.renderDiarySheet();
+          this.scheduleSync('haziri');
+          this.showToast(`✓ सभी ${currentWorkers.length} सदस्य उपस्थित दर्ज!`);
+        }
+      });
+
+      // Attendance: Sleek iOS Toggle Switch Checkbox Change
+      document.addEventListener('change', (e) => {
+        if (e.target.classList.contains('attendance-toggle-input')) {
+          const workerId = e.target.getAttribute('data-worker-id');
+          const isChecked = e.target.checked;
+          const val = isChecked ? 1.0 : 0;
+          const date = this.selectedHaziriDate || getTodayString();
+          const currentRecord = this.store.getHaziri(date)[workerId] || { status: 0, otHours: 0 };
+
+          this.store.setWorkerHaziri(date, workerId, val, currentRecord.otHours);
+          this.renderHaziri();
+          this.renderMonthlyHaziri();
+          this.renderStats();
+          this.renderDiarySheet();
+          this.scheduleSync('haziri');
+        }
+      });
+
+      // Attendance: Rare Half-Day Micro-chip click
+      document.addEventListener('click', (e) => {
+        const halfBtn = e.target.closest('[data-hz-half]');
+        if (halfBtn) {
+          const workerId = halfBtn.getAttribute('data-hz-half');
+          const date = this.selectedHaziriDate || getTodayString();
+          const currentRecord = this.store.getHaziri(date)[workerId] || { status: 0, otHours: 0 };
+          const newStatus = (currentRecord.status === 0.5) ? 1.0 : 0.5;
+
+          this.store.setWorkerHaziri(date, workerId, newStatus, currentRecord.otHours);
+          this.renderHaziri();
+          this.renderMonthlyHaziri();
+          this.renderStats();
+          this.renderDiarySheet();
+          this.scheduleSync('haziri');
+        }
+      });
+
+      // Attendance: Overtime Prompt
+      document.addEventListener('click', (e) => {
+        const otBtn = e.target.closest('[data-hz-ot]');
+        if (otBtn) {
+          const workerId = otBtn.getAttribute('data-hz-ot');
+          const date = this.selectedHaziriDate || getTodayString();
+          const currentRecord = this.store.getHaziri(date)[workerId] || { status: 1.0, otHours: 0 };
+          const otInput = prompt('ओवरटाइम घंटे (Overtime Hours) दर्ज करें:', currentRecord.otHours || '1');
+          if (otInput !== null) {
+            const ot = parseFloat(otInput) || 0;
+            this.store.setWorkerHaziri(date, workerId, currentRecord.status || 1.0, ot);
+            this.renderHaziri();
+            this.renderMonthlyHaziri();
+            this.renderStats();
+            this.renderDiarySheet();
+            this.scheduleSync('haziri');
+          }
+        }
+      });
+
+      // Attendance: Update / Save Button Toast
+      document.addEventListener('click', (e) => {
+        if (e.target.closest('#btnHaziriSaveUpdate')) {
+          this.showToast('✓ हाजिरी सफलतापूर्वक सुरक्षित सहेजी गई!');
+        }
+      });
+
+      // Quick add worker to specific trade when group is empty
+      document.addEventListener('click', (e) => {
+        const btnAddWorkerTrade = e.target.closest('#btnQuickAddWorkerToTrade');
+        if (btnAddWorkerTrade) {
+          const tradeId = btnAddWorkerTrade.getAttribute('data-trade-id');
+          this.openAddWorkerModal();
+          const tradeSelect = document.getElementById('modalWorkerTrade');
+          if (tradeSelect && tradeId && tradeId !== 'all') {
+            tradeSelect.value = tradeId;
+          }
+        }
+      });
+
+      // Legacy support for any old toggle buttons if present
       document.addEventListener('click', (e) => {
         const hzBtn = e.target.closest('.btn-hz-toggle');
         if (hzBtn && hzBtn.hasAttribute('data-hz-val')) {
@@ -2097,22 +2523,7 @@ class App {
           this.renderMonthlyHaziri();
           this.renderStats();
           this.renderDiarySheet();
-        }
-
-        // Overtime Prompt
-        if (hzBtn && hzBtn.hasAttribute('data-hz-ot')) {
-          const workerId = hzBtn.getAttribute('data-hz-ot');
-          const date = this.selectedHaziriDate || getTodayString();
-          const currentRecord = this.store.getHaziri(date)[workerId] || { status: 1.0, otHours: 0 };
-          const otInput = prompt('ओवरटाइम घंटे (Overtime Hours) दर्ज करें:', currentRecord.otHours || '1');
-          if (otInput !== null) {
-            const ot = parseFloat(otInput) || 0;
-            this.store.setWorkerHaziri(date, workerId, currentRecord.status || 1.0, ot);
-            this.renderHaziri();
-            this.renderMonthlyHaziri();
-            this.renderStats();
-            this.renderDiarySheet();
-          }
+          this.scheduleSync('haziri');
         }
       });
 
@@ -2129,8 +2540,14 @@ class App {
     const btnAddWorkerFromMonthly = document.getElementById('btnAddWorkerFromMonthly');
     if (btnAddWorkerFromMonthly) btnAddWorkerFromMonthly.addEventListener('click', () => this.openAddWorkerModal());
 
-    const btnAddWorkerFromHz = document.getElementById('btnAddWorkerFromHaziri');
-    if (btnAddWorkerFromHz) btnAddWorkerFromHz.addEventListener('click', () => this.openAddWorkerModal());
+    // Lives inside the re-rendered roster, so it needs delegation rather than a
+    // one-time getElementById binding. Pre-selects the trade currently on screen.
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#btnAddWorkerFromHaziri')) {
+        const tradeId = this.activeHaziriTradeId !== 'all' ? this.activeHaziriTradeId : null;
+        this.openAddWorkerModal(tradeId);
+      }
+    });
 
     document.addEventListener('click', (e) => {
       if (e.target.closest('.btn-add-first-worker')) {
@@ -2293,7 +2710,7 @@ class App {
 
         this.closeModals();
         this.populateSelects();
-        this.renderAll();
+        this.commit();
       });
     }
 
@@ -2376,7 +2793,7 @@ class App {
             this.store.deleteTrade(tradeId);
             this.renderExistingTradesList();
             this.populateSelects();
-            this.renderAll();
+            this.commit();
           }
         }
       });
@@ -2397,7 +2814,7 @@ class App {
           formTrade.reset();
           document.getElementById('modalAddTrade')?.classList.remove('open');
           this.populateSelects();
-          this.renderAll();
+          this.commit();
 
           // If opened from inside another modal, return to that modal and select the new trade
           if (this.tradeReturnModal) {
@@ -2434,6 +2851,7 @@ class App {
         this.store.setMarkedInDiary(today, newStatus);
         this.renderStats();
         this.renderDiarySheet();
+        this.scheduleSync('haziri');
         this.checkEveningBanner();
 
         if (newStatus) {
@@ -2472,6 +2890,8 @@ class App {
       document.getElementById('settingReminderTime').value = s.eveningReminderTime || '19:30';
       document.getElementById('settingNotifToggle').checked = s.reminderEnabled !== false;
       document.getElementById('settingSoundToggle').checked = s.soundEnabled !== false;
+      const otHoursInput = document.getElementById('settingOtHours');
+      if (otHoursInput) otHoursInput.value = s.otHoursPerDay || 8;
 
       // 1. Populate Worker select in Settings
       const workerSelect = document.getElementById('settingsWorkerSelect');
@@ -2483,7 +2903,7 @@ class App {
           workerSelect.innerHTML = workers.map(w => {
             const tr = this.store.getTrade(w.tradeId);
             const roleText = w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर';
-            return `<option value="${w.id}">${w.name} — ${getTradeIcon(tr.icon)} ${tr.name} (${roleText})</option>`;
+            return `<option value="${esc(w.id)}">${esc(w.name)} — ${getTradeIcon(tr.icon)} ${esc(tr.name)} (${roleText})</option>`;
           }).join('');
         }
       }
@@ -2495,8 +2915,8 @@ class App {
         tradesPills.innerHTML = trades.map(t => {
           const count = this.store.getWorkers(t.id).length;
           return `
-            <span class="filter-chip" style="cursor: default; background: rgba(255,255,255,0.06); font-size: 0.8rem; border-color: rgba(255,255,255,0.15); display: inline-flex; align-items: center; gap: 4px;">
-              ${getTradeIcon(t.icon)} ${t.name} <strong style="color: var(--amber-light); margin-left: 2px;">(${count})</strong>
+            <span class="filter-chip" style="cursor: default; background: rgba(15, 23, 42, 0.063); font-size: 0.8rem; border-color: rgba(15, 23, 42, 0.14); display: inline-flex; align-items: center; gap: 4px;">
+              ${getTradeIcon(t.icon)} ${esc(t.name)} <strong style="color: var(--amber-light); margin-left: 2px;">(${count})</strong>
             </span>
           `;
         }).join('');
@@ -2518,34 +2938,34 @@ class App {
         try { customTypes = JSON.parse(localStorage.getItem('custom_tx_types') || '[]'); } catch(e) {}
         const allTypes = [...builtIn, ...customTypes.map(c => ({ id: c.id, label: '🏷️ ' + c.label }))];
         txPills.innerHTML = allTypes.map(t => `
-          <span class="filter-chip" style="cursor: default; background: rgba(255,255,255,0.06); font-size: 0.8rem; border-color: rgba(255,255,255,0.15);">
+          <span class="filter-chip" style="cursor: default; background: rgba(15, 23, 42, 0.063); font-size: 0.8rem; border-color: rgba(15, 23, 42, 0.14);">
             ${t.label}
           </span>
         `).join('');
       }
 
-      const syncKeyInput = document.getElementById('settingCloudSyncKey');
-      if (syncKeyInput) syncKeyInput.value = s.cloudSyncKey || '';
-      const badge = document.getElementById('cloudSyncStatusBadge');
-      const note = document.getElementById('cloudSyncLastTimeNote');
-      if (badge) {
-        if (s.lastCloudSync) {
-          const syncDateStr = new Date(s.lastCloudSync).toLocaleDateString('hi-IN', { day: 'numeric', month: 'short' });
-          const syncTimeStr = new Date(s.lastCloudSync).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-          badge.textContent = `सिंक: ${syncDateStr}, ${syncTimeStr}`;
-          badge.style.background = 'rgba(16, 185, 129, 0.15)';
-          badge.style.color = '#34d399';
-          if (note) note.textContent = `अंतिम क्लाउड सिंक: ${syncDateStr} ${syncTimeStr} पर सुरक्षित किया गया।`;
-        } else {
-          badge.textContent = 'ऑफलाइन / लोकल';
-          badge.style.background = 'rgba(245, 158, 11, 0.15)';
-          badge.style.color = 'var(--amber-light)';
-        }
+      // Storage meter — makes the 5MB ceiling visible before writes start failing.
+      const usage = this.store.getStorageUsage();
+      const usageLabel = document.getElementById('storageUsageLabel');
+      const meterFill = document.getElementById('storageMeterFill');
+      const usageNote = document.getElementById('storageUsageNote');
+      if (usageLabel) usageLabel.textContent = `${usage.readable} / 5 MB (${usage.percent}%)`;
+      if (meterFill) {
+        meterFill.style.width = `${Math.max(2, usage.percent)}%`;
+        meterFill.className = 'storage-meter-fill' +
+          (usage.percent > 85 ? ' meter-danger' : usage.percent > 60 ? ' meter-warn' : '');
+      }
+      if (usageNote) {
+        const photos = (this.store.data.workers || []).filter(w => w.photoUrl).length;
+        const clips = (this.store.data.transactions || []).filter(t => t.audioDataUrl).length;
+        usageNote.textContent = usage.percent > 60
+          ? `जगह भर रही है। ${photos} फ़ोटो और ${clips} आवाज़ रिकॉर्डिंग सबसे ज़्यादा जगह लेती हैं — बैकअप फ़ाइल सेव करके पुराने हटा दें।`
+          : `${photos} फ़ोटो, ${clips} आवाज़ रिकॉर्डिंग सुरक्षित हैं।`;
       }
 
       // Populate Firebase Settings UI
       const fbSiteIdInput = document.getElementById('firebaseSiteIdInput');
-      if (fbSiteIdInput) fbSiteIdInput.value = s.firebaseSiteId || 'khalen-dairy';
+      if (fbSiteIdInput) fbSiteIdInput.value = s.firebaseSiteId || '';
 
       const fbConfigInput = document.getElementById('firebaseConfigInput');
       if (fbConfigInput) {
@@ -2569,7 +2989,7 @@ class App {
           }
         } else {
           fbBadge.textContent = '⚪ कनेक्ट नहीं है';
-          fbBadge.style.background = 'rgba(255, 255, 255, 0.08)';
+          fbBadge.style.background = 'rgba(15, 23, 42, 0.084)';
           fbBadge.style.color = 'var(--text-muted)';
         }
       }
@@ -2689,7 +3109,7 @@ class App {
     if (btnConnectFb) {
       btnConnectFb.addEventListener('click', async () => {
         const cfgStr = document.getElementById('firebaseConfigInput')?.value.trim();
-        const siteId = document.getElementById('firebaseSiteIdInput')?.value.trim() || 'khalen-dairy';
+        const siteId = document.getElementById('firebaseSiteIdInput')?.value.trim() || this.store.getSettings().firebaseSiteId;
         if (!cfgStr) {
           alert('कृपया पहले अपना Firebase Web Config JSON पेस्ट करें।\n\nउदा: {"apiKey": "...", "projectId": "...", "appId": "..."}');
           return;
@@ -2697,14 +3117,14 @@ class App {
         try {
           let cfg;
           try {
-            cfg = parseFirebaseConfig(cfgStr);
+            cfg = await parseFirebaseConfig(cfgStr);
           } catch (e) {
             throw new Error(e.message || 'अमान्य Firebase Config! कृपया Firebase से कॉपी किया गया पूरा कोड पेस्ट करें।');
           }
           btnConnectFb.disabled = true;
           btnConnectFb.textContent = '⏳ कनेक्ट हो रहा है...';
 
-          const ok = initFirebase(cfg);
+          const ok = await initFirebase(cfg);
           if (!ok) throw new Error('Firebase प्रारंभ करने में त्रुटि आई। कृपया apiKey और projectId जांचें।');
 
           // Write back clean formatted JSON to input
@@ -2712,7 +3132,7 @@ class App {
           if (configInput) configInput.value = JSON.stringify(cfg, null, 2);
 
           // Save test snapshot
-          await saveToFirebase(siteId, this.store.data);
+          await saveToFirebase(siteId, this.store.data, this.deviceId);
           this.store.updateSettings({
             firebaseConfig: cfg,
             firebaseSiteId: siteId,
@@ -2739,10 +3159,10 @@ class App {
     const btnPushFb = document.getElementById('btnPushToFirebase');
     if (btnPushFb) {
       btnPushFb.addEventListener('click', async () => {
-        const siteId = document.getElementById('firebaseSiteIdInput')?.value.trim() || this.store.getSettings().firebaseSiteId || 'khalen-dairy';
+        const siteId = document.getElementById('firebaseSiteIdInput')?.value.trim() || this.store.getSettings().firebaseSiteId;
         if (!isFirebaseReady()) {
           const cfg = this.store.getSettings().firebaseConfig;
-          if (cfg) initFirebase(cfg);
+          if (cfg) await initFirebase(cfg);
           else {
             alert('कृपया पहले Firebase Config दर्ज करके "टेस्ट व कनेक्ट करें" दबाएं।');
             return;
@@ -2751,7 +3171,7 @@ class App {
         btnPushFb.disabled = true;
         btnPushFb.textContent = '⏳ सेव हो रहा है...';
         try {
-          await saveToFirebase(siteId, this.store.data);
+          await saveToFirebase(siteId, this.store.data, this.deviceId);
           this.store.updateSettings({ lastFirebaseSync: Date.now() });
           alert('✅ पूरा हिसाब Google Firebase पर सफलतापूर्वक सुरक्षित हो गया!');
         } catch (err) {
@@ -2766,10 +3186,10 @@ class App {
     const btnPullFb = document.getElementById('btnPullFromFirebase');
     if (btnPullFb) {
       btnPullFb.addEventListener('click', async () => {
-        const siteId = document.getElementById('firebaseSiteIdInput')?.value.trim() || this.store.getSettings().firebaseSiteId || 'khalen-dairy';
+        const siteId = document.getElementById('firebaseSiteIdInput')?.value.trim() || this.store.getSettings().firebaseSiteId;
         if (!isFirebaseReady()) {
           const cfg = this.store.getSettings().firebaseConfig;
-          if (cfg) initFirebase(cfg);
+          if (cfg) await initFirebase(cfg);
           else {
             alert('कृपया पहले Firebase Config दर्ज करें।');
             return;
@@ -2788,7 +3208,11 @@ class App {
               workers: remoteData.workers,
               transactions: remoteData.transactions || [],
               haziri: remoteData.haziri || {},
+              haziriMeta: remoteData.haziriMeta || {},
               diaryNotedDates: remoteData.diaryNotedDates || {},
+              // Dropping this flag used to let the demo seed re-inject 8 fake
+              // workers' attendance into a real site after every restore.
+              isCleanStarted: remoteData.isCleanStarted === true || this.store.data.isCleanStarted === true,
               settings: { ...this.store.getSettings(), ...(remoteData.settings || {}) }
             };
             this.store.save();
@@ -2813,22 +3237,33 @@ class App {
         const time = document.getElementById('settingReminderTime').value;
         const reminderEnabled = document.getElementById('settingNotifToggle').checked;
         const soundEnabled = document.getElementById('settingSoundToggle').checked;
-        const cloudSyncKey = document.getElementById('settingCloudSyncKey') ? document.getElementById('settingCloudSyncKey').value.trim() : '';
-        const firebaseSiteId = document.getElementById('firebaseSiteIdInput') ? document.getElementById('firebaseSiteIdInput').value.trim() : 'khalen-dairy';
+        const current = this.store.getSettings();
+        // Never fall back to the old shared id — that is what made every install
+        // write into one another's ledger.
+        const firebaseSiteId = document.getElementById('firebaseSiteIdInput')?.value.trim() || current.firebaseSiteId;
         const firebaseAutoSync = document.getElementById('firebaseAutoSyncToggle') ? document.getElementById('firebaseAutoSyncToggle').checked : false;
+        const otHoursPerDay = Number(document.getElementById('settingOtHours')?.value) || current.otHoursPerDay || 8;
+
+        const siteChanged = firebaseSiteId !== current.firebaseSiteId;
 
         this.store.updateSettings({
           eveningReminderTime: time,
           reminderEnabled,
           soundEnabled,
-          cloudSyncKey,
           firebaseSiteId,
-          firebaseAutoSync
+          firebaseAutoSync,
+          otHoursPerDay
         });
 
+        // Pointing at a different site document means re-subscribing, otherwise
+        // this phone keeps listening to (and overwriting) the previous one.
+        if (siteChanged || firebaseAutoSync !== current.firebaseAutoSync) {
+          this.lastKnownRemoteStamp = 0;
+          this.initFirebaseIntegration();
+        }
+
         this.closeModals();
-        this.renderHeaderInfo();
-        this.checkEveningBanner();
+        this.renderAll();
         alert('सेटिंग्स सुरक्षित कर दी गई हैं!');
       });
     }
@@ -2893,16 +3328,18 @@ class App {
       btnClearDemo.addEventListener('click', async () => {
         if (confirm('क्या आप डमी/सैंपल डेटा हटाकर अपनी साइट का असली हिसाब शुरू करना चाहते हैं?\n\nट्रेड श्रेणियां (बढ़ई, राजमिस्त्री, ब्लॉक ठेका मिस्त्री आदि) सुरक्षित रहेंगी और आप अपने असली कारीगर व खर्चे जोड़ सकेंगे।')) {
           this.store.resetToClean();
+          // Was `saveToFirebase(this.store.getData())` — no such method, and the
+          // site id was missing, so the cloud copy silently kept the demo data.
           if (isFirebaseReady()) {
             try {
-              await saveToFirebase(this.store.getData());
+              await saveToFirebase(this.store.getSettings().firebaseSiteId, this.store.data, this.deviceId);
             } catch (err) {
               console.error('Firebase clean sync failed:', err);
             }
           }
           this.closeModals();
           this.populateSelects();
-          this.renderAll();
+          this.commit();
           alert('डमी डेटा सफलतापूर्वक साफ़ कर दिया गया है!\n\nअब आपका खाता पूरी तरह खाली व साफ़ है। आप "+ नया कारीगर" से अपने असली कारीगर जोड़ सकते हैं।');
         }
       });
@@ -3099,6 +3536,20 @@ class App {
       });
     }
 
+    // Anything that is neither a worker payment nor ration — diesel, cylinder,
+    // material, custom types. These were omitted from the slip's line items while
+    // still being added into the total, so the diary never tallied.
+    const listedIds = new Set([...cashTxs, ...rationTxs].map(t => t.id));
+    const siteTxs = txs.filter(t => !listedIds.has(t.id));
+    if (siteTxs.length > 0) {
+      text += `\n🧱 4. साइट का अन्य खर्च:\n`;
+      siteTxs.forEach(t => {
+        const meta = getTxTypeMeta(t.type);
+        const where = t.targetType === 'group' ? `${this.store.getTrade(t.tradeId).name} ग्रुप` : (this.store.getWorker(t.workerId)?.name || 'साइट');
+        text += `- ${meta.icon} ${meta.hi} (${where}): ₹${t.amount}${t.note ? ' - ' + t.note : ''}\n`;
+      });
+    }
+
     const grandTotal = txs.reduce((sum, t) => sum + (t.amount || 0), 0);
     text += `\n------------------------------\n`;
     text += `कुल खर्च (TOTAL): ₹${grandTotal.toLocaleString('en-IN')}\n`;
@@ -3188,7 +3639,7 @@ class App {
     const initials = worker.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
     if (avatarEl) {
       if (worker.photoUrl) {
-        avatarEl.innerHTML = `<img src="${worker.photoUrl}" alt="${worker.name}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />`;
+        avatarEl.innerHTML = `<img src="${esc(worker.photoUrl)}" alt="${esc(worker.name)}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />`;
       } else {
         avatarEl.innerHTML = initials;
       }
@@ -3386,7 +3837,7 @@ class App {
     const tradeSelect = document.getElementById('editWorkerTrade');
     if (tradeSelect) {
       tradeSelect.innerHTML = this.store.getTrades().map(t => `
-        <option value="${t.id}" ${t.id === worker.tradeId ? 'selected' : ''}>${t.name}</option>
+        <option value="${esc(t.id)}" ${t.id === worker.tradeId ? 'selected' : ''}>${esc(t.name)}</option>
       `).join('');
     }
 
@@ -3471,7 +3922,7 @@ class App {
     const tradeSelect = document.getElementById('editTxTradeSelect');
     if (tradeSelect) {
       tradeSelect.innerHTML = this.store.getTrades().map(t => `
-        <option value="${t.id}" ${t.id === tx.tradeId ? 'selected' : ''}>${t.name}</option>
+        <option value="${esc(t.id)}" ${t.id === tx.tradeId ? 'selected' : ''}>${esc(t.name)}</option>
       `).join('');
     }
 
@@ -3482,7 +3933,7 @@ class App {
         const workers = this.store.getWorkers(tradeId);
         workerSelect.innerHTML = workers.map(w => `
           <option value="${w.id}" ${w.id === selectedWorkerId ? 'selected' : ''}>
-            ${w.name} (${w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'})
+            ${esc(w.name)} (${w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'})
           </option>
         `).join('');
       }
@@ -3536,13 +3987,17 @@ window.addEventListener('DOMContentLoaded', () => {
   setInterval(clearPatterns, 1000);
 
   // Register Service Worker for Offline & PWA support with auto-update
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js?v=4').then((reg) => {
+  // Only in a real build. In dev the worker's cache-first asset strategy serves
+  // stale CSS/JS after every edit, which looks exactly like a broken change.
+  if ('serviceWorker' in navigator && import.meta.env.PROD) {
+    navigator.serviceWorker.register('./sw.js?v=5').then((reg) => {
       console.log('Site Diary Service Worker registered:', reg.scope);
       reg.update();
     }).catch((err) => {
       console.log('Service Worker registration failed:', err);
     });
+  } else if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(regs => regs.forEach(r => r.unregister()));
   }
 
   // Handle PWA Install Prompt

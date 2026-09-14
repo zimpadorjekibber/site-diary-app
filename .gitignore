@@ -32,3 +32,6 @@ android/.idea
 android/captures
 android/local.properties
 
+
+# Build output committed by mistake earlier
+*.apk

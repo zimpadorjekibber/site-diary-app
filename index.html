@@ -30,6 +30,11 @@
         </div>
       </div>
       <div class="header-actions">
+        <!-- Standing answer to "is my hisaab backed up?" — a failed cloud save
+             used to be invisible outside the console. -->
+        <button id="syncStatusChip" class="sync-chip sync-off" title="क्लाउड बैकअप">
+          <span class="sync-dot"></span><span>ऑफ़लाइन</span>
+        </button>
         <button id="btnOpenReminderSettings" class="header-reminder-pill" title="शाम का रिमाइंडर बदलें">
           <span class="bell-icon">⏰</span> <strong id="headerReminderTime">19:30</strong>
         </button>
@@ -69,7 +74,7 @@
         <div class="overview-metric-item" id="metricCardCash">
           <div class="metric-icon-bubble bubble-cash">💵</div>
           <div class="metric-info">
-            <span class="metric-label" data-i18n="metricCash">नकद पेशगी</span>
+            <span class="metric-label" data-i18n="metricCash">कारीगरों को दिया</span>
             <strong class="metric-val" id="statTodayCash">₹0</strong>
           </div>
         </div>
@@ -77,8 +82,18 @@
         <div class="overview-metric-item" id="metricCardRation">
           <div class="metric-icon-bubble bubble-ration">🛒</div>
           <div class="metric-info">
-            <span class="metric-label" data-i18n="metricRation">ग्रुप राशन</span>
+            <span class="metric-label" data-i18n="metricRation">राशन / चूल्हा</span>
             <strong class="metric-val" id="statTodayRation">₹0</strong>
+          </div>
+        </div>
+
+        <!-- Diesel, cylinder, material and custom types land here, so the three
+             tiles always add up to the headline figure above. -->
+        <div class="overview-metric-item" id="metricCardOther" style="display: none;">
+          <div class="metric-icon-bubble bubble-ration">🧱</div>
+          <div class="metric-info">
+            <span class="metric-label" data-i18n="metricOther">अन्य साइट खर्च</span>
+            <strong class="metric-val" id="statTodayOther">₹0</strong>
           </div>
         </div>
 
@@ -94,12 +109,14 @@
       <!-- QUICK ENTRY BAR: Text Input + Voice Mic -->
       <div class="voice-search-bar" style="cursor: default;">
         <div class="voice-search-content" style="flex: 1;">
-          <input type="text" id="quickEntryInput" class="form-input" data-i18n-placeholder="quickEntryPlaceholder" placeholder="लिखें: रमेश 500 नकद या बोलने के लिए 🎙️ दबाएं" style="margin: 0; border: none; background: rgba(255,255,255,0.06); color: var(--text-main); font-size: 0.88rem; padding: 10px 12px; border-radius: 8px; width: 100%;" />
+          <!-- Styling lives in .voice-search-content .form-input: this sits on the
+               dark overview card, so it needs light-on-dark, not the page palette. -->
+          <input type="text" id="quickEntryInput" class="form-input" data-i18n-placeholder="quickEntryPlaceholder" placeholder="लिखें: रमेश 500 नकद या बोलने के लिए 🎙️ दबाएं" />
         </div>
         <button type="button" id="btnQuickEntrySubmit" data-i18n="quickEntryBtn" style="background: var(--amber-primary); border: none; color: #000; font-weight: 700; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; white-space: nowrap;">
           जोड़ें ➔
         </button>
-        <button type="button" id="btnVoiceMic" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: var(--text-main); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 1.1rem;" title="बोलकर नोट करें">
+        <button type="button" id="btnVoiceMic" class="btn-voice-mic" title="बोलकर नोट करें">
           🎙️
         </button>
       </div>
@@ -192,26 +209,29 @@
 
     <!-- TAB 2: DAILY HAZIRI (ATTENDANCE) REGISTER -->
     <section id="tab-haziri" class="tab-view active">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <label style="font-size: 0.9rem; font-weight: 600; color: var(--text-muted);">तारीख चुनें:</label>
-          <input type="date" id="haziriDatePicker" class="form-input" style="width: auto; padding: 6px 12px;" />
+      <!-- Attendance Top Navigation Bar: Date Chip, Group Count Badge, Horizontal Trade Tabs -->
+      <div class="attendance-top-bar">
+        <div class="attendance-date-chip" id="haziriDateWrap" title="तारीख बदलें (Change Date)">
+          <span class="attendance-date-icon">📅</span>
+          <span id="haziriDateDisplay" class="attendance-date-text">14 Sep</span>
+          <input type="date" id="haziriDatePicker" class="attendance-date-native-input" />
         </div>
-        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button id="btnSwitchToMonthlyTab" class="btn-secondary" style="font-size: 0.85rem;">
-            📊 पूरे महीने की हाजिरी देखें →
-          </button>
-          <button id="btnAddTradeFromHaziri" class="btn-secondary" style="font-size: 0.85rem;">
-            🏷️ + नया ट्रेड
-          </button>
-          <button id="btnAddWorkerFromHaziri" class="btn-primary" style="padding: 8px 16px; font-size: 0.88rem;">
-            + नया कारीगर / हेल्पर जोड़ें
-          </button>
+
+        <div class="attendance-count-badge" id="haziriActiveGroupCount" title="ग्रुप के कुल कारीगर">
+          0
         </div>
+
+        <div class="attendance-group-tabs-scroll" id="haziriGroupTabs">
+          <!-- Injected via JavaScript: Trade tabs [✓ Carpenter], [Mason], etc. -->
+        </div>
+
       </div>
+      <!-- The month view lives on the "मस्टर रोल" tab and adding a worker now sits
+           at the end of the roster, so this row belongs entirely to the trade
+           chips — the same way the reference lays out its class tabs. -->
 
       <div id="haziriTradesContainer">
-        <!-- Rendered per trade and role (Mistri / Helper) -->
+        <!-- Rendered per trade group with All Present button, compact toggle rows, and bottom summary dock -->
       </div>
     </section>
 
@@ -220,20 +240,17 @@
       
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
         <div>
-          <h2 style="font-size: 1.25rem; font-weight: 700; color: #fff;">📊 पूरे महीने का हाजिरी रजिस्टर (Muster Roll)</h2>
+          <h2 style="font-size: 1.25rem; font-weight: 700; color: var(--text-main);">📊 पूरे महीने का हाजिरी रजिस्टर (Muster Roll)</h2>
           <p style="font-size: 0.82rem; color: var(--text-muted);">
             1 तारीख से 30/31 तारीख तक सभी कारीगरों (मिस्त्री, हेल्पर, ठेका) की पूरी हाजिरी, गैरहाजिरी और बकाया एक साथ देखें।
           </p>
         </div>
         <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-          <button id="btnAddTradeFromMonthly" class="btn-secondary" style="font-size: 0.85rem; padding: 7px 14px;">
-            🏷️ + नया ट्रेड
-          </button>
           <button id="btnAddWorkerFromMonthly" class="btn-primary" style="font-size: 0.85rem; padding: 7px 16px;">
             👷 + नया कारीगर जोड़ें
           </button>
           <button id="btnFillDemoMonth" class="btn-secondary" style="font-size: 0.82rem; border-color: var(--amber-primary); color: var(--amber-light);">
-            ✨ पूरे महीने का रिकॉर्ड भरें / रीसेट
+            ✓ खाली तारीखों में सब उपस्थित लगाएं
           </button>
         </div>
       </div>
@@ -266,7 +283,7 @@
         <span class="legend-chip legend-half">🟡 0.5 = आधा दिन</span>
         <span class="legend-chip legend-absent">🔴 A = गैरहाजिर / काम बंद</span>
         <span class="legend-chip legend-ot">🟣 OT = ओवरटाइम घंटे</span>
-        <span style="font-size: 0.78rem; color: #fde047; margin-left: auto;">👉 किसी भी तारीख के बॉक्स पर क्लिक करके सीधे हाजिरी बदल सकते हैं</span>
+        <span style="font-size: 0.78rem; color: var(--text-muted); margin-left: auto;">👉 किसी भी तारीख के बॉक्स पर क्लिक करके सीधे हाजिरी बदल सकते हैं</span>
       </div>
 
       <!-- Monthly Grand Total KPI Banner -->
@@ -323,9 +340,6 @@
           <p style="font-size: 0.82rem; color: var(--text-muted);">हर ट्रेड के मिस्त्री, हेल्पर और ग्रुप राशन का पूरा ब्यौरा</p>
         </div>
         <div style="display: flex; gap: 8px;">
-          <button id="btnAddTradeBtn" class="btn-secondary" style="font-size: 0.85rem;">
-            + नया कारीगर प्रकार (Trade)
-          </button>
           <button id="btnAddWorkerBtn" class="btn-primary" style="font-size: 0.85rem;">
             + नया कारीगर जोड़ें
           </button>
@@ -431,7 +445,7 @@
         <!-- MARKED IN PHYSICAL DIARY TRACKER -->
         <div class="marked-status-box">
           <div>
-            <h3 style="font-size: 1.05rem; font-weight: 700; color: #fff;">क्या आपने इसे अपनी डायरी में नोट कर लिया?</h3>
+            <h3 style="font-size: 1.05rem; font-weight: 700; color: var(--text-main);">क्या आपने इसे अपनी डायरी में नोट कर लिया?</h3>
             <p style="font-size: 0.84rem; color: var(--text-muted);" id="markedStatusDesc">
               डायरी में नोट करने के बाद नीचे बटन दबाएं ताकि शाम का रिमाइंडर शांत हो जाए।
             </p>
@@ -737,9 +751,9 @@
       </div>
       <form id="formSettings">
         <!-- 0. LANGUAGE SELECTION (भाषा चयन) -->
-        <div class="form-group" style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-card); border-radius: 10px; padding: 12px 14px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+        <div class="form-group" style="background: rgba(15, 23, 42, 0.042); border: 1px solid var(--border-card); border-radius: 10px; padding: 12px 14px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
           <div>
-            <strong style="font-size: 0.9rem; color: #fff;">🌐 ऐप की भाषा (App Language):</strong>
+            <strong style="font-size: 0.9rem; color: var(--text-main);">🌐 ऐप की भाषा (App Language):</strong>
             <div style="font-size: 0.76rem; color: var(--text-muted);">हिंदी / English चुनें</div>
           </div>
           <div class="segmented-control" id="settingsLangSwitcher" style="max-width: 200px;">
@@ -783,7 +797,7 @@
         </div>
 
         <!-- 3. TRADE CATEGORIES (ट्रेड / श्रेणी प्रबंधन) -->
-        <div class="form-group" style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-card); border-radius: 10px; padding: 14px; margin-bottom: 18px;">
+        <div class="form-group" style="background: rgba(15, 23, 42, 0.032); border: 1px solid var(--border-card); border-radius: 10px; padding: 14px; margin-bottom: 18px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
             <label class="form-label" style="font-weight: 700; font-size: 0.95rem; margin: 0;">
               🏷️ कारीगर ट्रेड / श्रेणियां (Trades):
@@ -801,7 +815,7 @@
         </div>
 
         <!-- 4. TRANSACTION CATEGORIES (लेन-देन के प्रकार) -->
-        <div class="form-group" style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-card); border-radius: 10px; padding: 14px; margin-bottom: 18px;">
+        <div class="form-group" style="background: rgba(15, 23, 42, 0.032); border: 1px solid var(--border-card); border-radius: 10px; padding: 14px; margin-bottom: 18px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
             <label class="form-label" style="font-weight: 700; font-size: 0.95rem; margin: 0;">
               💳 लेन-देन के प्रकार (Transaction Types):
@@ -819,7 +833,7 @@
         </div>
 
         <!-- 5. REMINDER & SOUND SETTINGS -->
-        <div class="form-group" style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-card); border-radius: 10px; padding: 14px; margin-bottom: 18px;">
+        <div class="form-group" style="background: rgba(15, 23, 42, 0.032); border: 1px solid var(--border-card); border-radius: 10px; padding: 14px; margin-bottom: 18px;">
           <label class="form-label" style="font-weight: 700; font-size: 0.95rem; margin-bottom: 10px;">
             ⏰ शाम का रिमाइंडर व अलार्म (Evening Reminder):
           </label>
@@ -850,44 +864,56 @@
           </button>
         </div>
 
+        <!-- Overtime rate basis. Was hardcoded to /8 in three separate places. -->
+        <div class="form-group" style="background: rgba(15, 23, 42, 0.032); border: 1px solid var(--border-card); border-radius: 10px; padding: 14px; margin-bottom: 18px;">
+          <label class="form-label" for="settingOtHours">⏱️ एक दिन में कितने घंटे काम (OT की दर के लिए):</label>
+          <input type="number" id="settingOtHours" class="form-input" min="1" max="16" step="1" value="8" style="max-width: 120px;" />
+          <p style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px;">
+            ओवरटाइम का एक घंटा = दिहाड़ी ÷ यह संख्या। जैसे ₹800 दिहाड़ी और 8 घंटे = ₹100 प्रति घंटा।
+          </p>
+        </div>
+
         <!-- 6. ADVANCED TECHNICAL / BACKUP SETTINGS (COLLAPSED BY DEFAULT) -->
         <details id="advancedTechSettingsDetails" style="border-top: 1px solid var(--border-card); padding-top: 14px; margin-top: 16px;">
           <summary style="font-size: 0.82rem; color: var(--text-dim); cursor: pointer; user-select: none; padding: 6px 0; font-weight: 600;">
-            🛠️ उन्नत तकनीकी सेटिंग्स (Firebase, Sync Key, JSON बैकअप) ▾
+            🛠️ उन्नत सेटिंग्स (फ़ाइल बैकअप, स्टोरेज, Firebase) ▾
           </summary>
           <div style="padding-top: 12px;">
-            <!-- Cloud Sync Key -->
+            <!-- Local file backup. Replaces the old kvdb.io "sync key", which sent
+                 the whole unencrypted ledger to a public key-value bucket. -->
             <div class="form-group" style="margin-bottom: 16px;">
-              <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
-                <span>☁️ क्लाउड बैकअप व सिंक Key:</span>
-                <span id="cloudSyncStatusBadge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; background: rgba(245, 158, 11, 0.15); color: var(--amber-light);">ऑफलाइन / लोकल</span>
-              </label>
-              <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-                <input type="text" id="settingCloudSyncKey" class="form-input" placeholder="सिंक की (जैसे: SD-ABCD-1234)" style="font-family: monospace; font-size: 0.85rem;" />
-                <button type="button" id="btnGenerateSyncKey" class="btn-secondary" style="font-size: 0.75rem; white-space: nowrap;">
-                  🔑 नया Key बनाएं
-                </button>
-              </div>
+              <label class="form-label">💾 फ़ाइल बैकअप (आपके फ़ोन में):</label>
               <div style="display: flex; gap: 8px;">
-                <button type="button" id="btnPushToCloud" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: #34d399; color: #34d399; font-weight: 600;">
-                  📤 क्लाउड पर सेव करें
+                <button type="button" id="btnPushToCloud" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: var(--emerald-success); color: var(--emerald-success); font-weight: 600;">
+                  📤 बैकअप फ़ाइल सेव करें
                 </button>
-                <button type="button" id="btnPullFromCloud" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: #38bdf8; color: #38bdf8; font-weight: 600;">
-                  📥 क्लाउड से लाएं
+                <button type="button" id="btnPullFromCloud" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: var(--blue-accent); color: var(--blue-accent); font-weight: 600;">
+                  📥 फ़ाइल से वापस लाएं
                 </button>
               </div>
-              <p style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px;" id="cloudSyncLastTimeNote">
-                इस सिंक की (Sync Key) को किसी भी दूसरे फोन या कंप्यूटर में डालकर आप अपना पूरा डेटा तुरंत ला सकते हैं।
+              <p style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px;">
+                पूरा हिसाब एक JSON फ़ाइल में सेव होता है। इसे WhatsApp या Google Drive पर रखकर किसी भी फ़ोन में वापस लाया जा सकता है।
               </p>
             </div>
 
+            <!-- Storage meter: photos and voice clips are stored inline, and a full
+                 quota used to fail writes silently. -->
+            <div class="form-group" style="margin-bottom: 16px;">
+              <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>📦 फ़ोन में जगह (Storage):</span>
+                <span id="storageUsageLabel" style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">—</span>
+              </label>
+              <div class="storage-meter"><div class="storage-meter-fill" id="storageMeterFill"></div></div>
+              <p style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px;" id="storageUsageNote"></p>
+            </div>
+
             <!-- Firebase Status & Config -->
-            <div class="form-group" style="margin-bottom: 16px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 12px;">
+            <div class="form-group" style="margin-bottom: 16px; border-top: 1px solid rgba(15, 23, 42, 0.063); padding-top: 12px;">
               <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
                 <strong style="color: #fbbf24; display: flex; align-items: center; gap: 6px;">
                   🔥 Google Firebase (डेटाबेस):
                 </strong>
-                <span id="firebaseStatusBadge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); color: var(--text-muted);">कनेक्ट नहीं है</span>
+                <span id="firebaseStatusBadge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; background: rgba(15, 23, 42, 0.084); color: var(--text-muted);">कनेक्ट नहीं है</span>
               </label>
               <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
                 <button type="button" id="btnPushToFirebase" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: #f59e0b; color: #f59e0b; font-weight: 700; padding: 8px 12px;">
@@ -905,7 +931,7 @@
                 गूगल के ऑफिशियल डेटाबेस (Firestore) पर डेटा बैकअप रहता है।
               </p>
 
-              <div id="firebaseDevConfig" style="display: none; margin-top: 12px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 10px;">
+              <div id="firebaseDevConfig" style="display: none; margin-top: 12px; border-top: 1px dashed rgba(15, 23, 42, 0.105); padding-top: 10px;">
                 <div style="margin-top: 8px;">
                   <label style="font-size: 0.76rem; color: var(--text-muted);">साइट ID:</label>
                   <input type="text" id="firebaseSiteIdInput" class="form-input" placeholder="जैसे: khalen-dairy" style="margin-bottom: 8px; font-size: 0.85rem;" />
@@ -921,7 +947,7 @@
             </div>
 
             <!-- Local JSON backup -->
-            <div class="form-group" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 12px;">
+            <div class="form-group" style="border-top: 1px solid rgba(15, 23, 42, 0.063); padding-top: 12px;">
               <label class="form-label">लोकल फ़ाइल बैकअप (JSON Backup):</label>
               <div style="display: flex; gap: 8px;">
                 <button type="button" id="btnExportData" class="btn-secondary" style="flex: 1; font-size: 0.8rem;">

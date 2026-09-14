@@ -1,0 +1,55 @@
+rules_version = '2';
+
+// Firestore security rules for Shram & Site Diary.
+//
+// Deploy with:  firebase deploy --only firestore:rules
+//
+// Context: the app has no sign-in. Every install generates its own unguessable
+// site id (site-XXXX-XXXX, see getOrCreateSiteId in src/storage.js) and that id
+// is the only thing protecting a site's ledger. These rules therefore do two
+// things the default test-mode rules do not:
+//
+//   1. Refuse access to any document whose id is not a well-formed site id, so
+//      a scan of short or guessed names finds nothing.
+//   2. Refuse writes that do not look like this app's payload, so a malformed
+//      or oversized document cannot replace a real ledger.
+//
+// They deliberately do NOT allow listing the collection: without that, an
+// attacker cannot enumerate sites, only guess full ids (32^8 combinations).
+//
+// If you later add Firebase Authentication, tighten `isOwner()` below to compare
+// request.auth.uid against an ownerUid field on the document.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /site_diaries/{siteId} {
+
+      // site-XXXX-XXXX, using the same alphabet as randomCode() in storage.js.
+      function isWellFormedSiteId() {
+        return siteId.matches('^site-[A-Z2-9]{4}-[A-Z2-9]{4}$');
+      }
+
+      function looksLikeLedger() {
+        return request.resource.data.keys().hasOnly([
+                 'trades', 'workers', 'transactions', 'haziri', 'haziriMeta',
+                 'diaryNotedDates', 'isCleanStarted', 'settings',
+                 'lastWriterDeviceId', 'updatedAt', 'timestamp'
+               ])
+               && request.resource.data.workers is list
+               && request.resource.data.trades is list
+               && request.resource.data.transactions is list;
+      }
+
+      allow get: if isWellFormedSiteId();
+      allow list: if false; // never allow enumerating sites
+      allow create, update: if isWellFormedSiteId() && looksLikeLedger();
+      allow delete: if false; // the app never deletes a site document
+    }
+
+    // Anything outside site_diaries is not part of this app.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
