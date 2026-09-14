@@ -2570,12 +2570,20 @@ class App {
     // Clear Demo Data & Start Fresh with Real Site Data
     const btnClearDemo = document.getElementById('btnClearDemoData');
     if (btnClearDemo) {
-      btnClearDemo.addEventListener('click', () => {
-        if (confirm('क्या आप डमी/सैंपल डेटा हटाकर अपनी साइट का असली हिसाब शुरू करना चाहते हैं?\n\nट्रेड श्रेणियां (बढ़ई, राजमिस्त्री, प्लंबर आदि) सुरक्षित रहेंगी और आप अपने असली कारीगर व खर्चे जोड़ सकेंगे।')) {
+      btnClearDemo.addEventListener('click', async () => {
+        if (confirm('क्या आप डमी/सैंपल डेटा हटाकर अपनी साइट का असली हिसाब शुरू करना चाहते हैं?\n\nट्रेड श्रेणियां (बढ़ई, राजमिस्त्री, ब्लॉक ठेका मिस्त्री आदि) सुरक्षित रहेंगी और आप अपने असली कारीगर व खर्चे जोड़ सकेंगे।')) {
           this.store.resetToClean();
+          if (isFirebaseReady()) {
+            try {
+              await saveToFirebase(this.store.getData());
+            } catch (err) {
+              console.error('Firebase clean sync failed:', err);
+            }
+          }
           this.closeModals();
+          this.populateSelects();
           this.renderAll();
-          alert('डमी डेटा सफलतापूर्वक साफ़ कर दिया गया है!\n\nअब आप "+ नया कारीगर जोड़ें" बटन दबाकर अपनी साइट के असली कारीगर और दैनिक हिसाब दर्ज कर सकते हैं।');
+          alert('डमी डेटा सफलतापूर्वक साफ़ कर दिया गया है!\n\nअब आपका खाता पूरी तरह खाली व साफ़ है। आप "+ नया कारीगर" से अपने असली कारीगर जोड़ सकते हैं।');
         }
       });
     }

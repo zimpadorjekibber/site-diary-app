@@ -218,12 +218,12 @@ export class Store {
 
   resetToClean() {
     this.data = {
-      trades: DEFAULT_TRADES,
+      trades: (this.data && this.data.trades && this.data.trades.length > 0) ? this.data.trades : DEFAULT_TRADES,
       workers: [],
       transactions: [],
       haziri: {},
       diaryNotedDates: {},
-      settings: DEFAULT_SETTINGS,
+      settings: (this.data && this.data.settings) ? this.data.settings : DEFAULT_SETTINGS,
       isCleanStarted: true
     };
     this.save();
