@@ -6,6 +6,7 @@ import { VoiceManager } from './speech.js';
 import { ReminderManager } from './reminder.js';
 import confetti from 'canvas-confetti';
 import { initFirebase, isFirebaseReady, saveToFirebase, loadFromFirebase, enableRealtimeSync, parseFirebaseConfig } from './firebase.js';
+import { translations } from './i18n.js';
 
 const ICON_MAP = {
   'hammer': '🔨',
@@ -86,6 +87,10 @@ class App {
     // Trade creation return modal state
     this.tradeReturnModal = null;
 
+    // Language state ('hi' | 'en')
+    const savedLang = this.store.getSettings().language;
+    this.currentLang = (savedLang === 'en' || savedLang === 'en-IN') ? 'en' : 'hi';
+
     this.init();
   }
 
@@ -129,10 +134,83 @@ class App {
   init() {
     this.bindEvents();
     this.populateSelects();
+    this.applyLanguage(this.currentLang, false);
     this.renderAll();
     this.startClock();
     this.checkEveningBanner();
     this.initFirebaseIntegration();
+  }
+
+  applyLanguage(lang, reRender = true) {
+    this.currentLang = (lang === 'en' || lang === 'en-IN') ? 'en' : 'hi';
+    const dict = translations[this.currentLang] || translations.hi;
+
+    // Update html lang attribute
+    document.documentElement.lang = this.currentLang;
+
+    // Update Header button label: shows target language to switch to
+    const currentLangLabel = document.getElementById('currentLangLabel');
+    if (currentLangLabel) {
+      currentLangLabel.textContent = this.currentLang === 'hi' ? 'English' : 'हिंदी';
+    }
+
+    // Update Settings modal language segmented switcher
+    document.querySelectorAll('#settingsLangSwitcher .segment-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-lang') === this.currentLang);
+    });
+
+    // Update all data-i18n elements
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.getAttribute('data-i18n');
+      if (dict[key]) el.textContent = dict[key];
+    });
+    document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+      const key = el.getAttribute('data-i18n-placeholder');
+      if (dict[key]) el.placeholder = dict[key];
+    });
+
+    // Update filter chips default labels if present
+    const filterAll = document.querySelector('#timelineFilters [data-filter-type="all"]');
+    if (filterAll && dict.filterAll) filterAll.textContent = dict.filterAll;
+    const filterCash = document.querySelector('#timelineFilters [data-filter-type="cash"]');
+    if (filterCash && dict.filterCash) filterCash.textContent = dict.filterCash;
+    const filterRation = document.querySelector('#timelineFilters [data-filter-type="ration"]');
+    if (filterRation && dict.filterRation) filterRation.textContent = dict.filterRation;
+    const filterRecharge = document.querySelector('#timelineFilters [data-filter-type="recharge"]');
+    if (filterRecharge && dict.filterRecharge) filterRecharge.textContent = dict.filterRecharge;
+    const filterCylinder = document.querySelector('#timelineFilters [data-filter-type="cylinder"]');
+    if (filterCylinder && dict.filterCylinder) filterCylinder.textContent = dict.filterCylinder;
+    const filterDiesel = document.querySelector('#timelineFilters [data-filter-type="diesel"]');
+    if (filterDiesel && dict.filterDiesel) filterDiesel.textContent = dict.filterDiesel;
+    const filterMaterial = document.querySelector('#timelineFilters [data-filter-type="material"]');
+    if (filterMaterial && dict.filterMaterial) filterMaterial.textContent = dict.filterMaterial;
+    const filterOther = document.querySelector('#timelineFilters [data-filter-type="other"]');
+    if (filterOther && dict.filterOther) filterOther.textContent = dict.filterOther;
+    const btnAddFilter = document.getElementById('btnAddFilterType');
+    if (btnAddFilter && dict.filterAdd) btnAddFilter.textContent = dict.filterAdd;
+
+    if (reRender) {
+      this.renderAll();
+    }
+  }
+
+  setLanguage(lang) {
+    this.currentLang = (lang === 'en' || lang === 'en-IN') ? 'en' : 'hi';
+    const settings = this.store.getSettings();
+    settings.language = this.currentLang;
+    this.store.updateSettings(settings);
+
+    // Update speech recognition language
+    if (this.voiceManager && this.voiceManager.recognition) {
+      this.voiceManager.recognition.lang = this.currentLang === 'en' ? 'en-IN' : 'hi-IN';
+    }
+
+    this.applyLanguage(this.currentLang, true);
+  }
+
+  toggleLanguage() {
+    const nextLang = this.currentLang === 'hi' ? 'en' : 'hi';
+    this.setLanguage(nextLang);
   }
 
   initFirebaseIntegration() {
@@ -2477,11 +2555,32 @@ class App {
         }
       }
 
+      // Sync Language Segmented Switcher in Settings Modal
+      document.querySelectorAll('#settingsLangSwitcher .segment-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-lang') === this.currentLang);
+      });
+
       modalSettings.classList.add('open');
     };
 
     if (btnOpenSettings) btnOpenSettings.addEventListener('click', openSettings);
     if (btnOpenReminder) btnOpenReminder.addEventListener('click', openSettings);
+
+    // Language Toggle in Header
+    const btnLangToggle = document.getElementById('btnLanguageToggle');
+    if (btnLangToggle) {
+      btnLangToggle.addEventListener('click', () => {
+        this.toggleLanguage();
+      });
+    }
+
+    // Language Segmented Control in Settings Modal
+    document.querySelectorAll('#settingsLangSwitcher .segment-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const lang = btn.getAttribute('data-lang');
+        this.setLanguage(lang);
+      });
+    });
 
     // Settings: Worker, Trade & Transaction Type Buttons
     const btnSettingsAddWorker = document.getElementById('btnSettingsAddWorker');

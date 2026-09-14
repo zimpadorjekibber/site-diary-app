@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html lang="hi">
+<html lang="hi" translate="no" class="notranslate">
 <head>
   <meta charset="UTF-8" />
+  <meta name="google" content="notranslate" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>श्रम व साइट डायरी - Voice & Text Site Transactions & Evening Diary</title>
   <meta name="theme-color" content="#f59e0b" />
@@ -14,7 +15,7 @@
   <link rel="manifest" href="./manifest.json" />
   <link rel="stylesheet" href="/src/style.css" />
 </head>
-<body>
+<body class="notranslate">
   <div class="app-container">
     
     <!-- HEADER (Sleek, Uncluttered Mobile App Bar) -->
@@ -22,13 +23,16 @@
       <div class="brand-section">
         <div class="brand-icon">🔨</div>
         <div>
-          <h1 class="brand-title">श्रम और साइट डायरी</h1>
+          <h1 class="brand-title" data-i18n="appTitle">श्रम और साइट डायरी</h1>
           <p class="brand-subtitle">
             <span id="currentDateDisplay">शनिवार, 12 सितम्बर 2026</span>
           </p>
         </div>
       </div>
       <div class="header-actions">
+        <button id="btnLanguageToggle" class="header-reminder-pill" title="भाषा बदलें / Switch Language (Hindi / English)" style="padding: 6px 10px; font-size: 0.8rem; cursor: pointer; border-color: rgba(255, 255, 255, 0.25);">
+          🌐 <strong id="currentLangLabel">English</strong>
+        </button>
         <button id="btnOpenReminderSettings" class="header-reminder-pill" title="शाम का रिमाइंडर बदलें">
           <span class="bell-icon">⏰</span> <strong id="headerReminderTime">19:30</strong>
         </button>
@@ -56,10 +60,10 @@
     <section class="overview-dashboard-card">
       <div class="overview-top-row">
         <div>
-          <div class="overview-eyebrow">आज का साइट खर्च (Total Spent Today)</div>
+          <div class="overview-eyebrow" data-i18n="todayExpense">आज का साइट खर्च (Total Spent Today)</div>
           <div class="overview-main-amount" id="overviewTodayTotalDisplay">₹0</div>
         </div>
-        <div class="overview-status-pill" id="statTodayDiaryStatus">
+        <div class="overview-status-pill" id="statTodayDiaryStatus" data-i18n="diaryPending">
           डायरी बाकी ⏳
         </div>
       </div>
@@ -68,7 +72,7 @@
         <div class="overview-metric-item" id="metricCardCash">
           <div class="metric-icon-bubble bubble-cash">💵</div>
           <div class="metric-info">
-            <span class="metric-label">नकद पेशगी</span>
+            <span class="metric-label" data-i18n="metricCash">नकद पेशगी</span>
             <strong class="metric-val" id="statTodayCash">₹0</strong>
           </div>
         </div>
@@ -76,7 +80,7 @@
         <div class="overview-metric-item" id="metricCardRation">
           <div class="metric-icon-bubble bubble-ration">🛒</div>
           <div class="metric-info">
-            <span class="metric-label">ग्रुप राशन</span>
+            <span class="metric-label" data-i18n="metricRation">ग्रुप राशन</span>
             <strong class="metric-val" id="statTodayRation">₹0</strong>
           </div>
         </div>
@@ -84,7 +88,7 @@
         <div class="overview-metric-item" id="metricCardHaziri">
           <div class="metric-icon-bubble bubble-haziri">👷</div>
           <div class="metric-info">
-            <span class="metric-label">आज हाजिरी</span>
+            <span class="metric-label" data-i18n="metricHaziri">आज हाजिरी</span>
             <strong class="metric-val" id="statTodayHaziri">0 लोग</strong>
           </div>
         </div>
@@ -93,16 +97,16 @@
       <!-- QUICK ENTRY BAR: Text Input + Voice Mic -->
       <div class="voice-search-bar" style="cursor: default;">
         <div class="voice-search-content" style="flex: 1;">
-          <input type="text" id="quickEntryInput" class="form-input" placeholder="लिखें: रमेश 500 नकद या बोलने के लिए 🎙️ दबाएं" style="margin: 0; border: none; background: rgba(255,255,255,0.06); color: var(--text-main); font-size: 0.88rem; padding: 10px 12px; border-radius: 8px; width: 100%;" />
+          <input type="text" id="quickEntryInput" class="form-input" data-i18n-placeholder="quickEntryPlaceholder" placeholder="लिखें: रमेश 500 नकद या बोलने के लिए 🎙️ दबाएं" style="margin: 0; border: none; background: rgba(255,255,255,0.06); color: var(--text-main); font-size: 0.88rem; padding: 10px 12px; border-radius: 8px; width: 100%;" />
         </div>
-        <button type="button" id="btnQuickEntrySubmit" style="background: var(--amber-primary); border: none; color: #000; font-weight: 700; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; white-space: nowrap;">
+        <button type="button" id="btnQuickEntrySubmit" data-i18n="quickEntryBtn" style="background: var(--amber-primary); border: none; color: #000; font-weight: 700; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; white-space: nowrap;">
           जोड़ें ➔
         </button>
         <button type="button" id="btnVoiceMic" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: var(--text-main); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 1.1rem;" title="बोलकर नोट करें">
           🎙️
         </button>
       </div>
-      <div id="voiceTranscriptBox" class="voice-transcript-box" style="display: none;">
+      <div id="voiceTranscriptBox" class="voice-transcript-box" data-i18n="voiceListening" style="display: none;">
         आपकी आवाज़ सुनी जा रही है...
       </div>
       <span id="voiceStatusText" style="display: none;"></span>
@@ -113,36 +117,36 @@
       <button id="btnQuickAddWorker" class="action-tile tile-add-worker">
         <span class="tile-icon">👷</span>
         <div class="tile-text">
-          <strong>+ नया कारीगर</strong>
-          <small>मिस्त्री / हेल्पर जोड़ें</small>
+          <strong data-i18n="tileAddWorker">+ नया कारीगर</strong>
+          <small data-i18n="tileAddWorkerSub">मिस्त्री / हेल्पर जोड़ें</small>
         </div>
       </button>
       <button id="btnQuickCash" class="action-tile tile-cash">
         <span class="tile-icon">💵</span>
         <div class="tile-text">
-          <strong>नकद / पेशगी</strong>
-          <small>व्यक्तिगत एडवांस</small>
+          <strong data-i18n="tileCash">नकद / पेशगी</strong>
+          <small data-i18n="tileCashSub">व्यक्तिगत एडवांस</small>
         </div>
       </button>
       <button id="btnQuickRation" class="action-tile tile-ration">
         <span class="tile-icon">🍚</span>
         <div class="tile-text">
-          <strong>ग्रुप राशन</strong>
-          <small>आटा, चावल, सिलेंडर</small>
+          <strong data-i18n="tileRation">ग्रुप राशन</strong>
+          <small data-i18n="tileRationSub">आटा, चावल, सिलेंडर</small>
         </div>
       </button>
       <button id="btnQuickRecharge" class="action-tile tile-recharge">
         <span class="tile-icon">📱</span>
         <div class="tile-text">
-          <strong>मोबाइल रिचार्ज</strong>
-          <small>कारीगर का रिचार्ज</small>
+          <strong data-i18n="tileRecharge">मोबाइल रिचार्ज</strong>
+          <small data-i18n="tileRechargeSub">कारीगर का रिचार्ज</small>
         </div>
       </button>
       <button id="btnQuickAddTrade" class="action-tile tile-trade">
         <span class="tile-icon">🏷️</span>
         <div class="tile-text">
-          <strong>+ नया ट्रेड</strong>
-          <small>श्रेणी / ग्रुप जोड़ें</small>
+          <strong data-i18n="tileAddTrade">+ नया ट्रेड</strong>
+          <small data-i18n="tileAddTradeSub">श्रेणी / ग्रुप जोड़ें</small>
         </div>
       </button>
     </div>
@@ -151,23 +155,23 @@
     <nav class="nav-tabs-wrapper app-bottom-dock">
       <button class="nav-tab-btn active" data-tab="tab-timeline">
         <span class="nav-tab-icon">🕒</span>
-        <span class="nav-tab-label">लेन-देन</span>
+        <span class="nav-tab-label" data-i18n="tabTimeline">लेन-देन</span>
       </button>
       <button class="nav-tab-btn" data-tab="tab-haziri">
         <span class="nav-tab-icon">📋</span>
-        <span class="nav-tab-label">दैनिक हाजिरी</span>
+        <span class="nav-tab-label" data-i18n="tabHaziri">दैनिक हाजिरी</span>
       </button>
       <button class="nav-tab-btn" data-tab="tab-monthly">
         <span class="nav-tab-icon">📊</span>
-        <span class="nav-tab-label">मस्टर रोल</span>
+        <span class="nav-tab-label" data-i18n="tabMonthly">मस्टर रोल</span>
       </button>
       <button class="nav-tab-btn" data-tab="tab-groups">
         <span class="nav-tab-icon">👥</span>
-        <span class="nav-tab-label">कारीगर खाता</span>
+        <span class="nav-tab-label" data-i18n="tabGroups">कारीगर खाता</span>
       </button>
       <button class="nav-tab-btn" data-tab="tab-diary">
         <span class="nav-tab-icon">📖</span>
-        <span class="nav-tab-label">शाम डायरी</span>
+        <span class="nav-tab-label" data-i18n="tabDiary">शाम डायरी</span>
       </button>
     </nav>
 
@@ -756,6 +760,18 @@
         <button class="btn-close-modal" data-close-modal>&times;</button>
       </div>
       <form id="formSettings">
+        <!-- 0. LANGUAGE SELECTION (भाषा चयन) -->
+        <div class="form-group" style="background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-card); border-radius: 10px; padding: 12px 14px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <strong style="font-size: 0.9rem; color: #fff;">🌐 ऐप की भाषा (App Language):</strong>
+            <div style="font-size: 0.76rem; color: var(--text-muted);">हिंदी / English चुनें</div>
+          </div>
+          <div class="segmented-control" id="settingsLangSwitcher" style="max-width: 200px;">
+            <button type="button" class="segment-btn active" data-lang="hi">🇮🇳 हिंदी</button>
+            <button type="button" class="segment-btn" data-lang="en">🇬🇧 English</button>
+          </div>
+        </div>
+
         <!-- 1. CLEAR DEMO DATA - Most Prominent at Top -->
         <div id="clearDemoSection" class="form-group" style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 10px; padding: 14px; margin-bottom: 18px;">
           <label class="form-label" style="color: #f87171; font-weight: 700; font-size: 0.95rem;">🧹 डमी डेटा साफ़ करें (Start Fresh):</label>
