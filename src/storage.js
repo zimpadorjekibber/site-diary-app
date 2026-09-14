@@ -4,12 +4,12 @@
 const STORAGE_KEY = 'site_diary_data_v1';
 
 const DEFAULT_TRADES = [
-  { id: 'carpenter', name: 'Carpenter (बढ़ई)', icon: 'hammer', color: '#f59e0b' },
-  { id: 'mason', name: 'Mason (राजमिस्त्री)', icon: 'brick-wall', color: '#ef4444' },
-  { id: 'plumber', name: 'Plumber (प्लंबर)', icon: 'wrench', color: '#06b6d4' },
-  { id: 'painter', name: 'Painter (पेंटर)', icon: 'paint-brush', color: '#8b5cf6' },
-  { id: 'electrician', name: 'Electrician (बिजली मिस्त्री)', icon: 'zap', color: '#eab308' },
-  { id: 'tile', name: 'Tile & Marble (टाइल मिस्त्री)', icon: 'grid', color: '#10b981' }
+  { id: 'carpenter', name: 'Carpenter (बढ़ई)', icon: '🔨', color: '#f59e0b' },
+  { id: 'mason', name: 'Mason (राजमिस्त्री)', icon: '🧱', color: '#ef4444' },
+  { id: 'plumber', name: 'Plumber (प्लंबर)', icon: '🔧', color: '#06b6d4' },
+  { id: 'painter', name: 'Painter (पेंटर)', icon: '🎨', color: '#8b5cf6' },
+  { id: 'electrician', name: 'Electrician (बिजली मिस्त्री)', icon: '⚡', color: '#eab308' },
+  { id: 'tile', name: 'Tile & Marble (टाइल मिस्त्री)', icon: '🔲', color: '#10b981' }
 ];
 
 const DEFAULT_WORKERS = [
@@ -223,6 +223,11 @@ export class Store {
 
   getTrade(id) {
     return this.data.trades.find(t => t.id === id) || { id, name: 'Unknown Trade', color: '#64748b' };
+  }
+
+  deleteTrade(id) {
+    this.data.trades = this.data.trades.filter(t => t.id !== id);
+    this.save();
   }
 
   // --- WORKERS ---

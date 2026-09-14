@@ -6,6 +6,21 @@ import { VoiceManager } from './speech.js';
 import { ReminderManager } from './reminder.js';
 import confetti from 'canvas-confetti';
 
+const ICON_MAP = {
+  'hammer': '🔨',
+  'brick-wall': '🧱',
+  'wrench': '🔧',
+  'paint-brush': '🎨',
+  'zap': '⚡',
+  'grid': '🔲',
+  'briefcase': '💼'
+};
+
+function getTradeIcon(icon) {
+  if (!icon) return '🔨';
+  return ICON_MAP[icon] || icon;
+}
+
 class App {
   constructor() {
     this.store = store;
@@ -48,6 +63,9 @@ class App {
     // Edit transaction state
     this.editTxType = 'cash';
     this.editTxTarget = 'individual';
+
+    // Trade creation return modal state
+    this.tradeReturnModal = null;
 
     this.init();
   }
@@ -440,7 +458,7 @@ class App {
         <div class="haziri-trade-section">
           <div class="trade-header-row">
             <div class="trade-title">
-              <span>🔨</span>
+              <span>${getTradeIcon(trade.icon)}</span>
               <span>${trade.name}</span>
             </div>
             <span style="font-size: 0.82rem; color: var(--text-muted);">
@@ -560,7 +578,7 @@ class App {
                   ${w.name} ${contractBadge}
                 </div>
                 <div style="font-size: 0.72rem; color: var(--text-dim);">
-                  ${row.trade.name} (${w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'})
+                  ${getTradeIcon(row.trade.icon)} ${row.trade.name} (${w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'})
                 </div>
               </div>
             </div>
@@ -760,7 +778,7 @@ class App {
         <div class="group-card">
           <div class="group-card-header">
             <div class="group-card-title">
-              <span>🔨</span>
+              <span>${getTradeIcon(trade.icon)}</span>
               <span>${trade.name}</span>
             </div>
             <span style="font-size: 0.8rem; color: var(--text-muted);">
@@ -925,11 +943,15 @@ class App {
     const trades = this.store.getTrades();
     const tradeSelect = document.getElementById('txTradeSelect');
     const workerTradeSelect = document.getElementById('workerTradeSelect');
+    const editWorkerTrade = document.getElementById('editWorkerTrade');
+    const editTxTradeSelect = document.getElementById('editTxTradeSelect');
 
-    const optionsHtml = trades.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+    const optionsHtml = trades.map(t => `<option value="${t.id}">${getTradeIcon(t.icon)} ${t.name}</option>`).join('');
 
     if (tradeSelect) tradeSelect.innerHTML = optionsHtml;
     if (workerTradeSelect) workerTradeSelect.innerHTML = optionsHtml;
+    if (editWorkerTrade) editWorkerTrade.innerHTML = optionsHtml;
+    if (editTxTradeSelect) editTxTradeSelect.innerHTML = optionsHtml;
 
     this.updateWorkerSelect();
   }
@@ -1010,6 +1032,51 @@ class App {
 
   closeModals() {
     document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
+  }
+
+  openAddTradeModal(returnToModal = null) {
+    this.tradeReturnModal = returnToModal;
+    const modal = document.getElementById('modalAddTrade');
+    if (!modal) return;
+
+    // Reset form
+    const form = document.getElementById('formAddTrade');
+    if (form) form.reset();
+
+    // Reset chips
+    document.querySelectorAll('#quickTradeSuggestionChips .trade-suggestion-chip').forEach(c => c.classList.remove('active'));
+
+    // Reset icon picker to default 🔨
+    const hiddenIcon = document.getElementById('selectedTradeIcon');
+    if (hiddenIcon) hiddenIcon.value = '🔨';
+    document.querySelectorAll('#tradeIconPicker .trade-icon-option').forEach(opt => {
+      opt.classList.toggle('active', opt.getAttribute('data-icon') === '🔨');
+    });
+
+    // Render existing trades list
+    this.renderExistingTradesList();
+
+    modal.classList.add('open');
+  }
+
+  renderExistingTradesList() {
+    const container = document.getElementById('existingTradesList');
+    const countEl = document.getElementById('existingTradesCount');
+    if (!container) return;
+
+    const trades = this.store.getTrades();
+    if (countEl) countEl.textContent = `${trades.length} ट्रेड्स मौजूद हैं`;
+
+    container.innerHTML = trades.map(t => {
+      const workerCount = this.store.getWorkers(t.id).length;
+      return `
+        <div class="trade-tag-chip">
+          <span>${getTradeIcon(t.icon)} ${t.name}</span>
+          <span class="worker-badge-count">${workerCount} कारीगर</span>
+          ${workerCount === 0 ? `<button type="button" class="btn-del-custom-trade" data-del-trade-id="${t.id}" title="ट्रेड हटाएं">✕</button>` : ''}
+        </div>
+      `;
+    }).join('');
   }
 
   // --- EVENT BINDINGS ---
@@ -2010,25 +2077,128 @@ class App {
       });
     }
 
-    // Add Trade Modal
+    // Add Trade Modal Openers & Handlers
+    const btnQuickAddTrade = document.getElementById('btnQuickAddTrade');
+    if (btnQuickAddTrade) btnQuickAddTrade.addEventListener('click', () => this.openAddTradeModal(null));
+
     const btnAddTrade = document.getElementById('btnAddTradeBtn');
-    if (btnAddTrade) {
-      btnAddTrade.addEventListener('click', () => {
-        document.getElementById('modalAddTrade').classList.add('open');
+    if (btnAddTrade) btnAddTrade.addEventListener('click', () => this.openAddTradeModal(null));
+
+    const btnAddTradeFromHz = document.getElementById('btnAddTradeFromHaziri');
+    if (btnAddTradeFromHz) btnAddTradeFromHz.addEventListener('click', () => this.openAddTradeModal(null));
+
+    const btnAddTradeFromMonth = document.getElementById('btnAddTradeFromMonthly');
+    if (btnAddTradeFromMonth) btnAddTradeFromMonth.addEventListener('click', () => this.openAddTradeModal(null));
+
+    const btnTradeFromWorker = document.getElementById('btnOpenAddTradeFromWorker');
+    if (btnTradeFromWorker) btnTradeFromWorker.addEventListener('click', () => this.openAddTradeModal('modalAddWorker'));
+
+    const btnTradeFromEditWorker = document.getElementById('btnOpenAddTradeFromEditWorker');
+    if (btnTradeFromEditWorker) btnTradeFromEditWorker.addEventListener('click', () => this.openAddTradeModal('modalEditWorker'));
+
+    const btnTradeFromTx = document.getElementById('btnOpenAddTradeFromTx');
+    if (btnTradeFromTx) btnTradeFromTx.addEventListener('click', () => this.openAddTradeModal('modalAddTransaction'));
+
+    // Quick Trade Suggestion Chips Click
+    const suggestionContainer = document.getElementById('quickTradeSuggestionChips');
+    if (suggestionContainer) {
+      suggestionContainer.addEventListener('click', (e) => {
+        const chip = e.target.closest('.trade-suggestion-chip');
+        if (chip) {
+          document.querySelectorAll('#quickTradeSuggestionChips .trade-suggestion-chip').forEach(c => c.classList.remove('active'));
+          chip.classList.add('active');
+
+          const name = chip.getAttribute('data-name');
+          const icon = chip.getAttribute('data-icon');
+
+          const nameInput = document.getElementById('tradeNameInput');
+          if (nameInput) nameInput.value = name;
+
+          const hiddenIcon = document.getElementById('selectedTradeIcon');
+          if (hiddenIcon) hiddenIcon.value = icon;
+
+          document.querySelectorAll('#tradeIconPicker .trade-icon-option').forEach(opt => {
+            opt.classList.toggle('active', opt.getAttribute('data-icon') === icon);
+          });
+        }
       });
     }
 
+    // Trade Icon Picker Click
+    const iconPicker = document.getElementById('tradeIconPicker');
+    if (iconPicker) {
+      iconPicker.addEventListener('click', (e) => {
+        const opt = e.target.closest('.trade-icon-option');
+        if (opt) {
+          document.querySelectorAll('#tradeIconPicker .trade-icon-option').forEach(o => o.classList.remove('active'));
+          opt.classList.add('active');
+          const icon = opt.getAttribute('data-icon');
+          const hiddenIcon = document.getElementById('selectedTradeIcon');
+          if (hiddenIcon) hiddenIcon.value = icon;
+        }
+      });
+    }
+
+    // Delete Trade Click in Existing Trades List
+    const existingList = document.getElementById('existingTradesList');
+    if (existingList) {
+      existingList.addEventListener('click', (e) => {
+        const delBtn = e.target.closest('[data-del-trade-id]');
+        if (delBtn) {
+          const tradeId = delBtn.getAttribute('data-del-trade-id');
+          const trade = this.store.getTrade(tradeId);
+          const workers = this.store.getWorkers(tradeId);
+          if (workers.length > 0) {
+            alert(`इस ट्रेड में अभी ${workers.length} कारीगर जुड़े हुए हैं। पहले उन कारीगरों को किसी अन्य ट्रेड में बदलें या हटाएं।`);
+            return;
+          }
+          if (confirm(`क्या आप ट्रेड "${trade.name}" को सूची से हटाना चाहते हैं?`)) {
+            this.store.deleteTrade(tradeId);
+            this.renderExistingTradesList();
+            this.populateSelects();
+            this.renderAll();
+          }
+        }
+      });
+    }
+
+    // Form Add Trade Submit
     const formTrade = document.getElementById('formAddTrade');
     if (formTrade) {
       formTrade.addEventListener('submit', (e) => {
         e.preventDefault();
-        const name = document.getElementById('tradeNameInput').value;
-        if (name.trim()) {
-          this.store.addTrade(name.trim());
+        const nameInput = document.getElementById('tradeNameInput');
+        const name = nameInput ? nameInput.value.trim() : '';
+        const hiddenIcon = document.getElementById('selectedTradeIcon');
+        const icon = (hiddenIcon && hiddenIcon.value) ? hiddenIcon.value : '🔨';
+
+        if (name) {
+          const newTradeId = this.store.addTrade(name, icon);
           formTrade.reset();
-          this.closeModals();
+          document.getElementById('modalAddTrade')?.classList.remove('open');
           this.populateSelects();
           this.renderAll();
+
+          // If opened from inside another modal, return to that modal and select the new trade
+          if (this.tradeReturnModal) {
+            const returnModalEl = document.getElementById(this.tradeReturnModal);
+            if (returnModalEl) returnModalEl.classList.add('open');
+
+            if (this.tradeReturnModal === 'modalAddWorker') {
+              const sel = document.getElementById('workerTradeSelect');
+              if (sel) sel.value = newTradeId;
+            } else if (this.tradeReturnModal === 'modalEditWorker') {
+              const sel = document.getElementById('editWorkerTrade');
+              if (sel) sel.value = newTradeId;
+            } else if (this.tradeReturnModal === 'modalAddTransaction') {
+              const sel = document.getElementById('txTradeSelect');
+              if (sel) {
+                sel.value = newTradeId;
+                this.updateWorkerSelect();
+              }
+            }
+            this.tradeReturnModal = null;
+          }
         }
       });
     }
