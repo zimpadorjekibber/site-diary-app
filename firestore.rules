@@ -41,15 +41,10 @@ service cloud.firestore {
                && request.resource.data.transactions is list;
       }
 
-      // Installs made before per-site ids all wrote to this one document. It is
-      // readable so nothing already stored there becomes unreachable, but not
-      // writable — new writes go to the migrated per-site id instead.
-      // Safe to delete this clause once you've confirmed nothing needs it.
-      function isLegacySharedDoc() {
-        return siteId == 'khalen-dairy';
-      }
-
-      allow get: if isWellFormedSiteId() || isLegacySharedDoc();
+      // Installs made before per-site ids all wrote to one shared document
+      // ('khalen-dairy'). It held only demo data, confirmed with the owner, so it
+      // gets no exemption here — nothing outside the site-id pattern is reachable.
+      allow get: if isWellFormedSiteId();
       allow list: if false; // never allow enumerating sites
       allow create, update: if isWellFormedSiteId() && looksLikeLedger();
       allow delete: if false; // the app never deletes a site document

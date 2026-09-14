@@ -34,7 +34,6 @@ Rules क्या करती हैं:
 | सिर्फ़ `site-XXXX-XXXX` जैसी ID पढ़ी/लिखी जा सकती है | छोटे या अंदाज़े वाले नाम स्कैन करने पर कुछ नहीं मिलेगा |
 | collection की list कभी नहीं | कोई साइटें गिन नहीं सकता, सिर्फ़ पूरी ID अंदाज़ सकता है (32⁸ combinations) |
 | सिर्फ़ इस ऐप जैसा payload लिखा जा सकता है | कोई कचरा document असली हिसाब की जगह नहीं ले सकता |
-| `khalen-dairy` सिर्फ़ पढ़ा जा सकता है | पुराना साझा document पहुँच में रहे, पर उस पर नए writes न हों |
 | delete कभी नहीं | ऐप कभी साइट document मिटाता ही नहीं |
 
 आगे चलकर Firebase Authentication जोड़ें तो `firestore.rules` में `ownerUid`
