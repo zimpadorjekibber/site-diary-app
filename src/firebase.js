@@ -4,6 +4,53 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getFirestore, doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
 
+export function parseFirebaseConfig(input) {
+  if (!input || typeof input !== 'string') throw new Error('इनपुट खाली है');
+  
+  let trimmed = input.trim();
+
+  // Try parsing as strict JSON first
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === 'object' && parsed.apiKey) return parsed;
+  } catch {}
+
+  // If user pasted `<script>...` or `const firebaseConfig = { ... };`
+  const firstBrace = trimmed.indexOf('{');
+  const lastBrace = trimmed.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    trimmed = trimmed.substring(firstBrace, lastBrace + 1);
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === 'object' && parsed.apiKey) return parsed;
+  } catch {}
+
+  // Regex parser for JS object literal with unquoted keys
+  const config = {};
+  const regex = /([a-zA-Z0-9_]+)\s*:\s*["']([^"']+)["']/g;
+  let match;
+  while ((match = regex.exec(trimmed)) !== null) {
+    config[match[1]] = match[2];
+  }
+
+  if (config.apiKey && config.projectId) {
+    return config;
+  }
+
+  // Safe Function evaluation for standard JS object literal
+  try {
+    const fn = new Function(`return (${trimmed});`);
+    const result = fn();
+    if (result && typeof result === 'object' && result.apiKey) {
+      return result;
+    }
+  } catch {}
+
+  throw new Error('Firebase Config में apiKey या projectId नहीं मिला। कृपया Firebase से कॉपी किया गया पूरा कोड पेस्ट करें।');
+}
+
 let app = null;
 let db = null;
 let unsubscribeRealtime = null;

@@ -5,7 +5,7 @@ import { store, getTodayString } from './storage.js';
 import { VoiceManager } from './speech.js';
 import { ReminderManager } from './reminder.js';
 import confetti from 'canvas-confetti';
-import { initFirebase, isFirebaseReady, saveToFirebase, loadFromFirebase, enableRealtimeSync } from './firebase.js';
+import { initFirebase, isFirebaseReady, saveToFirebase, loadFromFirebase, enableRealtimeSync, parseFirebaseConfig } from './firebase.js';
 
 const ICON_MAP = {
   'hammer': '🔨',
@@ -2349,15 +2349,19 @@ class App {
         try {
           let cfg;
           try {
-            cfg = JSON.parse(cfgStr);
-          } catch {
-            throw new Error('अमान्य JSON प्रारूप! कृपया सही Firebase Config JSON पेस्ट करें।');
+            cfg = parseFirebaseConfig(cfgStr);
+          } catch (e) {
+            throw new Error(e.message || 'अमान्य Firebase Config! कृपया Firebase से कॉपी किया गया पूरा कोड पेस्ट करें।');
           }
           btnConnectFb.disabled = true;
           btnConnectFb.textContent = '⏳ कनेक्ट हो रहा है...';
 
           const ok = initFirebase(cfg);
           if (!ok) throw new Error('Firebase प्रारंभ करने में त्रुटि आई। कृपया apiKey और projectId जांचें।');
+
+          // Write back clean formatted JSON to input
+          const configInput = document.getElementById('firebaseConfigInput');
+          if (configInput) configInput.value = JSON.stringify(cfg, null, 2);
 
           // Save test snapshot
           await saveToFirebase(siteId, this.store.data);
