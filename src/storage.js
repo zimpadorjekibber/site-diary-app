@@ -36,7 +36,9 @@ const DEFAULT_SETTINGS = {
   reminderEnabled: true,
   soundEnabled: true,
   currency: '₹',
-  language: 'hi-IN' // for speech recognition
+  language: 'hi-IN', // for speech recognition
+  cloudSyncKey: '',
+  lastCloudSync: null
 };
 
 // Seed initial sample transactions for today to give the user immediate interactive context
@@ -300,6 +302,46 @@ export class Store {
     this.save();
   }
 
+  getTransaction(id) {
+    return this.data.transactions.find(t => t.id === id) || null;
+  }
+
+  updateTransaction(id, updates) {
+    const idx = this.data.transactions.findIndex(t => t.id === id);
+    if (idx !== -1) {
+      this.data.transactions[idx] = {
+        ...this.data.transactions[idx],
+        ...updates,
+        amount: updates.amount !== undefined ? Number(updates.amount) || 0 : this.data.transactions[idx].amount
+      };
+      this.save();
+      return this.data.transactions[idx];
+    }
+    return null;
+  }
+
+  getWorkerTransactions(workerId) {
+    return this.data.transactions
+      .filter(t => t.workerId === workerId)
+      .sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
+  }
+
+  getWorkerHaziriHistory(workerId) {
+    const history = [];
+    const dates = Object.keys(this.data.haziri).sort().reverse();
+    for (const date of dates) {
+      const rec = this.data.haziri[date] ? this.data.haziri[date][workerId] : null;
+      if (rec) {
+        history.push({
+          date,
+          status: rec.status,
+          otHours: rec.otHours || 0
+        });
+      }
+    }
+    return history;
+  }
+
   // --- HAZIRI (ATTENDANCE) ---
   getHaziri(date = getTodayString()) {
     return this.data.haziri[date] || {};
@@ -536,6 +578,47 @@ export class Store {
       console.error('Import failed', e);
     }
     return false;
+  }
+
+  generateSyncKey() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let key = 'SD-';
+    for (let i = 0; i < 4; i++) key += chars.charAt(Math.floor(Math.random() * chars.length));
+    key += '-';
+    for (let i = 0; i < 4; i++) key += chars.charAt(Math.floor(Math.random() * chars.length));
+    return key;
+  }
+
+  async pushToCloud(syncKey) {
+    if (!syncKey) throw new Error('सिंक की (Sync Key) दर्ज करें');
+    const payload = JSON.stringify(this.data);
+    const url = `https://kvdb.io/A9L2d93eE1iZc82z5f9kL3/${encodeURIComponent(syncKey)}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload
+    });
+    if (!res.ok) throw new Error(`क्लाउड सेव विफल (${res.status})`);
+    this.updateSettings({ cloudSyncKey: syncKey, lastCloudSync: Date.now() });
+    return true;
+  }
+
+  async pullFromCloud(syncKey) {
+    if (!syncKey) throw new Error('सिंक की (Sync Key) दर्ज करें');
+    const url = `https://kvdb.io/A9L2d93eE1iZc82z5f9kL3/${encodeURIComponent(syncKey)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      if (res.status === 404) throw new Error('इस सिंक की (Sync Key) पर कोई डेटा नहीं मिला।');
+      throw new Error(`क्लाउड से डेटा लाना विफल (${res.status})`);
+    }
+    const data = await res.json();
+    if (data && data.workers && data.trades) {
+      this.data = data;
+      this.updateSettings({ cloudSyncKey: syncKey, lastCloudSync: Date.now() });
+      this.save();
+      return true;
+    }
+    throw new Error('अमान्य क्लाउड डेटा प्रारूप');
   }
 }
 

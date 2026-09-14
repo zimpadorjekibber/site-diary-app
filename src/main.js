@@ -31,6 +31,24 @@ class App {
     this.voiceManager = new VoiceManager(this.store);
     this.reminderManager = new ReminderManager(this.store, () => this.onEveningReminderTriggered());
 
+    // Timeline date & search filters
+    this.timelineDateMode = 'today';
+    this.timelineCustomDate = getTodayString();
+    this.timelineSearchQuery = '';
+
+    // Passbook & statement state
+    this.activeStatementWorkerId = null;
+    this.statementSubTab = 'stmt-payments';
+
+    // Edit worker state
+    this.editWorkerPhotoDataUrl = null;
+    this.editWorkerRole = 'mistri';
+    this.editWorkerContract = 'dihadi';
+
+    // Edit transaction state
+    this.editTxType = 'cash';
+    this.editTxTarget = 'individual';
+
     this.init();
   }
 
@@ -200,8 +218,36 @@ class App {
     const container = document.getElementById('timelineListContainer');
     if (!container) return;
 
+    let txs = [];
     const today = getTodayString();
-    let txs = this.store.getTransactions(today);
+
+    if (this.timelineDateMode === 'today') {
+      txs = this.store.getTransactions(today);
+    } else if (this.timelineDateMode === 'yesterday') {
+      const y = new Date(Date.now() - 86400000);
+      const yStr = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
+      txs = this.store.getTransactions(yStr);
+    } else if (this.timelineDateMode === 'custom') {
+      txs = this.store.getTransactions(this.timelineCustomDate || today);
+    } else {
+      // 'all'
+      txs = this.store.getTransactions(null);
+    }
+
+    // Apply search query
+    if (this.timelineSearchQuery && this.timelineSearchQuery.trim()) {
+      const q = this.timelineSearchQuery.trim().toLowerCase();
+      txs = txs.filter(t => {
+        const trade = this.store.getTrade(t.tradeId);
+        const worker = t.workerId ? this.store.getWorker(t.workerId) : null;
+        const matchWorker = worker && worker.name.toLowerCase().includes(q);
+        const matchTrade = trade && trade.name.toLowerCase().includes(q);
+        const matchNote = t.note && t.note.toLowerCase().includes(q);
+        const matchItem = t.rationItem && t.rationItem.toLowerCase().includes(q);
+        const matchAmount = String(t.amount || '').includes(q);
+        return matchWorker || matchTrade || matchNote || matchItem || matchAmount;
+      });
+    }
 
     // Apply type filter
     if (this.activeFilterType !== 'all') {
@@ -216,9 +262,9 @@ class App {
       container.innerHTML = `
         <div style="text-align: center; padding: 40px 20px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px dashed var(--border-card);">
           <div style="font-size: 32px; margin-bottom: 10px;">📝</div>
-          <div style="font-weight: 600; color: var(--text-main); margin-bottom: 6px;">आज कोई लेन-देन दर्ज नहीं है</div>
+          <div style="font-weight: 600; color: var(--text-main); margin-bottom: 6px;">कोई लेन-देन नहीं मिला</div>
           <div style="font-size: 0.84rem; color: var(--text-muted);">
-            ऊपर माइक दबाकर बोलें या "+ नकद / राशन" बटन दबाकर पहला लेन-देन जोड़ें।
+            इस फ़िल्टर या तारीख में कोई रिकॉर्ड दर्ज नहीं है। ऊपर "+ नकद / राशन" बटन दबाकर नया लेन-देन जोड़ें।
           </div>
         </div>
       `;
@@ -267,6 +313,7 @@ class App {
               ${tx.rationItem ? `<div style="font-size: 0.85rem; font-weight: 600; color: var(--amber-light);">${tx.rationItem} ${tx.quantity ? `(${tx.quantity})` : ''}</div>` : ''}
               ${tx.note ? `<div class="tx-note">${tx.note}</div>` : ''}
               <div class="tx-meta">
+                <span>📅 ${tx.date}</span>
                 <span>🕒 ${tx.time}</span>
                 ${tx.audioDataUrl ? `<span>• <button class="btn-audio-play" data-audio="${tx.audioDataUrl}" style="background:none;border:none;color:var(--amber-primary);cursor:pointer;font-size:0.76rem;">▶ आवाज सुनें</button></span>` : ''}
               </div>
@@ -275,9 +322,14 @@ class App {
           <div class="tx-right">
             <div class="tx-amount ${amountClass}">₹${(tx.amount || 0).toLocaleString('en-IN')}</div>
             ${tx.quantity && tx.type === 'ration' ? `<span class="tx-item-qty">${tx.quantity}</span>` : ''}
-            <button class="btn-del-tx" data-delete-tx="${tx.id}" title="हटाएं">
-              🗑️
-            </button>
+            <div class="tx-actions-row">
+              <button class="btn-icon-action btn-edit-tx" data-edit-tx="${tx.id}" title="सुधारें">
+                ✏️
+              </button>
+              <button class="btn-icon-action btn-del-tx" data-delete-tx="${tx.id}" title="हटाएं">
+                🗑️
+              </button>
+            </div>
           </div>
         </div>
       `;
@@ -664,13 +716,13 @@ class App {
         }
 
         return `
-          <div class="worker-ledger-item" style="flex-direction: column; align-items: stretch; gap: 8px;">
-            <div style="display: flex; align-items: center; justify-content: space-between;">
-              <div style="display: flex; align-items: center; gap: 10px;">
+          <div class="worker-ledger-item" style="flex-direction: column; align-items: stretch; gap: 8px;" data-worker-card-id="${w.id}">
+            <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 10px; cursor: pointer;" data-open-statement="${w.id}">
                 ${avatarThumb}
                 <div>
                   <div class="worker-name-line">
-                    ${w.name}
+                    <strong style="color: #fff; text-decoration: underline dotted var(--amber-primary);">${w.name}</strong>
                     <span class="tag-badge ${w.role === 'mistri' ? 'tag-mistri' : 'tag-helper'}">
                       ${w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'}
                     </span>
@@ -685,6 +737,20 @@ class App {
             </div>
             <div style="padding-left: 42px;">
               ${middleStatsHtml}
+            </div>
+            <div class="worker-card-actions">
+              <button type="button" class="btn-worker-mini btn-worker-statement" data-open-statement="${w.id}" title="खाता व पासबुक खोलें">
+                📖 खाता पासबुक (Passbook)
+              </button>
+              <button type="button" class="btn-worker-mini btn-worker-wa" data-worker-wa-share="${w.id}" title="व्हाट्सएप पर हिसाब भेजें">
+                💬 WhatsApp हिसाब
+              </button>
+              <button type="button" class="btn-worker-mini btn-worker-edit" data-open-edit-worker="${w.id}" title="कारीगर की जानकारी बदलें">
+                ✏️ सुधारें
+              </button>
+              <button type="button" class="btn-worker-mini btn-worker-delete" data-delete-worker-id="${w.id}" title="कारीगर हटाएं">
+                🗑️
+              </button>
             </div>
           </div>
         `;
@@ -1223,6 +1289,411 @@ class App {
       });
     });
 
+    // Timeline Search & Date Mode Switcher
+    const timelinePreset = document.getElementById('timelineDatePreset');
+    const timelineCustomPicker = document.getElementById('timelineDatePicker');
+    const timelineSearch = document.getElementById('timelineSearchInput');
+
+    if (timelinePreset) {
+      timelinePreset.addEventListener('change', (e) => {
+        this.timelineDateMode = e.target.value;
+        if (this.timelineDateMode === 'custom') {
+          if (timelineCustomPicker) {
+            timelineCustomPicker.style.display = 'inline-block';
+            timelineCustomPicker.value = this.timelineCustomDate || getTodayString();
+          }
+        } else {
+          if (timelineCustomPicker) timelineCustomPicker.style.display = 'none';
+        }
+        this.renderTimeline();
+      });
+    }
+
+    if (timelineCustomPicker) {
+      timelineCustomPicker.addEventListener('change', (e) => {
+        this.timelineCustomDate = e.target.value;
+        this.renderTimeline();
+      });
+    }
+
+    if (timelineSearch) {
+      timelineSearch.addEventListener('input', (e) => {
+        this.timelineSearchQuery = e.target.value;
+        this.renderTimeline();
+      });
+    }
+
+    // Global delegation for Edit Transaction button
+    document.addEventListener('click', (e) => {
+      const editBtn = e.target.closest('[data-edit-tx]');
+      if (editBtn) {
+        const txId = editBtn.getAttribute('data-edit-tx');
+        this.openEditTransactionModal(txId);
+      }
+    });
+
+    // Global delegation for Worker Statement (Passbook) button
+    document.addEventListener('click', (e) => {
+      const stmtBtn = e.target.closest('[data-open-statement]');
+      if (stmtBtn) {
+        const workerId = stmtBtn.getAttribute('data-open-statement');
+        this.openWorkerStatementModal(workerId);
+      }
+    });
+
+    // Global delegation for Worker WhatsApp statement share button
+    document.addEventListener('click', (e) => {
+      const waBtn = e.target.closest('[data-worker-wa-share]');
+      if (waBtn) {
+        const workerId = waBtn.getAttribute('data-worker-wa-share');
+        this.shareWorkerStatementWhatsApp(workerId);
+      }
+    });
+
+    // Global delegation for Edit Worker button
+    document.addEventListener('click', (e) => {
+      const editWBtn = e.target.closest('[data-open-edit-worker]');
+      if (editWBtn) {
+        const workerId = editWBtn.getAttribute('data-open-edit-worker');
+        this.openEditWorkerModal(workerId);
+      }
+    });
+
+    // Global delegation for Delete Worker button
+    document.addEventListener('click', (e) => {
+      const delWBtn = e.target.closest('[data-delete-worker-id]');
+      if (delWBtn) {
+        const workerId = delWBtn.getAttribute('data-delete-worker-id');
+        const worker = this.store.getWorker(workerId);
+        if (worker && confirm(`क्या आप कारीगर "${worker.name}" को हटाना चाहते हैं?\n\nहटाने के बाद इस कारीगर का विवरण सूची से हट जाएगा।`)) {
+          this.store.deleteWorker(workerId);
+          this.closeModals();
+          this.populateSelects();
+          this.renderAll();
+        }
+      }
+    });
+
+    // Worker Statement Modal Actions
+    const btnShareWA = document.getElementById('btnShareStatementWhatsApp');
+    if (btnShareWA) {
+      btnShareWA.addEventListener('click', () => {
+        if (this.activeStatementWorkerId) {
+          this.shareWorkerStatementWhatsApp(this.activeStatementWorkerId);
+        }
+      });
+    }
+
+    const btnPrintStmt = document.getElementById('btnPrintWorkerStatement');
+    if (btnPrintStmt) {
+      btnPrintStmt.addEventListener('click', () => {
+        window.print();
+      });
+    }
+
+    const btnEditFromStmt = document.getElementById('btnEditWorkerFromStatement');
+    if (btnEditFromStmt) {
+      btnEditFromStmt.addEventListener('click', () => {
+        const wId = this.activeStatementWorkerId;
+        this.closeModals();
+        if (wId) this.openEditWorkerModal(wId);
+      });
+    }
+
+    // Statement Subview Switcher (Payments vs Haziri)
+    document.querySelectorAll('[data-stmt-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-stmt-tab]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const tabId = btn.getAttribute('data-stmt-tab');
+        const paymentsView = document.getElementById('stmt-payments');
+        const haziriView = document.getElementById('stmt-haziri');
+        if (tabId === 'stmt-haziri') {
+          if (paymentsView) paymentsView.style.display = 'none';
+          if (haziriView) haziriView.style.display = 'block';
+        } else {
+          if (paymentsView) paymentsView.style.display = 'block';
+          if (haziriView) haziriView.style.display = 'none';
+        }
+      });
+    });
+
+    // Edit Worker Role switcher
+    document.querySelectorAll('#editWorkerRoleSwitcher .segment-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#editWorkerRoleSwitcher .segment-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.editWorkerRole = btn.getAttribute('data-role');
+      });
+    });
+
+    // Edit Worker Contract switcher
+    document.querySelectorAll('#editWorkerContractSwitcher .segment-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#editWorkerContractSwitcher .segment-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.editWorkerContract = btn.getAttribute('data-contract');
+        const dihadiGroup = document.getElementById('editDihadiGroup');
+        const thekaGroup = document.getElementById('editThekaGroup');
+        if (this.editWorkerContract === 'theka') {
+          if (dihadiGroup) dihadiGroup.style.display = 'none';
+          if (thekaGroup) thekaGroup.style.display = 'block';
+        } else {
+          if (dihadiGroup) dihadiGroup.style.display = 'block';
+          if (thekaGroup) thekaGroup.style.display = 'none';
+        }
+      });
+    });
+
+    // Edit Worker Photo Pick / Remove
+    const btnEditPickPhoto = document.getElementById('btnEditPickPhoto');
+    const editWorkerPhotoInput = document.getElementById('editWorkerPhotoInput');
+    const editWorkerPhotoImg = document.getElementById('editWorkerPhotoImg');
+    const editWorkerPhotoPlaceholder = document.getElementById('editWorkerPhotoPlaceholder');
+    const btnEditRemovePhoto = document.getElementById('btnEditRemovePhoto');
+    const editPhotoPreviewBox = document.getElementById('editWorkerPhotoPreview');
+
+    const triggerEditPhotoPick = () => {
+      if (editWorkerPhotoInput) editWorkerPhotoInput.click();
+    };
+    if (btnEditPickPhoto) btnEditPickPhoto.addEventListener('click', triggerEditPhotoPick);
+    if (editPhotoPreviewBox) editPhotoPreviewBox.addEventListener('click', triggerEditPhotoPick);
+
+    if (editWorkerPhotoInput) {
+      editWorkerPhotoInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+          const compressed = await this.compressImage(file);
+          this.editWorkerPhotoDataUrl = compressed;
+          if (editWorkerPhotoImg) {
+            editWorkerPhotoImg.src = compressed;
+            editWorkerPhotoImg.style.display = 'block';
+          }
+          if (editWorkerPhotoPlaceholder) editWorkerPhotoPlaceholder.style.display = 'none';
+          if (btnEditRemovePhoto) btnEditRemovePhoto.style.display = 'inline-block';
+        } catch (err) {
+          console.error('Photo compression error:', err);
+        }
+      });
+    }
+
+    if (btnEditRemovePhoto) {
+      btnEditRemovePhoto.addEventListener('click', () => {
+        this.editWorkerPhotoDataUrl = null;
+        if (editWorkerPhotoInput) editWorkerPhotoInput.value = '';
+        if (editWorkerPhotoImg) {
+          editWorkerPhotoImg.src = '';
+          editWorkerPhotoImg.style.display = 'none';
+        }
+        if (editWorkerPhotoPlaceholder) editWorkerPhotoPlaceholder.style.display = 'block';
+        btnEditRemovePhoto.style.display = 'none';
+      });
+    }
+
+    // Submit Edit Worker Form
+    const formEditWorker = document.getElementById('formEditWorker');
+    if (formEditWorker) {
+      formEditWorker.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const workerId = document.getElementById('editWorkerId').value;
+        const name = document.getElementById('editWorkerName').value;
+        const tradeId = document.getElementById('editWorkerTrade').value;
+        const phone = document.getElementById('editWorkerPhone').value;
+        const isTheka = this.editWorkerContract === 'theka';
+        const dailyRate = !isTheka ? (Number(document.getElementById('editWorkerDailyRate').value) || 0) : 0;
+        const thekaAmount = isTheka ? (Number(document.getElementById('editWorkerThekaAmount').value) || 0) : 0;
+        const thekaDescription = isTheka ? document.getElementById('editWorkerThekaDesc').value : '';
+
+        this.store.updateWorker(workerId, {
+          name: name.trim(),
+          tradeId,
+          role: this.editWorkerRole,
+          contractType: this.editWorkerContract,
+          dailyRate,
+          thekaAmount,
+          thekaDescription,
+          phone: phone.trim(),
+          photoUrl: this.editWorkerPhotoDataUrl
+        });
+
+        this.closeModals();
+        this.populateSelects();
+        this.renderAll();
+        alert('कारीगर की जानकारी सफलतापूर्वक अपडेट कर दी गई!');
+      });
+    }
+
+    // Delete Worker from inside Edit Modal
+    const btnDelWorkerInside = document.getElementById('btnDeleteWorker');
+    if (btnDelWorkerInside) {
+      btnDelWorkerInside.addEventListener('click', () => {
+        const workerId = document.getElementById('editWorkerId').value;
+        const worker = this.store.getWorker(workerId);
+        if (worker && confirm(`क्या आप सच में कारीगर "${worker.name}" को हटाना चाहते हैं?`)) {
+          this.store.deleteWorker(workerId);
+          this.closeModals();
+          this.populateSelects();
+          this.renderAll();
+        }
+      });
+    }
+
+    // Edit Transaction Type & Target Switchers
+    document.querySelectorAll('#editTxTypeSwitcher .segment-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#editTxTypeSwitcher .segment-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.editTxType = btn.getAttribute('data-type');
+        const rationFields = document.getElementById('editRationFields');
+        if (rationFields) {
+          rationFields.style.display = this.editTxType === 'ration' ? 'block' : 'none';
+        }
+      });
+    });
+
+    document.querySelectorAll('#editTxTargetTypeSwitcher .segment-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#editTxTargetTypeSwitcher .segment-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.editTxTarget = btn.getAttribute('data-target');
+        const workerSelectGroup = document.getElementById('editTxWorkerSelectGroup');
+        if (workerSelectGroup) {
+          workerSelectGroup.style.display = this.editTxTarget === 'individual' ? 'block' : 'none';
+        }
+      });
+    });
+
+    const editTxTradeSelect = document.getElementById('editTxTradeSelect');
+    if (editTxTradeSelect) {
+      editTxTradeSelect.addEventListener('change', (e) => {
+        const workerSelect = document.getElementById('editTxWorkerSelect');
+        if (workerSelect) {
+          const workers = this.store.getWorkers(e.target.value);
+          workerSelect.innerHTML = workers.map(w => `
+            <option value="${w.id}">${w.name} (${w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'})</option>
+          `).join('');
+        }
+      });
+    }
+
+    // Submit Edit Transaction Form
+    const formEditTx = document.getElementById('formEditTransaction');
+    if (formEditTx) {
+      formEditTx.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const txId = document.getElementById('editTxId').value;
+        const tradeId = document.getElementById('editTxTradeSelect').value;
+        const workerId = this.editTxTarget === 'individual' ? document.getElementById('editTxWorkerSelect').value : null;
+        const date = document.getElementById('editTxDate').value;
+        const time = document.getElementById('editTxTime').value;
+        const amount = Number(document.getElementById('editTxAmount').value) || 0;
+        const note = document.getElementById('editTxNote').value;
+        const rationItem = this.editTxType === 'ration' ? document.getElementById('editTxRationItem').value : '';
+        const quantity = this.editTxType === 'ration' ? document.getElementById('editTxQuantity').value : '';
+
+        this.store.updateTransaction(txId, {
+          type: this.editTxType,
+          targetType: this.editTxTarget,
+          tradeId,
+          workerId,
+          date,
+          time,
+          amount,
+          note,
+          rationItem,
+          quantity
+        });
+
+        this.closeModals();
+        this.renderAll();
+        if (this.activeStatementWorkerId) {
+          this.openWorkerStatementModal(this.activeStatementWorkerId);
+        }
+      });
+    }
+
+    const btnDelTxFromEdit = document.getElementById('btnDeleteTxFromEdit');
+    if (btnDelTxFromEdit) {
+      btnDelTxFromEdit.addEventListener('click', () => {
+        const txId = document.getElementById('editTxId').value;
+        if (confirm('क्या आप इस लेन-देन को हटाना चाहते हैं?')) {
+          this.store.deleteTransaction(txId);
+          this.closeModals();
+          this.renderAll();
+          if (this.activeStatementWorkerId) {
+            this.openWorkerStatementModal(this.activeStatementWorkerId);
+          }
+        }
+      });
+    }
+
+    // Cloud Sync Buttons in Settings
+    const btnGenKey = document.getElementById('btnGenerateSyncKey');
+    if (btnGenKey) {
+      btnGenKey.addEventListener('click', () => {
+        const newKey = this.store.generateSyncKey();
+        const keyInput = document.getElementById('settingCloudSyncKey');
+        if (keyInput) keyInput.value = newKey;
+      });
+    }
+
+    const btnPushCloud = document.getElementById('btnPushToCloud');
+    if (btnPushCloud) {
+      btnPushCloud.addEventListener('click', async () => {
+        const keyInput = document.getElementById('settingCloudSyncKey');
+        let key = keyInput ? keyInput.value.trim() : '';
+        if (!key) {
+          key = this.store.generateSyncKey();
+          if (keyInput) keyInput.value = key;
+        }
+        btnPushCloud.disabled = true;
+        btnPushCloud.textContent = '⏳ सेव हो रहा है...';
+        try {
+          await this.store.pushToCloud(key);
+          alert(`✅ डेटा क्लाउड पर सफलतापूर्वक सुरक्षित हो गया!\n\nआपकी सिंक की (Sync Key): ${key}\n\nइसे संभाल कर रखें, दूसरे फोन में यही की डालकर अपना खाता पा सकते हैं।`);
+          const badge = document.getElementById('cloudSyncStatusBadge');
+          if (badge) {
+            badge.textContent = `सिंक: अभी`;
+            badge.style.background = 'rgba(16, 185, 129, 0.15)';
+            badge.style.color = '#34d399';
+          }
+        } catch (err) {
+          alert('क्लाउड सेव विफल: ' + err.message);
+        } finally {
+          btnPushCloud.disabled = false;
+          btnPushCloud.textContent = '📤 क्लाउड पर सेव करें';
+        }
+      });
+    }
+
+    const btnPullCloud = document.getElementById('btnPullFromCloud');
+    if (btnPullCloud) {
+      btnPullCloud.addEventListener('click', async () => {
+        const keyInput = document.getElementById('settingCloudSyncKey');
+        const key = keyInput ? keyInput.value.trim() : '';
+        if (!key) {
+          alert('कृपया अपनी सिंक की (Sync Key) दर्ज करें!');
+          return;
+        }
+        if (!confirm('चेतावनी: क्लाउड से डेटा लाने पर मौजूदा लोकल डेटा बदल जाएगा। क्या आप जारी रखना चाहते हैं?')) {
+          return;
+        }
+        btnPullCloud.disabled = true;
+        btnPullCloud.textContent = '⏳ लोड हो रहा है...';
+        try {
+          await this.store.pullFromCloud(key);
+          alert('✅ क्लाउड से डेटा सफलतापूर्वक आ गया!');
+          location.reload();
+        } catch (err) {
+          alert('क्लाउड से डेटा लाना विफल: ' + err.message);
+        } finally {
+          btnPullCloud.disabled = false;
+          btnPullCloud.textContent = '📥 क्लाउड से लाएं';
+        }
+      });
+    }
+
     // Haziri Date Picker
     const haziriDate = document.getElementById('haziriDatePicker');
     if (haziriDate) {
@@ -1611,6 +2082,26 @@ class App {
       document.getElementById('settingReminderTime').value = s.eveningReminderTime || '19:30';
       document.getElementById('settingNotifToggle').checked = s.reminderEnabled !== false;
       document.getElementById('settingSoundToggle').checked = s.soundEnabled !== false;
+
+      const syncKeyInput = document.getElementById('settingCloudSyncKey');
+      if (syncKeyInput) syncKeyInput.value = s.cloudSyncKey || '';
+      const badge = document.getElementById('cloudSyncStatusBadge');
+      const note = document.getElementById('cloudSyncLastTimeNote');
+      if (badge) {
+        if (s.lastCloudSync) {
+          const syncDateStr = new Date(s.lastCloudSync).toLocaleDateString('hi-IN', { day: 'numeric', month: 'short' });
+          const syncTimeStr = new Date(s.lastCloudSync).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          badge.textContent = `सिंक: ${syncDateStr}, ${syncTimeStr}`;
+          badge.style.background = 'rgba(16, 185, 129, 0.15)';
+          badge.style.color = '#34d399';
+          if (note) note.textContent = `अंतिम क्लाउड सिंक: ${syncDateStr} ${syncTimeStr} पर सुरक्षित किया गया।`;
+        } else {
+          badge.textContent = 'ऑफलाइन / लोकल';
+          badge.style.background = 'rgba(245, 158, 11, 0.15)';
+          badge.style.color = 'var(--amber-light)';
+        }
+      }
+
       modalSettings.classList.add('open');
     };
 
@@ -1624,11 +2115,13 @@ class App {
         const time = document.getElementById('settingReminderTime').value;
         const reminderEnabled = document.getElementById('settingNotifToggle').checked;
         const soundEnabled = document.getElementById('settingSoundToggle').checked;
+        const cloudSyncKey = document.getElementById('settingCloudSyncKey') ? document.getElementById('settingCloudSyncKey').value.trim() : '';
 
         this.store.updateSettings({
           eveningReminderTime: time,
           reminderEnabled,
-          soundEnabled
+          soundEnabled,
+          cloudSyncKey
         });
 
         this.closeModals();
@@ -1903,6 +2396,356 @@ class App {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  }
+
+  // --- WORKER STATEMENT / PASSBOOK ---
+  openWorkerStatementModal(workerId) {
+    const worker = this.store.getWorker(workerId);
+    if (!worker) return;
+    this.activeStatementWorkerId = workerId;
+
+    const modal = document.getElementById('modalWorkerStatement');
+    if (!modal) return;
+
+    const trade = this.store.getTrade(worker.tradeId);
+    const ledger = this.store.getWorkerLedger(workerId);
+    const txs = this.store.getWorkerTransactions(workerId);
+    const haziriHistory = this.store.getWorkerHaziriHistory(workerId);
+
+    // Populate Header
+    const avatarEl = document.getElementById('statementWorkerAvatar');
+    const initials = worker.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+    if (avatarEl) {
+      if (worker.photoUrl) {
+        avatarEl.innerHTML = `<img src="${worker.photoUrl}" alt="${worker.name}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />`;
+      } else {
+        avatarEl.innerHTML = initials;
+      }
+    }
+
+    const nameEl = document.getElementById('statementWorkerName');
+    if (nameEl) nameEl.textContent = `${worker.name} का खाता`;
+
+    const tradeRoleEl = document.getElementById('statementWorkerTradeRole');
+    if (tradeRoleEl) {
+      tradeRoleEl.textContent = `${trade.name} (${worker.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'})`;
+      tradeRoleEl.className = `tag-badge ${worker.role === 'mistri' ? 'tag-mistri' : 'tag-helper'}`;
+    }
+
+    const contractEl = document.getElementById('statementWorkerContract');
+    if (contractEl) {
+      contractEl.textContent = ledger.isTheka ? '📜 ठेका' : '👷 दिहाड़ी';
+      contractEl.className = `tag-badge ${ledger.isTheka ? 'tag-theka' : 'tag-dihadi'}`;
+    }
+
+    const phoneEl = document.getElementById('statementWorkerPhone');
+    if (phoneEl) {
+      phoneEl.textContent = worker.phone ? `📞 ${worker.phone}` : 'फोन नंबर नहीं जुड़ा';
+    }
+
+    // Populate KPIs
+    const kpiPresent = document.getElementById('statementKpiPresent');
+    if (kpiPresent) kpiPresent.textContent = `${ledger.totalHaziriDays} दिन`;
+
+    const kpiAbsent = document.getElementById('statementKpiAbsent');
+    if (kpiAbsent) kpiAbsent.textContent = `${ledger.totalAbsentDays} दिन गैरहाजिर`;
+
+    const kpiEarned = document.getElementById('statementKpiEarned');
+    if (kpiEarned) kpiEarned.textContent = `₹${ledger.totalEarned.toLocaleString('en-IN')}`;
+
+    const kpiRate = document.getElementById('statementKpiRate');
+    if (kpiRate) {
+      kpiRate.textContent = ledger.isTheka
+        ? `कुल ठेका: ₹${(worker.thekaAmount || 0).toLocaleString('en-IN')}`
+        : `दर: ₹${worker.dailyRate}/दिन`;
+    }
+
+    const kpiPaid = document.getElementById('statementKpiPaid');
+    if (kpiPaid) kpiPaid.textContent = `₹${ledger.totalIndividualGiven.toLocaleString('en-IN')}`;
+
+    const kpiTxCount = document.getElementById('statementKpiTxCount');
+    if (kpiTxCount) kpiTxCount.textContent = `${txs.length} बार भुगतान दर्ज`;
+
+    const kpiDue = document.getElementById('statementKpiDue');
+    if (kpiDue) {
+      kpiDue.textContent = `₹${ledger.balanceDue.toLocaleString('en-IN')}`;
+      kpiDue.style.color = ledger.balanceDue >= 0 ? '#10b981' : '#f87171';
+    }
+
+    // Payments Table
+    const pTableBody = document.getElementById('statementPaymentsTableBody');
+    if (pTableBody) {
+      if (txs.length === 0) {
+        pTableBody.innerHTML = `
+          <tr>
+            <td colspan="5" style="text-align: center; color: var(--text-dim); padding: 24px;">
+              अभी कोई नकद या पेशगी दर्ज नहीं है।
+            </td>
+          </tr>
+        `;
+      } else {
+        pTableBody.innerHTML = txs.map(t => `
+          <tr>
+            <td style="white-space: nowrap;">📅 ${t.date} <small style="color:var(--text-dim);">${t.time || ''}</small></td>
+            <td>
+              <span class="tag-badge ${t.type === 'cash' ? 'tag-dihadi' : 'tag-helper'}">
+                ${t.type === 'cash' ? '💵 नकद' : (t.type === 'recharge' ? '📱 रिचार्ज' : t.type)}
+              </span>
+            </td>
+            <td>${t.note || '-'}</td>
+            <td style="text-align: right; font-weight: 700; color: #38bdf8;">₹${(t.amount || 0).toLocaleString('en-IN')}</td>
+            <td style="text-align: center; white-space: nowrap;">
+              <button class="btn-icon-action btn-edit-tx" data-edit-tx="${t.id}" title="सुधारें">✏️</button>
+              <button class="btn-icon-action btn-del-tx" data-delete-tx="${t.id}" title="हटाएं">🗑️</button>
+            </td>
+          </tr>
+        `).join('');
+      }
+    }
+
+    // Haziri Table
+    const hTableBody = document.getElementById('statementHaziriTableBody');
+    if (hTableBody) {
+      if (haziriHistory.length === 0) {
+        hTableBody.innerHTML = `
+          <tr>
+            <td colspan="5" style="text-align: center; color: var(--text-dim); padding: 24px;">
+              अभी कोई हाजिरी रिकॉर्ड दर्ज नहीं है।
+            </td>
+          </tr>
+        `;
+      } else {
+        const hindiDayNames = ['रवि', 'सोम', 'मंगल', 'बुध', 'गुरु', 'शुक्र', 'शनि'];
+        hTableBody.innerHTML = haziriHistory.map(h => {
+          const d = new Date(h.date);
+          const dayName = isNaN(d.getTime()) ? '' : hindiDayNames[d.getDay()];
+          let statusBadge = '<span class="tag-badge" style="background:rgba(239,68,68,0.2);color:#f87171;">🔴 गैरहाजिर (A)</span>';
+          let dayEarned = 0;
+          if (h.status === 1.0) {
+            statusBadge = '<span class="tag-badge" style="background:rgba(16,185,129,0.2);color:#34d399;">🟢 पूरा दिन (1.0)</span>';
+            dayEarned = worker.dailyRate || 0;
+          } else if (h.status === 0.5) {
+            statusBadge = '<span class="tag-badge" style="background:rgba(245,158,11,0.2);color:#fbbf24;">🟡 आधा दिन (0.5)</span>';
+            dayEarned = (worker.dailyRate || 0) * 0.5;
+          }
+          if (h.otHours > 0) {
+            dayEarned += (h.otHours * ((worker.dailyRate || 0) / 8));
+          }
+
+          const earnedDisplay = ledger.isTheka ? 'ठेके में शामिल' : `₹${Math.round(dayEarned).toLocaleString('en-IN')}`;
+
+          return `
+            <tr>
+              <td style="white-space: nowrap;">📅 ${h.date}</td>
+              <td style="color: var(--text-dim);">${dayName}</td>
+              <td>${statusBadge}</td>
+              <td>${h.otHours > 0 ? `<span style="color:#c084fc; font-weight:600;">+${h.otHours} घंटे</span>` : '-'}</td>
+              <td style="text-align: right; font-weight: 700; color: #fbbf24;">${earnedDisplay}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+    }
+
+    modal.classList.add('open');
+  }
+
+  shareWorkerStatementWhatsApp(workerId) {
+    const worker = this.store.getWorker(workerId);
+    if (!worker) return;
+
+    const ledger = this.store.getWorkerLedger(workerId);
+    const trade = this.store.getTrade(worker.tradeId);
+    const txs = this.store.getWorkerTransactions(workerId);
+
+    let msg = `*श्रम व साइट डायरी - हिसाब पर्ची*\n`;
+    msg += `------------------------------------\n`;
+    msg += `👤 *कारीगर:* ${worker.name} (${trade.name})\n`;
+    msg += `📋 *पद / अनुबंध:* ${worker.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'} (${ledger.isTheka ? 'ठेका' : 'दिहाड़ी'})\n`;
+    if (ledger.isTheka) {
+      msg += `📜 *तय ठेका राशि:* ₹${(worker.thekaAmount || 0).toLocaleString('en-IN')}\n`;
+    } else {
+      msg += `💵 *दैनिक दिहाड़ी दर:* ₹${worker.dailyRate}/दिन\n`;
+    }
+    msg += `------------------------------------\n`;
+    msg += `✅ *कुल उपस्थिति:* ${ledger.totalHaziriDays} दिन\n`;
+    if (ledger.totalAbsentDays > 0) {
+      msg += `⚠️ *कुल गैरहाजिरी:* ${ledger.totalAbsentDays} दिन\n`;
+    }
+    msg += `💰 *कुल देय / तय कमाई:* ₹${ledger.totalEarned.toLocaleString('en-IN')}\n`;
+    msg += `💸 *अब तक दिया गया (नकद/पेशगी):* ₹${ledger.totalIndividualGiven.toLocaleString('en-IN')}\n`;
+    msg += `------------------------------------\n`;
+    msg += `⭐ *शुद्ध बाकी (Balance Due):* ₹${ledger.balanceDue.toLocaleString('en-IN')}\n`;
+    msg += `------------------------------------\n`;
+
+    if (txs.length > 0) {
+      msg += `\n*हाल ही के भुगतान (Last Payments):*\n`;
+      txs.slice(0, 5).forEach(t => {
+        msg += `• ${t.date}: ₹${t.amount} (${t.note || (t.type === 'recharge' ? 'रिचार्ज' : 'नकद')})\n`;
+      });
+    }
+
+    msg += `\n_यह हिसाब 'श्रम व साइट डायरी' ऐप से जारी किया गया है।_\n`;
+
+    const cleanPhone = (worker.phone || '').replace(/[^0-9]/g, '');
+    const encoded = encodeURIComponent(msg);
+    if (cleanPhone && cleanPhone.length === 10) {
+      window.open(`https://wa.me/91${cleanPhone}?text=${encoded}`, '_blank');
+    } else {
+      navigator.clipboard.writeText(msg).then(() => {
+        alert('कारीगर का मोबाइल नंबर नहीं है, इसलिए पूरा हिसाब क्लिपबोर्ड पर कॉपी कर लिया गया है!\n\nआप इसे किसी भी व्हाट्सएप चैट में पेस्ट कर सकते हैं।');
+      }).catch(() => {
+        prompt('हिसाब कॉपी करने के लिए Ctrl+C दबाएं:', msg);
+      });
+    }
+  }
+
+  openEditWorkerModal(workerId) {
+    const worker = this.store.getWorker(workerId);
+    if (!worker) return;
+
+    const modal = document.getElementById('modalEditWorker');
+    if (!modal) return;
+
+    document.getElementById('editWorkerId').value = worker.id;
+    document.getElementById('editWorkerName').value = worker.name;
+    document.getElementById('editWorkerPhone').value = worker.phone || '';
+
+    // Populate trade select
+    const tradeSelect = document.getElementById('editWorkerTrade');
+    if (tradeSelect) {
+      tradeSelect.innerHTML = this.store.getTrades().map(t => `
+        <option value="${t.id}" ${t.id === worker.tradeId ? 'selected' : ''}>${t.name}</option>
+      `).join('');
+    }
+
+    // Role
+    this.editWorkerRole = worker.role || 'mistri';
+    document.querySelectorAll('#editWorkerRoleSwitcher .segment-btn').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-role') === this.editWorkerRole);
+    });
+
+    // Contract
+    this.editWorkerContract = worker.contractType || 'dihadi';
+    document.querySelectorAll('#editWorkerContractSwitcher .segment-btn').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-contract') === this.editWorkerContract);
+    });
+
+    const dihadiGroup = document.getElementById('editDihadiGroup');
+    const thekaGroup = document.getElementById('editThekaGroup');
+    const rateInput = document.getElementById('editWorkerDailyRate');
+    const thekaAmtInput = document.getElementById('editWorkerThekaAmount');
+    const thekaDescInput = document.getElementById('editWorkerThekaDesc');
+
+    if (this.editWorkerContract === 'theka') {
+      if (dihadiGroup) dihadiGroup.style.display = 'none';
+      if (thekaGroup) thekaGroup.style.display = 'block';
+      if (rateInput) rateInput.value = '0';
+      if (thekaAmtInput) thekaAmtInput.value = worker.thekaAmount || '';
+      if (thekaDescInput) thekaDescInput.value = worker.thekaDescription || '';
+    } else {
+      if (dihadiGroup) dihadiGroup.style.display = 'block';
+      if (thekaGroup) thekaGroup.style.display = 'none';
+      if (rateInput) rateInput.value = worker.dailyRate || '';
+      if (thekaAmtInput) thekaAmtInput.value = '';
+      if (thekaDescInput) thekaDescInput.value = '';
+    }
+
+    // Photo
+    this.editWorkerPhotoDataUrl = worker.photoUrl || null;
+    const photoImg = document.getElementById('editWorkerPhotoImg');
+    const placeholder = document.getElementById('editWorkerPhotoPlaceholder');
+    const btnRemove = document.getElementById('btnEditRemovePhoto');
+    const fileInput = document.getElementById('editWorkerPhotoInput');
+    if (fileInput) fileInput.value = '';
+
+    if (this.editWorkerPhotoDataUrl) {
+      if (photoImg) {
+        photoImg.src = this.editWorkerPhotoDataUrl;
+        photoImg.style.display = 'block';
+      }
+      if (placeholder) placeholder.style.display = 'none';
+      if (btnRemove) btnRemove.style.display = 'inline-block';
+    } else {
+      if (photoImg) {
+        photoImg.src = '';
+        photoImg.style.display = 'none';
+      }
+      if (placeholder) placeholder.style.display = 'block';
+      if (btnRemove) btnRemove.style.display = 'none';
+    }
+
+    modal.classList.add('open');
+  }
+
+  openEditTransactionModal(txId) {
+    const tx = this.store.getTransaction(txId);
+    if (!tx) return;
+
+    const modal = document.getElementById('modalEditTransaction');
+    if (!modal) return;
+
+    document.getElementById('editTxId').value = tx.id;
+    this.editTxType = tx.type || 'cash';
+    document.querySelectorAll('#editTxTypeSwitcher .segment-btn').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-type') === this.editTxType);
+    });
+
+    this.editTxTarget = tx.targetType || 'individual';
+    document.querySelectorAll('#editTxTargetTypeSwitcher .segment-btn').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-target') === this.editTxTarget);
+    });
+
+    // Populate Trade
+    const tradeSelect = document.getElementById('editTxTradeSelect');
+    if (tradeSelect) {
+      tradeSelect.innerHTML = this.store.getTrades().map(t => `
+        <option value="${t.id}" ${t.id === tx.tradeId ? 'selected' : ''}>${t.name}</option>
+      `).join('');
+    }
+
+    // Populate Worker
+    const populateWorkerSelect = (tradeId, selectedWorkerId) => {
+      const workerSelect = document.getElementById('editTxWorkerSelect');
+      if (workerSelect) {
+        const workers = this.store.getWorkers(tradeId);
+        workerSelect.innerHTML = workers.map(w => `
+          <option value="${w.id}" ${w.id === selectedWorkerId ? 'selected' : ''}>
+            ${w.name} (${w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'})
+          </option>
+        `).join('');
+      }
+    };
+    populateWorkerSelect(tx.tradeId, tx.workerId);
+
+    const workerSelectGroup = document.getElementById('editTxWorkerSelectGroup');
+    if (workerSelectGroup) {
+      workerSelectGroup.style.display = this.editTxTarget === 'individual' ? 'block' : 'none';
+    }
+
+    // Ration Fields
+    const rationFields = document.getElementById('editRationFields');
+    if (rationFields) {
+      rationFields.style.display = this.editTxType === 'ration' ? 'block' : 'none';
+    }
+    const rationItemInput = document.getElementById('editTxRationItem');
+    if (rationItemInput) rationItemInput.value = tx.rationItem || '';
+    const quantityInput = document.getElementById('editTxQuantity');
+    if (quantityInput) quantityInput.value = tx.quantity || '';
+
+    // Date & Time
+    const dateInput = document.getElementById('editTxDate');
+    if (dateInput) dateInput.value = tx.date || getTodayString();
+    const timeInput = document.getElementById('editTxTime');
+    if (timeInput) timeInput.value = tx.time || '';
+
+    // Amount & Note
+    const amtInput = document.getElementById('editTxAmount');
+    if (amtInput) amtInput.value = tx.amount || 0;
+    const noteInput = document.getElementById('editTxNote');
+    if (noteInput) noteInput.value = tx.note || '';
+
+    modal.classList.add('open');
   }
 }
 

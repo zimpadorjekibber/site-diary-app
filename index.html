@@ -163,9 +163,26 @@
 
     <!-- TAB 1: TODAY'S TIMELINE -->
     <section id="tab-timeline" class="tab-view active">
+      <!-- Search & Date Filter Bar -->
+      <div class="timeline-controls-bar">
+        <div class="timeline-search-wrap">
+          <span class="search-icon">🔍</span>
+          <input type="text" id="timelineSearchInput" class="form-input" placeholder="कारीगर, सामान या नोट से खोजें..." />
+        </div>
+        <div class="timeline-date-selector">
+          <select id="timelineDatePreset" class="form-select" style="width: auto; min-width: 140px;">
+            <option value="today">📅 आज (Today)</option>
+            <option value="yesterday">📅 कल (Yesterday)</option>
+            <option value="custom">📆 तारीख चुनें...</option>
+            <option value="all">📂 सभी लेन-देन (All)</option>
+          </select>
+          <input type="date" id="timelineDatePicker" class="form-input" style="display: none; width: auto; padding: 6px 10px;" />
+        </div>
+      </div>
+
       <!-- Filter chips -->
       <div class="filter-bar" id="timelineFilters">
-        <button class="filter-chip active" data-filter-type="all">सभी लेन-देन (All)</button>
+        <button class="filter-chip active" data-filter-type="all">सभी प्रकार (All)</button>
         <button class="filter-chip" data-filter-type="cash">💵 नकद (Cash)</button>
         <button class="filter-chip" data-filter-type="ration">🍚 राशन (Ration)</button>
         <button class="filter-chip" data-filter-type="recharge">📱 रिचार्ज (Recharge)</button>
@@ -691,7 +708,31 @@
         </div>
 
         <div class="form-group" style="border-top: 1px solid var(--border-card); padding-top: 14px;">
-          <label class="form-label">डेटा बैकअप (Data Backup):</label>
+          <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
+            <span>☁️ क्लाउड बैकअप व मल्टी-डिवाइस सिंक:</span>
+            <span id="cloudSyncStatusBadge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; background: rgba(245, 158, 11, 0.15); color: var(--amber-light);">ऑफलाइन / लोकल</span>
+          </label>
+          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+            <input type="text" id="settingCloudSyncKey" class="form-input" placeholder="सिंक की (जैसे: SD-ABCD-1234)" style="font-family: monospace; font-size: 0.85rem;" />
+            <button type="button" id="btnGenerateSyncKey" class="btn-secondary" style="font-size: 0.75rem; white-space: nowrap;">
+              🔑 नया Key बनाएं
+            </button>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" id="btnPushToCloud" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: #34d399; color: #34d399; font-weight: 600;">
+              📤 क्लाउड पर सेव करें
+            </button>
+            <button type="button" id="btnPullFromCloud" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: #38bdf8; color: #38bdf8; font-weight: 600;">
+              📥 क्लाउड से लाएं
+            </button>
+          </div>
+          <p style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px;" id="cloudSyncLastTimeNote">
+            इस सिंक की (Sync Key) को किसी भी दूसरे फोन या कंप्यूटर में डालकर आप अपना पूरा डेटा तुरंत सुरक्षित ला सकते हैं।
+          </p>
+        </div>
+
+        <div class="form-group" style="border-top: 1px solid var(--border-card); padding-top: 14px;">
+          <label class="form-label">लोकल फ़ाइल बैकअप (JSON Backup):</label>
           <div style="display: flex; gap: 8px;">
             <button type="button" id="btnExportData" class="btn-secondary" style="flex: 1; font-size: 0.8rem;">
               📥 बैकअप डाउनलोड (Export)
@@ -716,6 +757,288 @@
         <div class="modal-actions">
           <button type="button" class="btn-secondary" data-close-modal>बंद करें</button>
           <button type="submit" class="btn-primary">सेटिंग्स सेव करें</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================================================
+       MODAL 5: WORKER PASSBOOK / STATEMENT MODAL
+  =================================================== -->
+  <div id="modalWorkerStatement" class="modal-overlay">
+    <div class="modal-card modal-large" id="printableWorkerStatement">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div id="statementWorkerAvatar" class="worker-avatar" style="width: 46px; height: 46px; font-size: 1.1rem; border-radius: 10px;"></div>
+          <div>
+            <h3 class="modal-title" id="statementWorkerName" style="margin: 0; font-size: 1.2rem;">कारीगर खाता (Passbook)</h3>
+            <div style="display: flex; align-items: center; gap: 6px; margin-top: 3px; flex-wrap: wrap;">
+              <span id="statementWorkerTradeRole" class="tag-badge tag-mistri">मिस्त्री</span>
+              <span id="statementWorkerContract" class="tag-badge tag-dihadi">दिहाड़ी</span>
+              <span id="statementWorkerPhone" style="font-size: 0.8rem; color: var(--text-dim);"></span>
+            </div>
+          </div>
+        </div>
+        <button class="btn-close-modal" data-close-modal>&times;</button>
+      </div>
+
+      <!-- Action Bar -->
+      <div class="statement-actions-bar">
+        <button id="btnShareStatementWhatsApp" class="btn-statement-action btn-wa-share" title="व्हाट्सएप पर हिसाब भेजें">
+          <span>📲</span> WhatsApp पर पूरा हिसाब भेजें
+        </button>
+        <button id="btnPrintWorkerStatement" class="btn-statement-action btn-print-slip" title="रसीद/पर्ची प्रिंट करें">
+          <span>🖨️</span> रसीद / पर्ची प्रिंट करें
+        </button>
+        <button id="btnEditWorkerFromStatement" class="btn-statement-action btn-edit-worker" title="कारीगर में सुधार करें">
+          <span>✏️</span> सुधारें (Edit)
+        </button>
+      </div>
+
+      <!-- KPI Summary Cards -->
+      <div class="statement-kpi-grid">
+        <div class="statement-kpi-card">
+          <div class="kpi-label">कुल उपस्थिति (P)</div>
+          <div class="kpi-val" id="statementKpiPresent" style="color: #34d399;">0 दिन</div>
+          <div class="kpi-sub" id="statementKpiAbsent">0 दिन गैरहाजिर</div>
+        </div>
+        <div class="statement-kpi-card">
+          <div class="kpi-label">कुल तय/कमाई</div>
+          <div class="kpi-val" id="statementKpiEarned" style="color: #fbbf24;">₹0</div>
+          <div class="kpi-sub" id="statementKpiRate">दर: ₹0/दिन</div>
+        </div>
+        <div class="statement-kpi-card">
+          <div class="kpi-label">कुल नकद/एडवांस दिया</div>
+          <div class="kpi-val" id="statementKpiPaid" style="color: #38bdf8;">₹0</div>
+          <div class="kpi-sub" id="statementKpiTxCount">0 बार दिया</div>
+        </div>
+        <div class="statement-kpi-card highlighted-kpi">
+          <div class="kpi-label">शुद्ध बकाया (Balance Due)</div>
+          <div class="kpi-val" id="statementKpiDue" style="color: #10b981;">₹0</div>
+          <div class="kpi-sub" style="color: #a7f3d0;">आज तक देय बाकी</div>
+        </div>
+      </div>
+
+      <!-- Statement Segmented Tabs -->
+      <div class="statement-tabs-switcher">
+        <button type="button" class="segment-btn active" data-stmt-tab="stmt-payments">💵 लेन-देन व भुगतान इतिहास</button>
+        <button type="button" class="segment-btn" data-stmt-tab="stmt-haziri">📋 दैनिक हाजिरी रजिस्टर</button>
+      </div>
+
+      <!-- View 1: Payments & Advances -->
+      <div id="stmt-payments" class="statement-subview active">
+        <div class="statement-table-wrap">
+          <table class="statement-table">
+            <thead>
+              <tr>
+                <th>तारीख</th>
+                <th>प्रकार</th>
+                <th>विवरण / नोट</th>
+                <th style="text-align: right;">रकम (₹)</th>
+                <th style="text-align: center;">क्रिया</th>
+              </tr>
+            </thead>
+            <tbody id="statementPaymentsTableBody">
+              <!-- Injected via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- View 2: Daily Haziri Logs -->
+      <div id="stmt-haziri" class="statement-subview" style="display: none;">
+        <div class="statement-table-wrap">
+          <table class="statement-table">
+            <thead>
+              <tr>
+                <th>तारीख</th>
+                <th>दिन</th>
+                <th>हाजिरी स्थिति</th>
+                <th>ओवरटाइम (घंटे)</th>
+                <th style="text-align: right;">देय राशि (₹)</th>
+              </tr>
+            </thead>
+            <tbody id="statementHaziriTableBody">
+              <!-- Injected via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="modal-actions" style="margin-top: 16px;">
+        <button type="button" class="btn-secondary" data-close-modal>बंद करें</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================================================
+       MODAL 6: EDIT WORKER MODAL
+  =================================================== -->
+  <div id="modalEditWorker" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">कारीगर की जानकारी बदलें (Edit Worker)</h3>
+        <button class="btn-close-modal" data-close-modal>&times;</button>
+      </div>
+      <form id="formEditWorker">
+        <input type="hidden" id="editWorkerId" />
+        
+        <!-- Photo -->
+        <div class="form-group" style="text-align: center; margin-bottom: 16px;">
+          <label class="form-label">फोटो बदलें:</label>
+          <div class="worker-photo-upload-wrap">
+            <div id="editWorkerPhotoPreview" class="worker-photo-preview-box">
+              <span id="editWorkerPhotoPlaceholder" style="font-size: 32px;">📷</span>
+              <img id="editWorkerPhotoImg" src="" alt="Preview" style="display: none; width: 100%; height: 100%; object-fit: cover; border-radius: inherit;" />
+            </div>
+            <div class="photo-action-buttons">
+              <button type="button" id="btnEditPickPhoto" class="btn-secondary" style="font-size: 0.8rem; padding: 6px 12px;">
+                📷 नई फोटो चुनें
+              </button>
+              <button type="button" id="btnEditRemovePhoto" class="btn-secondary" style="display: none; font-size: 0.8rem; padding: 6px 10px; color: var(--rose-danger);">
+                हटाएं
+              </button>
+            </div>
+            <input type="file" id="editWorkerPhotoInput" accept="image/*" capture="environment" style="display: none;" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">कारीगर का नाम (Worker Name):</label>
+          <input type="text" id="editWorkerName" class="form-input" required />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">ट्रेड चुनें (Trade):</label>
+          <select id="editWorkerTrade" class="form-select" required></select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">पद / भूमिका (Role):</label>
+          <div class="segmented-control" id="editWorkerRoleSwitcher">
+            <button type="button" class="segment-btn" data-role="mistri">मिस्त्री</button>
+            <button type="button" class="segment-btn" data-role="helper">हेल्पर</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">काम का प्रकार / अनुबंध (Work Contract Type):</label>
+          <div class="segmented-control" id="editWorkerContractSwitcher">
+            <button type="button" class="segment-btn" data-contract="dihadi">👷 दिहाड़ी</button>
+            <button type="button" class="segment-btn" data-contract="theka">📜 ठेका</button>
+          </div>
+        </div>
+
+        <div class="form-group" id="editDihadiGroup">
+          <label class="form-label">दैनिक दिहाड़ी दर (Daily Rate in ₹):</label>
+          <input type="number" id="editWorkerDailyRate" class="form-input" min="0" />
+        </div>
+
+        <div id="editThekaGroup" style="display: none;">
+          <div class="form-group">
+            <label class="form-label">कुल तय ठेका राशि (Theka Amount in ₹):</label>
+            <input type="number" id="editWorkerThekaAmount" class="form-input" min="0" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">ठेके का काम व विवरण (Contract Scope):</label>
+            <input type="text" id="editWorkerThekaDesc" class="form-input" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">मोबाइल नंबर (Phone Number):</label>
+          <input type="tel" id="editWorkerPhone" class="form-input" pattern="[0-9]{10}" placeholder="10 अंकों का नंबर" />
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-card); padding-top: 14px; margin-top: 10px; flex-wrap: wrap; gap: 8px;">
+          <button type="button" id="btnDeleteWorker" class="btn-secondary" style="color: #f87171; border-color: rgba(239, 68, 68, 0.4);">
+            🗑️ कारीगर हटाएं (Delete)
+          </button>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn-secondary" data-close-modal>रद्द करें</button>
+            <button type="submit" class="btn-primary">बदलाव सुरक्षित करें</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ===================================================
+       MODAL 7: EDIT TRANSACTION MODAL
+  =================================================== -->
+  <div id="modalEditTransaction" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">लेन-देन में सुधार करें (Edit Entry)</h3>
+        <button class="btn-close-modal" data-close-modal>&times;</button>
+      </div>
+      <form id="formEditTransaction">
+        <input type="hidden" id="editTxId" />
+        
+        <div class="form-group">
+          <label class="form-label">प्रकार चुनें (Transaction Type):</label>
+          <div class="segmented-control" id="editTxTypeSwitcher">
+            <button type="button" class="segment-btn" data-type="cash">💵 नकद / पेशगी</button>
+            <button type="button" class="segment-btn" data-type="ration">🍚 राशन</button>
+            <button type="button" class="segment-btn" data-type="recharge">📱 रिचार्ज</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">कारीगर ग्रुप (Trade):</label>
+          <select id="editTxTradeSelect" class="form-select" required></select>
+        </div>
+
+        <div class="form-group" id="editTxTargetTypeGroup">
+          <label class="form-label">किसके नाम:</label>
+          <div class="segmented-control" id="editTxTargetTypeSwitcher">
+            <button type="button" class="segment-btn" data-target="individual">👤 व्यक्तिगत कारीगर</button>
+            <button type="button" class="segment-btn" data-target="group">👥 पूरे ग्रुप के लिए</button>
+          </div>
+        </div>
+
+        <div class="form-group" id="editTxWorkerSelectGroup">
+          <label class="form-label">कारीगर का नाम:</label>
+          <select id="editTxWorkerSelect" class="form-select"></select>
+        </div>
+
+        <div id="editRationFields" style="display: none;">
+          <div class="form-group">
+            <label class="form-label">राशन का सामान:</label>
+            <input type="text" id="editTxRationItem" class="form-input" placeholder="जैसे: आटा, गैस सिलेंडर..." />
+          </div>
+          <div class="form-group">
+            <label class="form-label">मात्रा (Quantity):</label>
+            <input type="text" id="editTxQuantity" class="form-input" placeholder="जैसे: 10 kg, 1 सिलेंडर..." />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">तारीख व समय:</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="date" id="editTxDate" class="form-input" required />
+            <input type="time" id="editTxTime" class="form-input" style="width: 130px;" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">रकम / खर्च (Amount in ₹):</label>
+          <input type="number" id="editTxAmount" class="form-input" min="0" required />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">विवरण / नोट (Memo):</label>
+          <input type="text" id="editTxNote" class="form-input" placeholder="जैसे: पेशगी दी..." />
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-card); padding-top: 14px; margin-top: 10px; flex-wrap: wrap; gap: 8px;">
+          <button type="button" id="btnDeleteTxFromEdit" class="btn-secondary" style="color: #f87171; border-color: rgba(239, 68, 68, 0.4);">
+            🗑️ हटाएं (Delete)
+          </button>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn-secondary" data-close-modal>रद्द करें</button>
+            <button type="submit" class="btn-primary">सुरक्षित करें</button>
+          </div>
         </div>
       </form>
     </div>

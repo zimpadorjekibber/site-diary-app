@@ -1760,4 +1760,366 @@ body {
   box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.4);
 }
 
+/* ===================================================
+   TIMELINE CONTROLS (SEARCH & DATE PICKER)
+=================================================== */
+.timeline-controls-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.timeline-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+}
+
+.timeline-search-wrap .search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  pointer-events: none;
+}
+
+.timeline-search-wrap input {
+  padding-left: 36px;
+  width: 100%;
+}
+
+.timeline-date-selector {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* TX Actions Row */
+.tx-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.btn-icon-action {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-main);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.15s ease;
+}
+
+.btn-icon-action:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: scale(1.08);
+}
+
+.btn-icon-action.btn-del-tx:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #f87171;
+}
+
+.btn-icon-action.btn-edit-tx:hover {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #38bdf8;
+}
+
+/* ===================================================
+   WORKER CARD INTERACTIVE ACTIONS
+=================================================== */
+.worker-card-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.btn-worker-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.btn-worker-statement {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--amber-light);
+  border-color: rgba(245, 158, 11, 0.35);
+}
+
+.btn-worker-statement:hover {
+  background: rgba(245, 158, 11, 0.28);
+  transform: translateY(-1px);
+}
+
+.btn-worker-wa {
+  background: rgba(37, 211, 102, 0.15);
+  color: #34d399;
+  border-color: rgba(37, 211, 102, 0.35);
+}
+
+.btn-worker-wa:hover {
+  background: rgba(37, 211, 102, 0.28);
+  transform: translateY(-1px);
+}
+
+.btn-worker-edit {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.3);
+}
+
+.btn-worker-edit:hover {
+  background: rgba(56, 189, 248, 0.22);
+}
+
+.btn-worker-delete {
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.btn-worker-delete:hover {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.6);
+}
+
+/* ===================================================
+   WORKER PASSBOOK / STATEMENT MODAL
+=================================================== */
+.modal-large {
+  max-width: 820px !important;
+  width: 95% !important;
+  max-height: 90vh !important;
+  overflow-y: auto !important;
+}
+
+.statement-actions-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.btn-statement-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.btn-wa-share {
+  background: #25D366;
+  color: #0b2210;
+  border: none;
+  font-weight: 800;
+  box-shadow: 0 4px 12px rgba(37, 211, 102, 0.25);
+}
+
+.btn-wa-share:hover {
+  background: #22c35e;
+  transform: translateY(-1px);
+}
+
+.btn-print-slip {
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.btn-print-slip:hover {
+  background: rgba(56, 189, 248, 0.22);
+}
+
+.btn-edit-worker {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.btn-edit-worker:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Statement KPI Grid */
+.statement-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+@media (max-width: 640px) {
+  .statement-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.statement-kpi-card {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+
+.statement-kpi-card.highlighted-kpi {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.statement-kpi-card .kpi-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.statement-kpi-card .kpi-val {
+  font-size: 1.25rem;
+  font-weight: 800;
+  margin: 4px 0 2px;
+}
+
+.statement-kpi-card .kpi-sub {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.statement-tabs-switcher {
+  display: flex;
+  background: rgba(0, 0, 0, 0.35);
+  padding: 4px;
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+  gap: 4px;
+}
+
+.statement-tabs-switcher .segment-btn {
+  flex: 1;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.statement-tabs-switcher .segment-btn.active {
+  background: var(--amber-primary);
+  color: #000;
+  font-weight: 700;
+}
+
+.statement-table-wrap {
+  max-height: 280px;
+  overflow-y: auto;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.statement-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.statement-table th {
+  background: #141b2a;
+  padding: 8px 12px;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.statement-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.statement-table tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+/* ===================================================
+   PRINT STYLES FOR WORKER STATEMENT SLIP
+=================================================== */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+  #printableWorkerStatement, #printableWorkerStatement * {
+    visibility: visible !important;
+  }
+  #printableWorkerStatement {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: #fff !important;
+    color: #000 !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 10px !important;
+  }
+  .statement-actions-bar, .modal-actions, .btn-close-modal, .statement-tabs-switcher {
+    display: none !important;
+  }
+  .statement-kpi-card {
+    background: #f8f9fa !important;
+    border: 1px solid #ccc !important;
+    color: #000 !important;
+  }
+  .statement-kpi-card .kpi-val {
+    color: #000 !important;
+  }
+  .statement-table th {
+    background: #e2e8f0 !important;
+    color: #000 !important;
+  }
+  .statement-table td {
+    color: #000 !important;
+    border-bottom: 1px solid #ddd !important;
+  }
+}
+
+
 
