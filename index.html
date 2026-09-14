@@ -90,19 +90,22 @@
         </div>
       </div>
 
-      <!-- SLEEK VOICE & QUICK ENTRY BAR -->
-      <div class="voice-search-bar" id="btnVoiceMic" title="बोलकर नोट करने के लिए माइक दबाएं">
-        <div class="voice-mic-badge">
-          <span class="mic-glyph">🎙️</span>
+      <!-- QUICK ENTRY BAR: Text Input + Voice Mic -->
+      <div class="voice-search-bar" style="cursor: default;">
+        <div class="voice-search-content" style="flex: 1;">
+          <input type="text" id="quickEntryInput" class="form-input" placeholder="लिखें: रमेश 500 नकद या बोलने के लिए 🎙️ दबाएं" style="margin: 0; border: none; background: rgba(255,255,255,0.06); color: var(--text-main); font-size: 0.88rem; padding: 10px 12px; border-radius: 8px; width: 100%;" />
         </div>
-        <div class="voice-search-content">
-          <span id="voiceStatusText" class="voice-prompt-text">बोलकर तुरंत नोट करें... <em>(उदा. "रमेश मिस्त्री 500 नकद")</em></span>
-        </div>
-        <span class="voice-tap-hint">टैप करें ➔</span>
+        <button type="button" id="btnQuickEntrySubmit" style="background: var(--amber-primary); border: none; color: #000; font-weight: 700; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; white-space: nowrap;">
+          जोड़ें ➔
+        </button>
+        <button type="button" id="btnVoiceMic" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: var(--text-main); padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 1.1rem;" title="बोलकर नोट करें">
+          🎙️
+        </button>
       </div>
       <div id="voiceTranscriptBox" class="voice-transcript-box" style="display: none;">
         आपकी आवाज़ सुनी जा रही है...
       </div>
+      <span id="voiceStatusText" style="display: none;"></span>
     </section>
 
     <!-- 4 PRIMARY QUICK ACTION TILES -->
@@ -747,6 +750,17 @@
         <button class="btn-close-modal" data-close-modal>&times;</button>
       </div>
       <form id="formSettings">
+        <!-- CLEAR DEMO DATA - Most Prominent at Top -->
+        <div id="clearDemoSection" class="form-group" style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 10px; padding: 14px; margin-bottom: 18px;">
+          <label class="form-label" style="color: #f87171; font-weight: 700; font-size: 0.95rem;">🧹 डमी डेटा साफ़ करें (Start Fresh):</label>
+          <button type="button" id="btnClearDemoData" class="btn-secondary" style="width: 100%; border-color: rgba(239, 68, 68, 0.5); color: #f87171; font-weight: 700; padding: 12px; font-size: 0.9rem; margin-top: 6px;">
+            🧹 सभी डमी कारीगर व लेन-देन हटाएँ — नया असली खाता शुरू करें
+          </button>
+          <p style="font-size: 0.76rem; color: var(--text-muted); margin-top: 6px;">
+            सैंपल कारीगर (Ramesh, Mohan आदि) और फर्जी खर्चे एक क्लिक में हट जाएंगे। आपकी ट्रेड श्रेणियां सुरक्षित रहेंगी।
+          </p>
+        </div>
+
         <div class="form-group">
           <label class="form-label">शाम को घर पहुँचने पर डायरी याद दिलाने का समय:</label>
           <input type="time" id="settingReminderTime" class="form-input" value="19:30" />
@@ -778,6 +792,7 @@
           </button>
         </div>
 
+        <!-- Cloud Sync Key (Simple) -->
         <div class="form-group" style="border-top: 1px solid var(--border-card); padding-top: 14px;">
           <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
             <span>☁️ क्लाउड बैकअप व मल्टी-डिवाइस सिंक:</span>
@@ -802,29 +817,15 @@
           </p>
         </div>
 
-        <!-- Google Firebase Cloud Integration -->
-        <div class="form-group" style="border-top: 1px solid var(--border-card); padding-top: 14px; background: rgba(245, 158, 11, 0.05); padding: 14px; border-radius: var(--radius-md); border: 1px solid rgba(245, 158, 11, 0.2); margin-top: 14px;">
+        <!-- Firebase Status Only (Config hidden behind dev toggle) -->
+        <div class="form-group" style="border-top: 1px solid var(--border-card); padding-top: 14px;">
           <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
             <strong style="color: #fbbf24; display: flex; align-items: center; gap: 6px;">
-              🔥 Google Firebase (लाइफटाइम फ्री डेटाबेस):
+              🔥 Google Firebase (लाइव डेटाबेस):
             </strong>
             <span id="firebaseStatusBadge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); color: var(--text-muted);">कनेक्ट नहीं है</span>
           </label>
-
-          <div style="margin-top: 8px;">
-            <label style="font-size: 0.76rem; color: var(--text-muted);">साइट / डायरी का नाम (Site ID):</label>
-            <input type="text" id="firebaseSiteIdInput" class="form-input" placeholder="जैसे: my-site या khalen-dairy" style="margin-bottom: 8px; font-size: 0.85rem;" />
-          </div>
-
-          <div>
-            <label style="font-size: 0.76rem; color: var(--text-muted);">Firebase Web Config (JSON पेस्ट करें):</label>
-            <textarea id="firebaseConfigInput" class="form-textarea" rows="3" placeholder='{"apiKey": "AIza...", "projectId": "my-diary-...", "appId": "..."}' style="font-family: monospace; font-size: 0.75rem; margin-bottom: 8px;"></textarea>
-          </div>
-
-          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-            <button type="button" id="btnConnectFirebase" class="btn-primary" style="flex: 1; font-size: 0.8rem; padding: 8px 12px;">
-              🔥 टेस्ट व कनेक्ट करें
-            </button>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
             <button type="button" id="btnPushToFirebase" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: #f59e0b; color: #f59e0b; font-weight: 700; padding: 8px 12px;">
               📤 Firebase पर सेव करें
             </button>
@@ -832,7 +833,6 @@
               📥 Firebase से लाएं
             </button>
           </div>
-
           <label style="display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: var(--text-main); margin-top: 10px; cursor: pointer;">
             <input type="checkbox" id="firebaseAutoSyncToggle" />
             <span>🔄 हर लेन-देन व हाजिरी पर अपने आप Firebase में सिंक करें (Auto-Sync)</span>
@@ -840,6 +840,21 @@
           <p style="font-size: 0.72rem; color: var(--text-dim); margin-top: 4px;" id="firebaseLastSyncNote">
             गूगल के ऑफिशियल डेटाबेस (Firestore) पर आपका डेटा जीवनभर सुरक्षित और निजी रहता है।
           </p>
+
+          <!-- Developer Config (hidden by default, requires 5 taps on title to open) -->
+          <div id="firebaseDevConfig" style="display: none; margin-top: 12px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 10px;">
+            <div style="margin-top: 8px;">
+              <label style="font-size: 0.76rem; color: var(--text-muted);">साइट / डायरी का नाम (Site ID):</label>
+              <input type="text" id="firebaseSiteIdInput" class="form-input" placeholder="जैसे: my-site या khalen-dairy" style="margin-bottom: 8px; font-size: 0.85rem;" />
+            </div>
+            <div>
+              <label style="font-size: 0.76rem; color: var(--text-muted);">Firebase Web Config (JSON पेस्ट करें):</label>
+              <textarea id="firebaseConfigInput" class="form-textarea" rows="3" placeholder='{"apiKey": "AIza...", "projectId": "my-diary-...", "appId": "..."}' style="font-family: monospace; font-size: 0.75rem; margin-bottom: 8px;"></textarea>
+            </div>
+            <button type="button" id="btnConnectFirebase" class="btn-primary" style="width: 100%; font-size: 0.8rem; padding: 8px 12px;">
+              🔥 टेस्ट व कनेक्ट करें
+            </button>
+          </div>
         </div>
 
         <div class="form-group" style="border-top: 1px solid var(--border-card); padding-top: 14px;">
@@ -853,16 +868,6 @@
             </button>
             <input type="file" id="fileImportInput" accept=".json" style="display: none;" />
           </div>
-        </div>
-
-        <div class="form-group" style="border-top: 1px solid var(--border-card); padding-top: 14px;">
-          <label class="form-label">डमी डेटा साफ़ करें (Start Fresh with Real Data):</label>
-          <button type="button" id="btnClearDemoData" class="btn-secondary" style="width: 100%; border-color: rgba(239, 68, 68, 0.4); color: #f87171; font-weight: 600; padding: 10px;">
-            🧹 डमी डेटा हटाएँ और नया असली खाता शुरू करें
-          </button>
-          <p style="font-size: 0.74rem; color: var(--text-muted); margin-top: 4px;">
-            सैंपल कारीगर और डमी लेन-देन हट जाएंगे ताकि आप अपनी साइट के असली कारीगर जोड़ सकें।
-          </p>
         </div>
 
         <div class="modal-actions">

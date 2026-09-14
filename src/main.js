@@ -2588,6 +2588,34 @@ class App {
       });
     }
 
+    // Quick Text Entry (typed input fallback for voice)
+    const quickEntryInput = document.getElementById('quickEntryInput');
+    const btnQuickEntrySubmit = document.getElementById('btnQuickEntrySubmit');
+    if (btnQuickEntrySubmit && quickEntryInput) {
+      const submitQuickEntry = () => {
+        const text = (quickEntryInput.value || '').trim();
+        if (!text) {
+          alert('कृपया पहले कुछ लिखें, जैसे: "रमेश 500 नकद" या "10 किलो आटा बढ़ई"');
+          return;
+        }
+        const parsed = this.voiceManager.parseTranscript(text);
+        if (parsed) {
+          this.openAddTransactionModal(parsed);
+          quickEntryInput.value = '';
+        } else {
+          // If parser can't extract, just open add transaction modal
+          this.openAddTransactionModal({});
+        }
+      };
+      btnQuickEntrySubmit.addEventListener('click', submitQuickEntry);
+      quickEntryInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          submitQuickEntry();
+        }
+      });
+    }
+
     // Voice Dictation Mic Button
     const btnMic = document.getElementById('btnVoiceMic');
     const voiceStatus = document.getElementById('voiceStatusText');
@@ -2595,22 +2623,31 @@ class App {
 
     if (btnMic) {
       btnMic.addEventListener('click', () => {
+        if (!this.voiceManager.isSupported()) {
+          alert('इस ब्राउज़र में बोलकर लिखना उपलब्ध नहीं है।\n\nआप ऊपर दिए गए टेक्स्ट बॉक्स में लिखकर भी जोड़ सकते हैं, जैसे:\n"रमेश 500 नकद" या "10 किलो आटा"');
+          return;
+        }
         if (this.voiceManager.isListening) {
           this.voiceManager.stopListening();
           btnMic.classList.remove('recording');
+          btnMic.textContent = '🎙️';
         } else {
           btnMic.classList.add('recording');
-          voiceTranscriptBox.style.display = 'block';
-          voiceTranscriptBox.textContent = 'सुन रहा हूँ... बोलिए...';
+          btnMic.textContent = '⏹️';
+          if (voiceTranscriptBox) {
+            voiceTranscriptBox.style.display = 'block';
+            voiceTranscriptBox.textContent = 'सुन रहा हूँ... बोलिए...';
+          }
 
           this.voiceManager.startListening(
             // On result
             (transcript, isFinal, parsedData, audioDataUrl) => {
-              voiceTranscriptBox.textContent = `"${transcript}"`;
+              if (voiceTranscriptBox) voiceTranscriptBox.textContent = `"${transcript}"`;
+              if (quickEntryInput) quickEntryInput.value = transcript;
               if (isFinal) {
                 btnMic.classList.remove('recording');
+                btnMic.textContent = '🎙️';
                 if (parsedData) {
-                  // Pre-fill modal with extracted information
                   parsedData.audioDataUrl = audioDataUrl;
                   this.openAddTransactionModal(parsedData);
                 }
@@ -2621,11 +2658,35 @@ class App {
               if (voiceStatus) voiceStatus.textContent = msg;
               if (!isListening) {
                 btnMic.classList.remove('recording');
+                btnMic.textContent = '🎙️';
               }
             }
           );
         }
       });
+    }
+
+    // Firebase Dev Config Toggle (5 taps on Firebase title to reveal API config)
+    let fbDevTapCount = 0;
+    let fbDevTapTimer = null;
+    const fbStatusBadge = document.getElementById('firebaseStatusBadge');
+    const fbDevConfig = document.getElementById('firebaseDevConfig');
+    if (fbStatusBadge && fbDevConfig) {
+      fbStatusBadge.addEventListener('click', () => {
+        fbDevTapCount++;
+        if (fbDevTapTimer) clearTimeout(fbDevTapTimer);
+        fbDevTapTimer = setTimeout(() => { fbDevTapCount = 0; }, 2000);
+        if (fbDevTapCount >= 5) {
+          fbDevConfig.style.display = fbDevConfig.style.display === 'none' ? 'block' : 'none';
+          fbDevTapCount = 0;
+        }
+      });
+    }
+
+    // Auto-hide Clear Demo Section if data is already clean
+    const clearDemoSection = document.getElementById('clearDemoSection');
+    if (clearDemoSection && this.store.data.isCleanStarted) {
+      clearDemoSection.style.display = 'none';
     }
   }
 
