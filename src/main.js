@@ -22,6 +22,24 @@ function getTradeIcon(icon) {
   return ICON_MAP[icon] || icon;
 }
 
+function getPhoneDialerHref(phone) {
+  if (!phone) return '#';
+  const cleaned = String(phone).replace(/[^\d+]/g, '');
+  return `tel:${cleaned}`;
+}
+
+function getWhatsAppUrl(phone, text = '') {
+  if (!phone) return '#';
+  let digits = String(phone).replace(/[^0-9]/g, '');
+  if (digits.length === 11 && digits.startsWith('0')) {
+    digits = '91' + digits.slice(1);
+  } else if (digits.length === 10) {
+    digits = '91' + digits;
+  }
+  const query = text ? `?text=${encodeURIComponent(text)}` : '';
+  return `https://wa.me/${digits}${query}`;
+}
+
 class App {
   constructor() {
     this.store = store;
@@ -431,8 +449,8 @@ class App {
         const contactPills = worker.phone
           ? `
             <span class="contact-quick-pills">
-              <a href="tel:${worker.phone}" class="btn-contact-pill btn-pill-call" title="कॉल करें">📞 ${worker.phone}</a>
-              <a href="https://wa.me/91${worker.phone.replace(/[^0-9]/g, '')}" target="_blank" class="btn-contact-pill btn-pill-wa" title="व्हाट्सएप">💬 चैट</a>
+              <a href="${getPhoneDialerHref(worker.phone)}" class="btn-contact-pill btn-pill-call" title="कॉल करें">📞 ${worker.phone}</a>
+              <a href="${getWhatsAppUrl(worker.phone)}" target="_blank" class="btn-contact-pill btn-pill-wa" title="व्हाट्सएप">💬 चैट</a>
             </span>
           `
           : '';
@@ -719,7 +737,7 @@ class App {
           : `<div class="worker-avatar" style="width: 32px; height: 32px; border-radius: 8px; font-size: 0.8rem;">${initials}</div>`;
 
         const contactPills = w.phone
-          ? `<a href="tel:${w.phone}" style="text-decoration:none; margin-left: 4px;" title="कॉल करें">📞</a> <a href="https://wa.me/91${w.phone.replace(/[^0-9]/g, '')}" target="_blank" style="text-decoration:none; margin-left: 2px;" title="व्हाट्सएप">💬</a>`
+          ? `<a href="${getPhoneDialerHref(w.phone)}" style="text-decoration:none; margin-left: 4px;" title="कॉल करें">📞</a> <a href="${getWhatsAppUrl(w.phone)}" target="_blank" style="text-decoration:none; margin-left: 2px;" title="व्हाट्सएप">💬</a>`
           : '';
 
         const contractBadge = ledger.isTheka
@@ -1593,7 +1611,7 @@ class App {
         const workerId = document.getElementById('editWorkerId').value;
         const name = document.getElementById('editWorkerName').value;
         const tradeId = document.getElementById('editWorkerTrade').value;
-        const phone = document.getElementById('editWorkerPhone').value;
+        const phone = (document.getElementById('editWorkerPhone').value || '').trim();
         const isTheka = this.editWorkerContract === 'theka';
         const dailyRate = !isTheka ? (Number(document.getElementById('editWorkerDailyRate').value) || 0) : 0;
         const thekaAmount = isTheka ? (Number(document.getElementById('editWorkerThekaAmount').value) || 0) : 0;
@@ -2055,7 +2073,7 @@ class App {
         const dailyRate = this.modalContractType === 'dihadi' ? (Number(document.getElementById('workerDailyRate').value) || 0) : 0;
         const thekaAmount = this.modalContractType === 'theka' ? (Number(document.getElementById('workerThekaAmount').value) || 0) : 0;
         const thekaDescription = document.getElementById('workerThekaDesc') ? document.getElementById('workerThekaDesc').value : '';
-        const phone = document.getElementById('workerPhone').value;
+        const phone = (document.getElementById('workerPhone').value || '').trim();
 
         this.store.addWorker({
           name,
@@ -2942,9 +2960,9 @@ class App {
     msg += `\n_यह हिसाब 'श्रम व साइट डायरी' ऐप से जारी किया गया है।_\n`;
 
     const cleanPhone = (worker.phone || '').replace(/[^0-9]/g, '');
-    const encoded = encodeURIComponent(msg);
-    if (cleanPhone && cleanPhone.length === 10) {
-      window.open(`https://wa.me/91${cleanPhone}?text=${encoded}`, '_blank');
+    const waUrl = getWhatsAppUrl(worker.phone, msg);
+    if (cleanPhone && cleanPhone.length >= 10) {
+      window.open(waUrl, '_blank');
     } else {
       navigator.clipboard.writeText(msg).then(() => {
         alert('कारीगर का मोबाइल नंबर नहीं है, इसलिए पूरा हिसाब क्लिपबोर्ड पर कॉपी कर लिया गया है!\n\nआप इसे किसी भी व्हाट्सएप चैट में पेस्ट कर सकते हैं।');
