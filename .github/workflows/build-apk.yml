@@ -24,7 +24,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: Install dependencies
@@ -54,8 +54,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: v1.0.0
-          name: "Shram & Site Diary v1.0.0 APK"
+          tag_name: v1.0.${{ github.run_number }}
+          name: "Shram & Site Diary v1.0.${{ github.run_number }} APK"
           body: "Android APK for Shram & Site Diary App. Download app-debug.apk directly to your Android device."
           draft: false
           prerelease: false

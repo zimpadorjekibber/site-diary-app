@@ -1606,10 +1606,15 @@ class App {
     // Submit Edit Worker Form
     const formEditWorker = document.getElementById('formEditWorker');
     if (formEditWorker) {
+      formEditWorker.noValidate = true;
       formEditWorker.addEventListener('submit', (e) => {
         e.preventDefault();
         const workerId = document.getElementById('editWorkerId').value;
-        const name = document.getElementById('editWorkerName').value;
+        const name = (document.getElementById('editWorkerName').value || '').trim();
+        if (!name) {
+          alert('कृपया कारीगर का नाम दर्ज करें!');
+          return;
+        }
         const tradeId = document.getElementById('editWorkerTrade').value;
         const phone = (document.getElementById('editWorkerPhone').value || '').trim();
         const isTheka = this.editWorkerContract === 'theka';
@@ -2066,9 +2071,14 @@ class App {
     // Form Add Worker Submit
     const formWorker = document.getElementById('formAddWorker');
     if (formWorker) {
+      formWorker.noValidate = true;
       formWorker.addEventListener('submit', (e) => {
         e.preventDefault();
-        const name = document.getElementById('workerNameInput').value;
+        const name = (document.getElementById('workerNameInput').value || '').trim();
+        if (!name) {
+          alert('कृपया कारीगर का नाम दर्ज करें!');
+          return;
+        }
         const tradeId = document.getElementById('workerTradeSelect').value;
         const dailyRate = this.modalContractType === 'dihadi' ? (Number(document.getElementById('workerDailyRate').value) || 0) : 0;
         const thekaAmount = this.modalContractType === 'theka' ? (Number(document.getElementById('workerThekaAmount').value) || 0) : 0;
@@ -3125,10 +3135,22 @@ class App {
 window.addEventListener('DOMContentLoaded', () => {
   new App();
 
-  // Register Service Worker for Offline & PWA support
+  // Clear any pattern attributes globally to prevent any browser format errors
+  const clearPatterns = () => {
+    document.querySelectorAll('input[pattern]').forEach(el => el.removeAttribute('pattern'));
+    const p1 = document.getElementById('workerPhone');
+    if (p1) p1.removeAttribute('pattern');
+    const p2 = document.getElementById('editWorkerPhone');
+    if (p2) p2.removeAttribute('pattern');
+  };
+  clearPatterns();
+  setInterval(clearPatterns, 1000);
+
+  // Register Service Worker for Offline & PWA support with auto-update
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').then((reg) => {
+    navigator.serviceWorker.register('./sw.js?v=4').then((reg) => {
       console.log('Site Diary Service Worker registered:', reg.scope);
+      reg.update();
     }).catch((err) => {
       console.log('Service Worker registration failed:', err);
     });
