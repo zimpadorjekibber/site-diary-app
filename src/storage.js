@@ -31,6 +31,16 @@ function getTodayString() {
   return `${year}-${month}-${day}`;
 }
 
+const DEFAULT_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBWCY6fp7P1i5ubqG_OXV74Aq9fGeyrzOQ",
+  authDomain: "khalen-dairy.firebaseapp.com",
+  projectId: "khalen-dairy",
+  storageBucket: "khalen-dairy.firebasestorage.app",
+  messagingSenderId: "54398896553",
+  appId: "1:54398896553:web:f282e56dd060a624f35cb8",
+  measurementId: "G-XE1YCNYJRB"
+};
+
 const DEFAULT_SETTINGS = {
   eveningReminderTime: '19:30', // 7:30 PM
   reminderEnabled: true,
@@ -38,7 +48,11 @@ const DEFAULT_SETTINGS = {
   currency: '₹',
   language: 'hi-IN', // for speech recognition
   cloudSyncKey: '',
-  lastCloudSync: null
+  lastCloudSync: null,
+  firebaseConfig: DEFAULT_FIREBASE_CONFIG,
+  firebaseSiteId: 'khalen-dairy',
+  firebaseAutoSync: true,
+  lastFirebaseSync: null
 };
 
 // Seed initial sample transactions for today to give the user immediate interactive context
@@ -165,6 +179,13 @@ export class Store {
           // If existing haziri has less than 5 dates and not clean-started, merge with seed
           if (!parsed.isCleanStarted && (!parsed.haziri || Object.keys(parsed.haziri).length < 5)) {
             parsed.haziri = { ...getInitialSeedHaziri(), ...(parsed.haziri || {}) };
+            this.save(parsed);
+          }
+          parsed.settings = { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) };
+          if (!parsed.settings.firebaseConfig || !parsed.settings.firebaseConfig.apiKey) {
+            parsed.settings.firebaseConfig = DEFAULT_FIREBASE_CONFIG;
+            parsed.settings.firebaseSiteId = 'khalen-dairy';
+            parsed.settings.firebaseAutoSync = true;
             this.save(parsed);
           }
           return parsed;
