@@ -14,17 +14,10 @@ export const translations = {
     quickEntryBtn: 'जोड़ें ➔',
     voiceListening: 'आपकी आवाज़ सुनी जा रही है...',
 
-    // Quick action tiles
-    tileAddWorker: '+ नया कारीगर',
-    tileAddWorkerSub: 'मिस्त्री / हेल्पर जोड़ें',
-    tileCash: 'नकद / पेशगी',
-    tileCashSub: 'व्यक्तिगत एडवांस',
-    tileRation: 'ग्रुप राशन',
-    tileRationSub: 'आटा, चावल, सिलेंडर',
-    tileRecharge: 'मोबाइल रिचार्ज',
-    tileRechargeSub: 'कारीगर का रिचार्ज',
-    tileAddTrade: '+ नया ट्रेड',
-    tileAddTradeSub: 'श्रेणी / ग्रुप जोड़ें',
+    // Daily Priority Actions
+    actionTakeHaziri: 'आज की हाजिरी लगाएं',
+    actionCashAdvance: 'नकद पेशगी / खर्च',
+    actionCashAdvanceSub: 'एडवांस या भुगतान लिखें +',
 
     // Nav tabs
     tabTimeline: 'लेन-देन',
@@ -99,17 +92,10 @@ export const translations = {
     quickEntryBtn: 'Add ➔',
     voiceListening: 'Listening to your voice...',
 
-    // Quick action tiles
-    tileAddWorker: '+ New Worker',
-    tileAddWorkerSub: 'Add Mistri / Helper',
-    tileCash: 'Cash / Advance',
-    tileCashSub: 'Individual Advance',
-    tileRation: 'Group Ration',
-    tileRationSub: 'Flour, Rice, Cylinder',
-    tileRecharge: 'Mobile Recharge',
-    tileRechargeSub: 'Worker Recharge',
-    tileAddTrade: '+ New Trade',
-    tileAddTradeSub: 'Add Category / Group',
+    // Daily Priority Actions
+    actionTakeHaziri: "Mark Today's Attendance",
+    actionCashAdvance: 'Cash Advance / Expense',
+    actionCashAdvanceSub: 'Log advance or expense +',
 
     // Nav tabs
     tabTimeline: 'Timeline',

@@ -426,8 +426,105 @@ body {
 }
 
 /* ===================================================
-   4 PRIMARY ACTION TILES (Clean, Modern 2x2 on mobile)
+   DAILY SITE PRIORITY ACTIONS (Compact & Contractor-Focused)
 =================================================== */
+.daily-site-actions-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.action-bar-haziri-btn {
+  flex: 1.35;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(217, 119, 6, 0.1));
+  border: 1.5px solid rgba(245, 158, 11, 0.45);
+  border-radius: var(--radius-md);
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.12);
+}
+
+.action-bar-haziri-btn:hover {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.28), rgba(217, 119, 6, 0.16));
+  border-color: var(--amber-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.2);
+}
+
+.action-bar-haziri-btn:active {
+  transform: scale(0.98);
+}
+
+.action-bar-cash-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.16), rgba(5, 150, 105, 0.08));
+  border: 1.5px solid rgba(16, 185, 129, 0.35);
+  border-radius: var(--radius-md);
+  color: #fff;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.1);
+}
+
+.action-bar-cash-btn:hover {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.24), rgba(5, 150, 105, 0.12));
+  border-color: #10b981;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.18);
+}
+
+.action-bar-cash-btn:active {
+  transform: scale(0.98);
+}
+
+.action-btn-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.action-btn-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.action-btn-text strong {
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.action-bar-haziri-btn .action-btn-text strong {
+  color: var(--amber-light);
+}
+
+.action-bar-cash-btn .action-btn-text strong {
+  color: #34d399;
+}
+
+.action-btn-text small {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .primary-actions-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);

@@ -44,7 +44,7 @@ function getWhatsAppUrl(phone, text = '') {
 class App {
   constructor() {
     this.store = store;
-    this.currentTab = 'tab-timeline';
+    this.currentTab = 'tab-haziri'; // Daily Attendance is #1 contractor priority
     this.activeFilterType = 'all';
     this.activeFilterTrade = null;
     this.selectedHaziriDate = getTodayString();
@@ -335,6 +335,17 @@ class App {
     });
     const statHaziriEl = document.getElementById('statTodayHaziri');
     if (statHaziriEl) statHaziriEl.textContent = `${workerCount} लोग`;
+
+    // Update real-time quick summary on primary Haziri button
+    const quickSummary = document.getElementById('quickHaziriStatusSummary');
+    if (quickSummary) {
+      const allWorkers = this.store.getWorkers();
+      if (this.currentLang === 'en') {
+        quickSummary.textContent = `${workerCount} of ${allWorkers.length} present • Mark or review →`;
+      } else {
+        quickSummary.textContent = `${allWorkers.length} में से ${workerCount} उपस्थित • हाजिरी भरें या बदलें →`;
+      }
+    }
 
     // Diary status
     const isMarked = this.store.isDateMarkedInDiary(today);
@@ -1237,6 +1248,14 @@ class App {
     });
 
     // Quick Action Buttons
+    const btnJumpHaziri = document.getElementById('btnJumpToHaziri');
+    if (btnJumpHaziri) {
+      btnJumpHaziri.addEventListener('click', () => {
+        const haziriTab = document.querySelector('.nav-tab-btn[data-tab="tab-haziri"]');
+        if (haziriTab) haziriTab.click();
+      });
+    }
+
     const btnCash = document.getElementById('btnQuickCash');
     if (btnCash) btnCash.addEventListener('click', () => this.openAddTransactionModal({ type: 'cash', targetType: 'individual' }));
 

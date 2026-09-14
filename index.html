@@ -30,9 +30,6 @@
         </div>
       </div>
       <div class="header-actions">
-        <button id="btnLanguageToggle" class="header-reminder-pill" title="भाषा बदलें / Switch Language (Hindi / English)" style="padding: 6px 10px; font-size: 0.8rem; cursor: pointer; border-color: rgba(255, 255, 255, 0.25);">
-          🌐 <strong id="currentLangLabel">English</strong>
-        </button>
         <button id="btnOpenReminderSettings" class="header-reminder-pill" title="शाम का रिमाइंडर बदलें">
           <span class="bell-icon">⏰</span> <strong id="headerReminderTime">19:30</strong>
         </button>
@@ -85,11 +82,11 @@
           </div>
         </div>
 
-        <div class="overview-metric-item" id="metricCardHaziri">
+        <div class="overview-metric-item" id="metricCardHaziri" style="cursor: pointer; border: 1.5px solid rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.08);" title="आज की हाजिरी खोलें (Tap to Open Attendance)">
           <div class="metric-icon-bubble bubble-haziri">👷</div>
           <div class="metric-info">
             <span class="metric-label" data-i18n="metricHaziri">आज हाजिरी</span>
-            <strong class="metric-val" id="statTodayHaziri">0 लोग</strong>
+            <strong class="metric-val" id="statTodayHaziri" style="color: var(--amber-light);">0 लोग</strong>
           </div>
         </div>
       </div>
@@ -112,54 +109,33 @@
       <span id="voiceStatusText" style="display: none;"></span>
     </section>
 
-    <!-- 4 PRIMARY QUICK ACTION TILES -->
-    <div class="primary-actions-grid">
-      <button id="btnQuickAddWorker" class="action-tile tile-add-worker">
-        <span class="tile-icon">👷</span>
-        <div class="tile-text">
-          <strong data-i18n="tileAddWorker">+ नया कारीगर</strong>
-          <small data-i18n="tileAddWorkerSub">मिस्त्री / हेल्पर जोड़ें</small>
+    <!-- DAILY SITE PRIORITY ACTIONS (Compact & Contractor-Focused) -->
+    <div class="daily-site-actions-bar">
+      <button type="button" id="btnJumpToHaziri" class="action-bar-haziri-btn" title="आज की हाजिरी लगाएं या जांचें">
+        <span class="action-btn-icon">📋</span>
+        <div class="action-btn-text">
+          <strong data-i18n="actionTakeHaziri">आज की हाजिरी लगाएं</strong>
+          <small id="quickHaziriStatusSummary">हाजिरी दर्ज करें या देखें →</small>
         </div>
       </button>
-      <button id="btnQuickCash" class="action-tile tile-cash">
-        <span class="tile-icon">💵</span>
-        <div class="tile-text">
-          <strong data-i18n="tileCash">नकद / पेशगी</strong>
-          <small data-i18n="tileCashSub">व्यक्तिगत एडवांस</small>
-        </div>
-      </button>
-      <button id="btnQuickRation" class="action-tile tile-ration">
-        <span class="tile-icon">🍚</span>
-        <div class="tile-text">
-          <strong data-i18n="tileRation">ग्रुप राशन</strong>
-          <small data-i18n="tileRationSub">आटा, चावल, सिलेंडर</small>
-        </div>
-      </button>
-      <button id="btnQuickRecharge" class="action-tile tile-recharge">
-        <span class="tile-icon">📱</span>
-        <div class="tile-text">
-          <strong data-i18n="tileRecharge">मोबाइल रिचार्ज</strong>
-          <small data-i18n="tileRechargeSub">कारीगर का रिचार्ज</small>
-        </div>
-      </button>
-      <button id="btnQuickAddTrade" class="action-tile tile-trade">
-        <span class="tile-icon">🏷️</span>
-        <div class="tile-text">
-          <strong data-i18n="tileAddTrade">+ नया ट्रेड</strong>
-          <small data-i18n="tileAddTradeSub">श्रेणी / ग्रुप जोड़ें</small>
+      <button type="button" id="btnQuickCash" class="action-bar-cash-btn" title="नकद पेशगी या खर्च दर्ज करें">
+        <span class="action-btn-icon">💵</span>
+        <div class="action-btn-text">
+          <strong data-i18n="actionCashAdvance">नकद पेशगी / खर्च</strong>
+          <small data-i18n="actionCashAdvanceSub">एडवांस या भुगतान लिखें +</small>
         </div>
       </button>
     </div>
 
     <!-- NAVIGATION TABS (DESKTOP TOP / MOBILE FIXED BOTTOM DOCK) -->
     <nav class="nav-tabs-wrapper app-bottom-dock">
-      <button class="nav-tab-btn active" data-tab="tab-timeline">
-        <span class="nav-tab-icon">🕒</span>
-        <span class="nav-tab-label" data-i18n="tabTimeline">लेन-देन</span>
-      </button>
-      <button class="nav-tab-btn" data-tab="tab-haziri">
+      <button class="nav-tab-btn active" data-tab="tab-haziri">
         <span class="nav-tab-icon">📋</span>
         <span class="nav-tab-label" data-i18n="tabHaziri">दैनिक हाजिरी</span>
+      </button>
+      <button class="nav-tab-btn" data-tab="tab-timeline">
+        <span class="nav-tab-icon">🕒</span>
+        <span class="nav-tab-label" data-i18n="tabTimeline">लेन-देन</span>
       </button>
       <button class="nav-tab-btn" data-tab="tab-monthly">
         <span class="nav-tab-icon">📊</span>
@@ -176,7 +152,7 @@
     </nav>
 
     <!-- TAB 1: TODAY'S TIMELINE -->
-    <section id="tab-timeline" class="tab-view active">
+    <section id="tab-timeline" class="tab-view">
       <!-- Search & Date Filter Bar -->
       <div class="timeline-controls-bar">
         <div class="timeline-search-wrap">
@@ -215,7 +191,7 @@
     </section>
 
     <!-- TAB 2: DAILY HAZIRI (ATTENDANCE) REGISTER -->
-    <section id="tab-haziri" class="tab-view">
+    <section id="tab-haziri" class="tab-view active">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px;">
         <div style="display: flex; align-items: center; gap: 8px;">
           <label style="font-size: 0.9rem; font-weight: 600; color: var(--text-muted);">तारीख चुनें:</label>
@@ -486,11 +462,11 @@
           <label class="form-label">प्रकार चुनें (Transaction Type):</label>
           <div class="segmented-control" id="txTypeSwitcher" style="flex-wrap: wrap; gap: 6px;">
             <button type="button" class="segment-btn active" data-type="cash">💵 नकद / पेशगी</button>
-            <button type="button" class="segment-btn" data-type="ration">🍚 राशन</button>
-            <button type="button" class="segment-btn" data-type="recharge">📱 रिचार्ज</button>
-            <button type="button" class="segment-btn" data-type="cylinder">🔥 सिलेंडर</button>
-            <button type="button" class="segment-btn" data-type="diesel">⛽ डीजल</button>
             <button type="button" class="segment-btn" data-type="material">🧱 सामान / मटेरियल</button>
+            <button type="button" class="segment-btn" data-type="diesel">⛽ डीजल</button>
+            <button type="button" class="segment-btn" data-type="recharge">📱 रिचार्ज</button>
+            <button type="button" class="segment-btn" data-type="ration">🍚 राशन</button>
+            <button type="button" class="segment-btn" data-type="cylinder">🔥 सिलेंडर</button>
             <button type="button" class="segment-btn" data-type="other">📝 अन्य</button>
           </div>
         </div>
