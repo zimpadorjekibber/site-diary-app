@@ -284,7 +284,18 @@ export class Store {
   updateWorker(id, updates) {
     const idx = this.data.workers.findIndex(w => w.id === id);
     if (idx !== -1) {
+      const oldTradeId = this.data.workers[idx].tradeId;
       this.data.workers[idx] = { ...this.data.workers[idx], ...updates };
+
+      // If tradeId changed, also update all individual transactions for this worker so they belong to the new trade
+      if (updates.tradeId && updates.tradeId !== oldTradeId && this.data.transactions) {
+        this.data.transactions.forEach(tx => {
+          if (tx.workerId === id) {
+            tx.tradeId = updates.tradeId;
+          }
+        });
+      }
+
       this.save();
       return this.data.workers[idx];
     }

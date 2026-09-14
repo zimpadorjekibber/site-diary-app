@@ -750,13 +750,13 @@
        MODAL 4: EVENING REMINDER & SETTINGS
   =================================================== -->
   <div id="modalSettings" class="modal-overlay">
-    <div class="modal-card">
+    <div class="modal-card" style="max-height: 90vh; overflow-y: auto;">
       <div class="modal-header">
-        <h3 class="modal-title">शाम का रिमाइंडर और सेटिंग्स</h3>
+        <h3 class="modal-title">⚙️ ऐप सेटिंग्स व मास्टर प्रबंधन</h3>
         <button class="btn-close-modal" data-close-modal>&times;</button>
       </div>
       <form id="formSettings">
-        <!-- CLEAR DEMO DATA - Most Prominent at Top -->
+        <!-- 1. CLEAR DEMO DATA - Most Prominent at Top -->
         <div id="clearDemoSection" class="form-group" style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 10px; padding: 14px; margin-bottom: 18px;">
           <label class="form-label" style="color: #f87171; font-weight: 700; font-size: 0.95rem;">🧹 डमी डेटा साफ़ करें (Start Fresh):</label>
           <button type="button" id="btnClearDemoData" class="btn-secondary" style="width: 100%; border-color: rgba(239, 68, 68, 0.5); color: #f87171; font-weight: 700; padding: 12px; font-size: 0.9rem; margin-top: 6px;">
@@ -767,116 +767,184 @@
           </p>
         </div>
 
-        <div class="form-group">
-          <label class="form-label">शाम को घर पहुँचने पर डायरी याद दिलाने का समय:</label>
-          <input type="time" id="settingReminderTime" class="form-input" value="19:30" />
-          <p style="font-size: 0.78rem; color: var(--text-muted); margin-top: 4px;">
-            इस समय पर आपको नोटिफिकेशन और मधुर घंटी की आवाज से याद दिलाया जाएगा।
+        <!-- 2. WORKER MANAGEMENT (कारीगर प्रबंधन व ग्रुप बदलना) -->
+        <div class="form-group" style="background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 10px; padding: 14px; margin-bottom: 18px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+            <label class="form-label" style="color: var(--amber-light); font-weight: 700; font-size: 0.95rem; margin: 0;">
+              👷 कारीगर प्रबंधन (Manage Workers):
+            </label>
+            <button type="button" id="btnSettingsAddWorker" class="btn-primary" style="font-size: 0.8rem; padding: 6px 12px;">
+              + नया कारीगर जोड़ें
+            </button>
+          </div>
+          <p style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 10px;">
+            यदि किसी कारीगर को गलती से गलत ग्रुप में डाल दिया है (जैसे Mason को Carpenter), तो नीचे से चुनें और <strong>"सुधारें"</strong> दबाएं:
           </p>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <select id="settingsWorkerSelect" class="form-select" style="flex: 1; font-size: 0.85rem; margin: 0;">
+              <!-- Populated dynamically via JS -->
+            </select>
+            <button type="button" id="btnSettingsEditWorker" class="btn-secondary" style="font-size: 0.82rem; padding: 9px 12px; border-color: var(--amber-primary); color: var(--amber-light); font-weight: 700; white-space: nowrap;">
+              ✏️ सुधारें / ग्रुप बदलें
+            </button>
+          </div>
         </div>
 
-        <div class="form-group">
-          <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
-            <span>ब्राउज़र पुश नोटिफिकेशन (Browser Push Notification):</span>
-            <input type="checkbox" id="settingNotifToggle" checked />
+        <!-- 3. TRADE CATEGORIES (ट्रेड / श्रेणी प्रबंधन) -->
+        <div class="form-group" style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-card); border-radius: 10px; padding: 14px; margin-bottom: 18px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+            <label class="form-label" style="font-weight: 700; font-size: 0.95rem; margin: 0;">
+              🏷️ कारीगर ट्रेड / श्रेणियां (Trades):
+            </label>
+            <button type="button" id="btnSettingsAddTrade" class="btn-primary" style="font-size: 0.8rem; padding: 6px 12px;">
+              + नया ट्रेड जोड़ें
+            </button>
+          </div>
+          <p style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 8px;">
+            आपकी साइट पर सक्रिय काम के ग्रुप:
+          </p>
+          <div id="settingsTradesPills" style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+
+        <!-- 4. TRANSACTION CATEGORIES (लेन-देन के प्रकार) -->
+        <div class="form-group" style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-card); border-radius: 10px; padding: 14px; margin-bottom: 18px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+            <label class="form-label" style="font-weight: 700; font-size: 0.95rem; margin: 0;">
+              💳 लेन-देन के प्रकार (Transaction Types):
+            </label>
+            <button type="button" id="btnSettingsAddTxType" class="btn-primary" style="font-size: 0.8rem; padding: 6px 12px;">
+              + नया प्रकार जोड़ें
+            </button>
+          </div>
+          <p style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 8px;">
+            मौजूदा लेन-देन श्रेणियां:
+          </p>
+          <div id="settingsTxTypesPills" style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+
+        <!-- 5. REMINDER & SOUND SETTINGS -->
+        <div class="form-group" style="background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-card); border-radius: 10px; padding: 14px; margin-bottom: 18px;">
+          <label class="form-label" style="font-weight: 700; font-size: 0.95rem; margin-bottom: 10px;">
+            ⏰ शाम का रिमाइंडर व अलार्म (Evening Reminder):
           </label>
-          <button type="button" id="btnRequestNotifPerm" class="btn-secondary" style="font-size: 0.8rem; margin-top: 6px;">
-            🔔 नोटिफिकेशन अनुमति दें (Enable Notifications)
-          </button>
-        </div>
+          <div style="margin-bottom: 12px;">
+            <label class="form-label" style="font-size: 0.82rem; color: var(--text-muted);">डायरी याद दिलाने का समय:</label>
+            <input type="time" id="settingReminderTime" class="form-input" value="19:30" />
+          </div>
 
-        <div class="form-group">
-          <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
-            <span>मधुर घंटी की आवाज (Evening Audio Chime):</span>
-            <input type="checkbox" id="settingSoundToggle" checked />
-          </label>
-        </div>
+          <div style="margin-bottom: 10px;">
+            <label class="form-label" style="display: flex; align-items: center; justify-content: space-between; font-size: 0.84rem;">
+              <span>ब्राउज़र पुश नोटिफिकेशन:</span>
+              <input type="checkbox" id="settingNotifToggle" checked />
+            </label>
+            <button type="button" id="btnRequestNotifPerm" class="btn-secondary" style="font-size: 0.78rem; margin-top: 4px; padding: 5px 10px;">
+              🔔 नोटिफिकेशन अनुमति दें
+            </button>
+          </div>
 
-        <div style="background: rgba(245, 158, 11, 0.08); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
-          <button type="button" id="btnTestReminderNow" class="btn-secondary" style="width: 100%; border-color: var(--amber-primary); color: var(--amber-light);">
+          <div style="margin-bottom: 12px;">
+            <label class="form-label" style="display: flex; align-items: center; justify-content: space-between; font-size: 0.84rem;">
+              <span>मधुर घंटी की आवाज (Audio Chime):</span>
+              <input type="checkbox" id="settingSoundToggle" checked />
+            </label>
+          </div>
+
+          <button type="button" id="btnTestReminderNow" class="btn-secondary" style="width: 100%; border-color: var(--amber-primary); color: var(--amber-light); font-size: 0.82rem; padding: 8px;">
             🔔 अभी टेस्ट करें (Test Reminder Chime & Alert)
           </button>
         </div>
 
-        <!-- Cloud Sync Key (Simple) -->
-        <div class="form-group" style="border-top: 1px solid var(--border-card); padding-top: 14px;">
-          <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
-            <span>☁️ क्लाउड बैकअप व मल्टी-डिवाइस सिंक:</span>
-            <span id="cloudSyncStatusBadge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; background: rgba(245, 158, 11, 0.15); color: var(--amber-light);">ऑफलाइन / लोकल</span>
-          </label>
-          <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-            <input type="text" id="settingCloudSyncKey" class="form-input" placeholder="सिंक की (जैसे: SD-ABCD-1234)" style="font-family: monospace; font-size: 0.85rem;" />
-            <button type="button" id="btnGenerateSyncKey" class="btn-secondary" style="font-size: 0.75rem; white-space: nowrap;">
-              🔑 नया Key बनाएं
-            </button>
-          </div>
-          <div style="display: flex; gap: 8px;">
-            <button type="button" id="btnPushToCloud" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: #34d399; color: #34d399; font-weight: 600;">
-              📤 क्लाउड पर सेव करें
-            </button>
-            <button type="button" id="btnPullFromCloud" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: #38bdf8; color: #38bdf8; font-weight: 600;">
-              📥 क्लाउड से लाएं
-            </button>
-          </div>
-          <p style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px;" id="cloudSyncLastTimeNote">
-            इस सिंक की (Sync Key) को किसी भी दूसरे फोन या कंप्यूटर में डालकर आप अपना पूरा डेटा तुरंत सुरक्षित ला सकते हैं।
-          </p>
-        </div>
-
-        <!-- Firebase Status Only (Config hidden behind dev toggle) -->
-        <div class="form-group" style="border-top: 1px solid var(--border-card); padding-top: 14px;">
-          <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
-            <strong style="color: #fbbf24; display: flex; align-items: center; gap: 6px;">
-              🔥 Google Firebase (लाइव डेटाबेस):
-            </strong>
-            <span id="firebaseStatusBadge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); color: var(--text-muted);">कनेक्ट नहीं है</span>
-          </label>
-          <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
-            <button type="button" id="btnPushToFirebase" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: #f59e0b; color: #f59e0b; font-weight: 700; padding: 8px 12px;">
-              📤 Firebase पर सेव करें
-            </button>
-            <button type="button" id="btnPullFromFirebase" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: #38bdf8; color: #38bdf8; font-weight: 700; padding: 8px 12px;">
-              📥 Firebase से लाएं
-            </button>
-          </div>
-          <label style="display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: var(--text-main); margin-top: 10px; cursor: pointer;">
-            <input type="checkbox" id="firebaseAutoSyncToggle" />
-            <span>🔄 हर लेन-देन व हाजिरी पर अपने आप Firebase में सिंक करें (Auto-Sync)</span>
-          </label>
-          <p style="font-size: 0.72rem; color: var(--text-dim); margin-top: 4px;" id="firebaseLastSyncNote">
-            गूगल के ऑफिशियल डेटाबेस (Firestore) पर आपका डेटा जीवनभर सुरक्षित और निजी रहता है।
-          </p>
-
-          <!-- Developer Config (hidden by default, requires 5 taps on title to open) -->
-          <div id="firebaseDevConfig" style="display: none; margin-top: 12px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 10px;">
-            <div style="margin-top: 8px;">
-              <label style="font-size: 0.76rem; color: var(--text-muted);">साइट / डायरी का नाम (Site ID):</label>
-              <input type="text" id="firebaseSiteIdInput" class="form-input" placeholder="जैसे: my-site या khalen-dairy" style="margin-bottom: 8px; font-size: 0.85rem;" />
+        <!-- 6. ADVANCED TECHNICAL / BACKUP SETTINGS (COLLAPSED BY DEFAULT) -->
+        <details id="advancedTechSettingsDetails" style="border-top: 1px solid var(--border-card); padding-top: 14px; margin-top: 16px;">
+          <summary style="font-size: 0.82rem; color: var(--text-dim); cursor: pointer; user-select: none; padding: 6px 0; font-weight: 600;">
+            🛠️ उन्नत तकनीकी सेटिंग्स (Firebase, Sync Key, JSON बैकअप) ▾
+          </summary>
+          <div style="padding-top: 12px;">
+            <!-- Cloud Sync Key -->
+            <div class="form-group" style="margin-bottom: 16px;">
+              <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
+                <span>☁️ क्लाउड बैकअप व सिंक Key:</span>
+                <span id="cloudSyncStatusBadge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; background: rgba(245, 158, 11, 0.15); color: var(--amber-light);">ऑफलाइन / लोकल</span>
+              </label>
+              <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                <input type="text" id="settingCloudSyncKey" class="form-input" placeholder="सिंक की (जैसे: SD-ABCD-1234)" style="font-family: monospace; font-size: 0.85rem;" />
+                <button type="button" id="btnGenerateSyncKey" class="btn-secondary" style="font-size: 0.75rem; white-space: nowrap;">
+                  🔑 नया Key बनाएं
+                </button>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button type="button" id="btnPushToCloud" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: #34d399; color: #34d399; font-weight: 600;">
+                  📤 क्लाउड पर सेव करें
+                </button>
+                <button type="button" id="btnPullFromCloud" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: #38bdf8; color: #38bdf8; font-weight: 600;">
+                  📥 क्लाउड से लाएं
+                </button>
+              </div>
+              <p style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px;" id="cloudSyncLastTimeNote">
+                इस सिंक की (Sync Key) को किसी भी दूसरे फोन या कंप्यूटर में डालकर आप अपना पूरा डेटा तुरंत ला सकते हैं।
+              </p>
             </div>
-            <div>
-              <label style="font-size: 0.76rem; color: var(--text-muted);">Firebase Web Config (JSON पेस्ट करें):</label>
-              <textarea id="firebaseConfigInput" class="form-textarea" rows="3" placeholder='{"apiKey": "AIza...", "projectId": "my-diary-...", "appId": "..."}' style="font-family: monospace; font-size: 0.75rem; margin-bottom: 8px;"></textarea>
+
+            <!-- Firebase Status & Config -->
+            <div class="form-group" style="margin-bottom: 16px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 12px;">
+              <label class="form-label" style="display: flex; align-items: center; justify-content: space-between;">
+                <strong style="color: #fbbf24; display: flex; align-items: center; gap: 6px;">
+                  🔥 Google Firebase (डेटाबेस):
+                </strong>
+                <span id="firebaseStatusBadge" style="font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.08); color: var(--text-muted);">कनेक्ट नहीं है</span>
+              </label>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px;">
+                <button type="button" id="btnPushToFirebase" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: #f59e0b; color: #f59e0b; font-weight: 700; padding: 8px 12px;">
+                  📤 Firebase पर सेव करें
+                </button>
+                <button type="button" id="btnPullFromFirebase" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: #38bdf8; color: #38bdf8; font-weight: 700; padding: 8px 12px;">
+                  📥 Firebase से लाएं
+                </button>
+              </div>
+              <label style="display: flex; align-items: center; gap: 8px; font-size: 0.78rem; color: var(--text-main); margin-top: 10px; cursor: pointer;">
+                <input type="checkbox" id="firebaseAutoSyncToggle" />
+                <span>🔄 हर लेन-देन व हाजिरी पर अपने आप Firebase में सिंक करें</span>
+              </label>
+              <p style="font-size: 0.72rem; color: var(--text-dim); margin-top: 4px;" id="firebaseLastSyncNote">
+                गूगल के ऑफिशियल डेटाबेस (Firestore) पर डेटा बैकअप रहता है।
+              </p>
+
+              <div id="firebaseDevConfig" style="display: none; margin-top: 12px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 10px;">
+                <div style="margin-top: 8px;">
+                  <label style="font-size: 0.76rem; color: var(--text-muted);">साइट ID:</label>
+                  <input type="text" id="firebaseSiteIdInput" class="form-input" placeholder="जैसे: khalen-dairy" style="margin-bottom: 8px; font-size: 0.85rem;" />
+                </div>
+                <div>
+                  <label style="font-size: 0.76rem; color: var(--text-muted);">Firebase Config JSON:</label>
+                  <textarea id="firebaseConfigInput" class="form-textarea" rows="3" style="font-family: monospace; font-size: 0.75rem; margin-bottom: 8px;"></textarea>
+                </div>
+                <button type="button" id="btnConnectFirebase" class="btn-primary" style="width: 100%; font-size: 0.8rem; padding: 8px 12px;">
+                  🔥 टेस्ट व कनेक्ट करें
+                </button>
+              </div>
             </div>
-            <button type="button" id="btnConnectFirebase" class="btn-primary" style="width: 100%; font-size: 0.8rem; padding: 8px 12px;">
-              🔥 टेस्ट व कनेक्ट करें
-            </button>
-          </div>
-        </div>
 
-        <div class="form-group" style="border-top: 1px solid var(--border-card); padding-top: 14px;">
-          <label class="form-label">लोकल फ़ाइल बैकअप (JSON Backup):</label>
-          <div style="display: flex; gap: 8px;">
-            <button type="button" id="btnExportData" class="btn-secondary" style="flex: 1; font-size: 0.8rem;">
-              📥 बैकअप डाउनलोड (Export)
-            </button>
-            <button type="button" id="btnImportData" class="btn-secondary" style="flex: 1; font-size: 0.8rem;">
-              📤 बैकअप रीस्टोर (Import)
-            </button>
-            <input type="file" id="fileImportInput" accept=".json" style="display: none;" />
+            <!-- Local JSON backup -->
+            <div class="form-group" style="border-top: 1px solid rgba(255,255,255,0.06); padding-top: 12px;">
+              <label class="form-label">लोकल फ़ाइल बैकअप (JSON Backup):</label>
+              <div style="display: flex; gap: 8px;">
+                <button type="button" id="btnExportData" class="btn-secondary" style="flex: 1; font-size: 0.8rem;">
+                  📥 बैकअप डाउनलोड
+                </button>
+                <button type="button" id="btnImportData" class="btn-secondary" style="flex: 1; font-size: 0.8rem;">
+                  📤 बैकअप रीस्टोर
+                </button>
+                <input type="file" id="fileImportInput" accept=".json" style="display: none;" />
+              </div>
+            </div>
           </div>
-        </div>
+        </details>
 
-        <div class="modal-actions">
+        <div class="modal-actions" style="margin-top: 20px;">
           <button type="button" class="btn-secondary" data-close-modal>बंद करें</button>
           <button type="submit" class="btn-primary">सेटिंग्स सेव करें</button>
         </div>

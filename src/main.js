@@ -474,6 +474,9 @@ class App {
                     ${worker.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'}
                   </span>
                   ${contractBadge}
+                  <button type="button" class="btn-worker-mini-edit" data-open-edit-worker="${worker.id}" title="कारीगर में सुधार करें (ट्रेड, नाम, दर बदलें)" style="background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 4px; color: var(--amber-light); font-size: 0.74rem; font-weight: 600; padding: 2px 7px; cursor: pointer; margin-left: 6px; display: inline-flex; align-items: center; gap: 2px;">
+                    ✏️ सुधारें
+                  </button>
                 </div>
                 <div class="worker-rate-line">
                   ${rateOrThekaLine}
@@ -619,8 +622,10 @@ class App {
             <div style="display: flex; align-items: center; gap: 8px;">
               ${avatarThumb}
               <div>
-                <div style="font-weight: 700; color: #fff; font-size: 0.82rem; white-space: nowrap;">
-                  ${w.name} ${contractBadge}
+                <div style="font-weight: 700; color: #fff; font-size: 0.82rem; white-space: nowrap; display: flex; align-items: center; gap: 4px;">
+                  <span>${w.name}</span>
+                  ${contractBadge}
+                  <button type="button" data-open-edit-worker="${w.id}" title="कारीगर में सुधार करें (ट्रेड, नाम बदलें)" style="background: none; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; color: var(--amber-light); cursor: pointer; font-size: 0.72rem; padding: 1px 4px;">✏️</button>
                 </div>
                 <div style="font-size: 0.72rem; color: var(--text-dim);">
                   ${getTradeIcon(row.trade.icon)} ${row.trade.name} (${w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'})
@@ -2371,6 +2376,57 @@ class App {
       document.getElementById('settingNotifToggle').checked = s.reminderEnabled !== false;
       document.getElementById('settingSoundToggle').checked = s.soundEnabled !== false;
 
+      // 1. Populate Worker select in Settings
+      const workerSelect = document.getElementById('settingsWorkerSelect');
+      if (workerSelect) {
+        const workers = this.store.getWorkers();
+        if (workers.length === 0) {
+          workerSelect.innerHTML = '<option value="">(अभी कोई कारीगर नहीं है)</option>';
+        } else {
+          workerSelect.innerHTML = workers.map(w => {
+            const tr = this.store.getTrade(w.tradeId);
+            const roleText = w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर';
+            return `<option value="${w.id}">${w.name} — ${getTradeIcon(tr.icon)} ${tr.name} (${roleText})</option>`;
+          }).join('');
+        }
+      }
+
+      // 2. Populate Trades in Settings
+      const tradesPills = document.getElementById('settingsTradesPills');
+      if (tradesPills) {
+        const trades = this.store.getTrades();
+        tradesPills.innerHTML = trades.map(t => {
+          const count = this.store.getWorkers(t.id).length;
+          return `
+            <span class="filter-chip" style="cursor: default; background: rgba(255,255,255,0.06); font-size: 0.8rem; border-color: rgba(255,255,255,0.15); display: inline-flex; align-items: center; gap: 4px;">
+              ${getTradeIcon(t.icon)} ${t.name} <strong style="color: var(--amber-light); margin-left: 2px;">(${count})</strong>
+            </span>
+          `;
+        }).join('');
+      }
+
+      // 3. Populate Transaction Types in Settings
+      const txPills = document.getElementById('settingsTxTypesPills');
+      if (txPills) {
+        const builtIn = [
+          { id: 'cash', label: '💵 नकद / पेशगी' },
+          { id: 'ration', label: '🍚 राशन' },
+          { id: 'recharge', label: '📱 रिचार्ज' },
+          { id: 'cylinder', label: '🔥 सिलेंडर' },
+          { id: 'diesel', label: '⛽ डीजल' },
+          { id: 'material', label: '🧱 सामान / मटेरियल' },
+          { id: 'other', label: '📝 अन्य' }
+        ];
+        let customTypes = [];
+        try { customTypes = JSON.parse(localStorage.getItem('custom_tx_types') || '[]'); } catch(e) {}
+        const allTypes = [...builtIn, ...customTypes.map(c => ({ id: c.id, label: '🏷️ ' + c.label }))];
+        txPills.innerHTML = allTypes.map(t => `
+          <span class="filter-chip" style="cursor: default; background: rgba(255,255,255,0.06); font-size: 0.8rem; border-color: rgba(255,255,255,0.15);">
+            ${t.label}
+          </span>
+        `).join('');
+      }
+
       const syncKeyInput = document.getElementById('settingCloudSyncKey');
       if (syncKeyInput) syncKeyInput.value = s.cloudSyncKey || '';
       const badge = document.getElementById('cloudSyncStatusBadge');
@@ -2426,6 +2482,89 @@ class App {
 
     if (btnOpenSettings) btnOpenSettings.addEventListener('click', openSettings);
     if (btnOpenReminder) btnOpenReminder.addEventListener('click', openSettings);
+
+    // Settings: Worker, Trade & Transaction Type Buttons
+    const btnSettingsAddWorker = document.getElementById('btnSettingsAddWorker');
+    if (btnSettingsAddWorker) {
+      btnSettingsAddWorker.addEventListener('click', () => {
+        this.closeModals();
+        this.openAddWorkerModal();
+      });
+    }
+
+    const btnSettingsEditWorker = document.getElementById('btnSettingsEditWorker');
+    if (btnSettingsEditWorker) {
+      btnSettingsEditWorker.addEventListener('click', () => {
+        const workerId = document.getElementById('settingsWorkerSelect')?.value;
+        if (!workerId) {
+          alert('कृपया पहले कोई कारीगर चुनें!');
+          return;
+        }
+        this.closeModals();
+        this.openEditWorkerModal(workerId);
+      });
+    }
+
+    const btnSettingsAddTrade = document.getElementById('btnSettingsAddTrade');
+    if (btnSettingsAddTrade) {
+      btnSettingsAddTrade.addEventListener('click', () => {
+        this.closeModals();
+        this.openAddTradeModal('modalSettings');
+      });
+    }
+
+    const btnSettingsAddTxType = document.getElementById('btnSettingsAddTxType');
+    if (btnSettingsAddTxType) {
+      btnSettingsAddTxType.addEventListener('click', () => {
+        const name = prompt('नया लेन-देन प्रकार का नाम लिखें:\n(जैसे: बिजली बिल, चाय-पानी, दवाई, भाड़ा आदि)');
+        if (!name || !name.trim()) return;
+        const typeName = name.trim();
+        const typeId = typeName.toLowerCase().replace(/\s+/g, '_');
+
+        let customTypes = [];
+        try { customTypes = JSON.parse(localStorage.getItem('custom_tx_types') || '[]'); } catch(e) {}
+        if (!customTypes.find(t => t.id === typeId)) {
+          customTypes.push({ id: typeId, label: typeName });
+          localStorage.setItem('custom_tx_types', JSON.stringify(customTypes));
+        }
+
+        // Add to timeline filter chips if not present
+        const timelineFilters = document.getElementById('timelineFilters');
+        const btnAddFilter = document.getElementById('btnAddFilterType');
+        if (timelineFilters && btnAddFilter && !timelineFilters.querySelector(`[data-filter-type="${typeId}"]`)) {
+          const chip = document.createElement('button');
+          chip.className = 'filter-chip';
+          chip.setAttribute('data-filter-type', typeId);
+          chip.textContent = '🏷️ ' + typeName;
+          btnAddFilter.parentNode.insertBefore(chip, btnAddFilter);
+          chip.addEventListener('click', () => {
+            document.querySelectorAll('#timelineFilters .filter-chip').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            this.activeFilterType = typeId;
+            this.renderTimeline();
+          });
+        }
+
+        // Add to modal txTypeSwitcher
+        const txTypeSwitcher = document.getElementById('txTypeSwitcher');
+        if (txTypeSwitcher && !txTypeSwitcher.querySelector(`[data-type="${typeId}"]`)) {
+          const segBtn = document.createElement('button');
+          segBtn.type = 'button';
+          segBtn.className = 'segment-btn';
+          segBtn.setAttribute('data-type', typeId);
+          segBtn.textContent = '🏷️ ' + typeName;
+          txTypeSwitcher.appendChild(segBtn);
+          segBtn.addEventListener('click', () => {
+            document.querySelectorAll('#txTypeSwitcher .segment-btn').forEach(b => b.classList.remove('active'));
+            segBtn.classList.add('active');
+            this.modalTxType = typeId;
+          });
+        }
+
+        openSettings();
+        alert(`✅ नया लेन-देन प्रकार "${typeName}" जोड़ दिया गया!`);
+      });
+    }
 
     // Firebase Connect & Sync Button Handlers
     const btnConnectFb = document.getElementById('btnConnectFirebase');
