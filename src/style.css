@@ -124,9 +124,9 @@ body {
   position: sticky;
   top: 0;
   z-index: 60;
-  background: color-mix(in srgb, var(--bg-main) 88%, transparent);
-  backdrop-filter: saturate(180%) blur(16px);
-  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  /* Opaque, and no backdrop-filter — see the note on .modal-overlay. A sticky
+     blurred header is the other place the WebView leaves repaint smears. */
+  background: var(--bg-main);
 }
 
 .brand-section {
@@ -1588,8 +1588,11 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(15, 23, 42, 0.413);
-  backdrop-filter: blur(8px);
+  /* Deliberately no backdrop-filter. On the Android WebView a blurred backdrop
+     repaints incorrectly when the soft keyboard resizes the viewport, leaving a
+     white band across the form while you type. A solid scrim looks the same and
+     costs nothing. */
+  background: rgba(15, 23, 42, 0.55);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1611,16 +1614,22 @@ body {
   border-radius: var(--radius-lg);
   width: 100%;
   max-width: 520px;
+  /* dvh follows the visible viewport, so the card shrinks when the soft keyboard
+     comes up instead of extending behind it. vh is the fallback for older WebViews. */
   max-height: 90vh;
+  max-height: 90dvh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 24px;
   box-shadow: 0 20px 50px rgba(15, 23, 42, 0.385);
   transform: scale(0.95);
   transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+/* `transform: none`, not `scale(1)`: an identity transform still keeps the card
+   on its own compositing layer, which is what smears while the keyboard opens. */
 .modal-overlay.open .modal-card {
-  transform: scale(1);
+  transform: none;
 }
 
 .modal-header {

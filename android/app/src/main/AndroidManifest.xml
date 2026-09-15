@@ -9,8 +9,13 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 
+        <!-- windowSoftInputMode=adjustResize shrinks the WebView when the soft
+             keyboard appears, instead of leaving it full height behind the keys.
+             Without it the viewport never changes, so dvh units and scroll-into-view
+             both misbehave and the field being typed into can sit under the keyboard. -->
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
+            android:windowSoftInputMode="adjustResize"
             android:name=".MainActivity"
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
