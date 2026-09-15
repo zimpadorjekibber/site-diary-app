@@ -371,7 +371,10 @@ body {
 
 .overview-metrics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  /* 140px, not 104px. A tile spends ~60px on the icon, gap and padding, so at
+     104px the amount had barely 40px and "₹2,400" spilled past the edge. This
+     gives two roomy tiles on a phone instead of three cramped ones. */
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 8px;
   position: relative;
   z-index: 1;
@@ -423,6 +426,18 @@ body {
   color: #fff;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.015em;
+  /* Safety net for a figure larger than any tile: clip it rather than let it
+     bleed over the tile's edge. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Very narrow phones: trim the fixed overhead so the number keeps its room. */
+@media (max-width: 380px) {
+  .overview-metric-item { padding: 10px 9px; gap: 7px; }
+  .metric-icon-bubble { width: 28px; height: 28px; font-size: 0.85rem; }
+  .metric-val { font-size: 0.92rem; }
 }
 
 /* ===================================================
@@ -1921,10 +1936,11 @@ body {
     font-size: 1.85rem;
   }
 
+  /* No fixed column count here. Forcing three columns onto a 360px phone left
+     each tile ~93px, which is where "₹2,400" started spilling over the edge —
+     the auto-fit rule above sizes them from the space actually available. */
   .overview-metrics-grid {
-    grid-template-columns: repeat(3, 1fr);
     gap: 6px;
-    padding: 8px;
   }
 
   .overview-metric-item {
