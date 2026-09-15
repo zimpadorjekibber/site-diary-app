@@ -20,17 +20,6 @@ const DEFAULT_TRADES = [
     isSupplier: true, supplierKind: 'machine' }
 ];
 
-const DEFAULT_WORKERS = [
-  { id: 'w1', name: 'Ramesh Sharma', tradeId: 'carpenter', role: 'mistri', contractType: 'dihadi', dailyRate: 900, phone: '9876543210' },
-  { id: 'w2', name: 'Mohan Lal', tradeId: 'carpenter', role: 'helper', contractType: 'dihadi', dailyRate: 550, phone: '9876543211' },
-  { id: 'w3', name: 'Sonu', tradeId: 'carpenter', role: 'helper', contractType: 'dihadi', dailyRate: 500, phone: '' },
-  { id: 'w4', name: 'Vikram Singh', tradeId: 'mason', role: 'mistri', contractType: 'dihadi', dailyRate: 950, phone: '9876543212' },
-  { id: 'w5', name: 'Ramu Paswan', tradeId: 'mason', role: 'helper', contractType: 'dihadi', dailyRate: 550, phone: '9876543213' },
-  { id: 'w6', name: 'Dinesh Plumber (ठेका)', tradeId: 'plumber', role: 'mistri', contractType: 'theka', dailyRate: 0, thekaAmount: 35000, thekaDescription: 'पूरे घर का नल व बाथरूम फिटिंग ठेका', phone: '9876543214' },
-  { id: 'w7', name: 'Ajay Painter', tradeId: 'painter', role: 'mistri', contractType: 'dihadi', dailyRate: 850, phone: '9876543215' },
-  { id: 'w8', name: 'Bablu', tradeId: 'painter', role: 'helper', contractType: 'dihadi', dailyRate: 500, phone: '' }
-];
-
 function getTodayString() {
   const d = new Date();
   const year = d.getFullYear();
@@ -271,115 +260,7 @@ export function getTxTypeLabel(typeId, lang = 'hi') {
 }
 
 // Seed initial sample transactions for today to give the user immediate interactive context
-function getInitialSeedTransactions() {
-  const today = getTodayString();
-  return [
-    {
-      id: 'tx_1',
-      date: today,
-      time: '09:30',
-      type: 'cash',
-      targetType: 'individual', // 'individual' or 'group'
-      tradeId: 'carpenter',
-      workerId: 'w1', // Ramesh Mistri
-      amount: 500,
-      subType: 'advance',
-      note: 'सुबह काम शुरू करने से पहले पेशगी (Advance)'
-    },
-    {
-      id: 'tx_2',
-      date: today,
-      time: '11:15',
-      type: 'ration',
-      targetType: 'group', // Entire group
-      tradeId: 'carpenter',
-      rationItem: 'Atta (आटा)',
-      quantity: '10 kg',
-      amount: 380,
-      note: 'बढ़ई ग्रुप के लिए 10 किलो आटा'
-    },
-    {
-      id: 'tx_3',
-      date: today,
-      time: '13:45',
-      type: 'recharge',
-      targetType: 'individual',
-      tradeId: 'mason',
-      workerId: 'w5', // Ramu Helper
-      amount: 299,
-      note: 'रामू हेल्पर का 28 दिन का जिओ रिचार्ज'
-    },
-    {
-      id: 'tx_4',
-      date: today,
-      time: '15:20',
-      type: 'ration',
-      targetType: 'group',
-      tradeId: 'mason',
-      rationItem: 'Gas Cylinder (गैस सिलेंडर)',
-      quantity: '1 Cylinder',
-      amount: 920,
-      note: 'राजमिस्त्री ग्रुप के चूल्हे के लिए गैस सिलेंडर'
-    }
-  ];
-}
-
 // Initial attendance for past days of the month to showcase monthly sheet
-function getInitialSeedHaziri() {
-  const today = getTodayString();
-  const d = new Date();
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const haziriMap = {};
-
-  // Populate days 1 to current day
-  const currentDay = d.getDate();
-  for (let day = 1; day <= currentDay; day++) {
-    const dayStr = String(day).padStart(2, '0');
-    const dateKey = `${year}-${month}-${dayStr}`;
-    const dayOfWeek = new Date(year, d.getMonth(), day).getDay();
-
-    if (dayOfWeek === 0) {
-      // Sunday - Chhutti / Absent
-      haziriMap[dateKey] = {
-        'w1': { status: 0, otHours: 0 },
-        'w2': { status: 0, otHours: 0 },
-        'w3': { status: 0, otHours: 0 },
-        'w4': { status: 0, otHours: 0 },
-        'w5': { status: 0, otHours: 0 },
-        'w6': { status: 0, otHours: 0 }, // Theka absent
-        'w7': { status: 0, otHours: 0 },
-        'w8': { status: 0, otHours: 0 }
-      };
-    } else {
-      haziriMap[dateKey] = {
-        'w1': { status: 1.0, otHours: day % 4 === 0 ? 2 : 0 },
-        'w2': { status: 1.0, otHours: 0 },
-        'w3': { status: day % 3 === 0 ? 0.5 : 1.0, otHours: 0 },
-        'w4': { status: 1.0, otHours: day % 5 === 0 ? 1 : 0 },
-        'w5': { status: day % 6 === 0 ? 0 : 1.0, otHours: 0 },
-        'w6': { status: day % 4 === 0 ? 0 : 1.0, otHours: 0 }, // Theka presence/absence
-        'w7': { status: 1.0, otHours: 0 },
-        'w8': { status: day % 5 === 0 ? 0 : 1.0, otHours: 0 }
-      };
-    }
-  }
-
-  // Ensure today has specific entries
-  haziriMap[today] = {
-    'w1': { status: 1.0, otHours: 0 },
-    'w2': { status: 1.0, otHours: 0 },
-    'w3': { status: 0.5, otHours: 0 },
-    'w4': { status: 1.0, otHours: 1 },
-    'w5': { status: 1.0, otHours: 0 },
-    'w6': { status: 1.0, otHours: 0 },
-    'w7': { status: 1.0, otHours: 0 },
-    'w8': { status: 0, otHours: 0 }
-  };
-
-  return haziriMap;
-}
-
 /* Anything logged against a named worker counts as money that worker received —
    cash, recharge, or a bag of cement bought in their name. The old code only
    counted cash+recharge in the ledger but counted everything in the muster roll,
@@ -852,8 +733,13 @@ export class Store {
       console.warn('Failed to load from storage, using defaults:', e);
     }
 
-    // A first run starts with one job holding the sample data, so the app has
-    // something to show before anything real is entered.
+    /* A first run starts EMPTY — trades but no people.
+
+       It used to seed eight invented workers with invented wages, advances
+       and attendance. On a contractor's real phone those read as records, not
+       as a demo: this app's owner twice found names he did not recognise in
+       his own ledger, and once went looking for them in his cloud backup.
+       Fake money in a book about real money is worse than an empty book. */
     const firstProject = {
       id: makeId('proj'),
       name: 'मेरा काम',
@@ -861,9 +747,9 @@ export class Store {
       note: '',
       createdAt: Date.now(),
       trades: DEFAULT_TRADES.map(t => ({ ...t })),
-      workers: DEFAULT_WORKERS,
-      transactions: getInitialSeedTransactions(),
-      haziri: getInitialSeedHaziri(),
+      workers: [],
+      transactions: [],
+      haziri: {},
       haziriMeta: {},
       diaryNotedDates: {},
       isCleanStarted: false
