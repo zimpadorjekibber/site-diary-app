@@ -68,14 +68,23 @@ function resolveWorker(store, nameOrId) {
   return null;
 }
 
+/** How a worker's role should read. Stored, a role is only ever mistri or
+    helper, with holding the contract kept as a separate flag — but a man shown
+    as "Mistri" beside a seven-lakh contract looks like a mistake, so every
+    place that reports a role goes through here rather than through w.role. */
+function roleLabel(w) {
+  if (!w.isThekedar) return w.role === 'mistri' ? 'Mistri' : 'Helper';
+  return w.worksHimself === false
+    ? 'Thekedar (does not work on site)'
+    : 'Thekedar (works on site too)';
+}
+
 function describeWorker(store, w) {
   const trade = store.getTrade(w.tradeId);
   /* The stored role is only ever mistri or helper; holding the contract is a
      separate flag. But a man who reads "Mistri" next to a seven-lakh contract
      looks like a day labourer with a typo, so say what he actually is. */
-  const role = w.isThekedar
-    ? (w.worksHimself === false ? 'Thekedar (does not work on site)' : 'Thekedar (works on site too)')
-    : (w.role === 'mistri' ? 'Mistri' : 'Helper');
+  const role = roleLabel(w);
   const base = {
     id: w.id,
     name: w.name,
@@ -412,7 +421,7 @@ const WRITE_TOOLS = [
       properties: {
         name: { type: 'string', description: "The worker's name." },
         trade: { type: 'string', description: 'Trade id or name, e.g. carpenter, mason.' },
-        role: { type: 'string', enum: ['mistri', 'helper'], description: 'mistri (craftsman) or helper.' },
+        role: { type: 'string', enum: ['mistri', 'helper', 'thekedar'], description: "mistri (craftsman), helper, or thekedar — 'thekedar' is the same as sending isThekedar: true." },
         contractType: { type: 'string', enum: ['dihadi', 'theka'], description: 'Daily wage or contract. Default dihadi.' },
         dailyRate: { type: 'number', description: 'Rupees per day. Required for dihadi.' },
         isThekedar: { type: 'boolean', description: 'True only for the person who holds the contract.' },
@@ -501,7 +510,7 @@ const WRITE_TOOLS = [
         thekaUnit: { type: 'string', description: 'Unit for that rate, e.g. "square ft".' },
         phone: { type: 'string', description: 'New mobile number.' },
         trade: { type: 'string', description: 'Move to a different trade.' },
-        role: { type: 'string', enum: ['mistri', 'helper'], description: 'Change role.' },
+        role: { type: 'string', enum: ['mistri', 'helper', 'thekedar'], description: "Change role. 'thekedar' also marks them as holding the contract." },
         thekaQuantity: { type: 'number', description: 'Measured quantity for a rate contract.' },
         thekaAmount: { type: 'number', description: 'New lump-sum contract value.' },
         thekaDescription: { type: 'string', description: 'What the contract covers.' }
@@ -547,7 +556,12 @@ const writeHandlers = {
       // Saying someone holds the contract says the work is on contract. Making
       // the caller spell out both meant a thekedar sent with only the flag fell
       // through to the daily-wage branch and was refused for having no rate.
-      const isThekedar = args.isThekedar === true;
+      // "Thekedar" is how people name the job, so accept it where a role goes
+      // as well as through the flag. Underneath he is still a mistri who holds
+      // the contract; the two are separate fields because a helper can hold one
+      // too, but nobody should have to know that to add him.
+      const roleIsThekedar = args.role === 'thekedar';
+      const isThekedar = args.isThekedar === true || roleIsThekedar;
       const isTheka = isThekedar || args.contractType === 'theka';
 
       // A daily-wage worker without a rate earns nothing, which silently
@@ -563,7 +577,7 @@ const writeHandlers = {
       const worker = store.addWorker({
         name,
         tradeId: trade.id,
-        role: args.role === 'helper' ? 'helper' : 'mistri',
+        role: args.role === 'helper' ? 'helper' : 'mistri',  // 'thekedar' is carried by isThekedar
         contractType: isTheka ? 'theka' : 'dihadi',
         dailyRate: args.dailyRate,
         isThekedar,
@@ -580,7 +594,7 @@ const writeHandlers = {
       return {
         added: worker.name,
         trade: trade.name,
-        role: worker.role,
+        role: roleLabel(worker),
         contract: isTheka
           ? (isThekedar ? describeTheka(worker, 'en') : 'works under the contractor — carries no amount of their own')
           : `₹${worker.dailyRate}/day`,
@@ -714,7 +728,11 @@ const writeHandlers = {
         updates.name = name;
       }
       if (args.phone !== undefined) updates.phone = String(args.phone).trim();
-      if (args.role !== undefined) updates.role = args.role === 'helper' ? 'helper' : 'mistri';
+      if (args.role !== undefined) {
+        updates.role = args.role === 'helper' ? 'helper' : 'mistri';
+        // Naming the role as thekedar is the same as saying he holds the contract.
+        if (args.role === 'thekedar') { updates.isThekedar = true; updates.contractType = 'theka'; }
+      }
       if (args.trade !== undefined) updates.tradeId = findTrade(store, args.trade).id;
       if (args.thekaDescription !== undefined) updates.thekaDescription = String(args.thekaDescription);
 
@@ -791,6 +809,7 @@ const writeHandlers = {
       return {
         worker: updated.name,
         changed: Object.keys(updates),
+        role: roleLabel(updated),
         contract: updated.contractType === 'theka' ? describeTheka(updated, 'en') : `₹${updated.dailyRate}/day`,
         note: 'Open the app on the phone to pull this in.'
       };
