@@ -141,6 +141,19 @@ async function handleRpc(msg) {
 export default async function handler(req) {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
 
+  /* Say plainly that there is no sign-in service here.
+
+     Before connecting, a client asks whether the host has an OAuth server, by
+     fetching /.well-known/oauth-*. On a single-page site every unknown path
+     returns 200 with index.html, so those questions were answered "yes, and
+     here is some HTML" — the client then tried to register with a sign-in
+     service that does not exist and gave up. A real 404 ends that search and
+     lets it connect with no auth at all, which is the truth: the secret is in
+     the URL, and it was already checked below. */
+  if (/^\/(\.well-known\/(oauth|openid)|register$|authorize$|token$)/.test(new URL(req.url).pathname)) {
+    return json({ error: 'No authorization server here.' }, 404);
+  }
+
   // No token configured means the endpoint is live but unguarded. Refuse rather
   // than serve the ledger to whoever found the URL.
   const expected = process.env.SITE_DIARY_TOKEN;
@@ -190,7 +203,21 @@ export default async function handler(req) {
 }
 
 export const config = {
-  // Both shapes: a header-capable client uses /mcp, and one that can only be
-  // given a URL puts the token in the path.
-  path: ['/mcp', '/mcp/:token']
+  // /mcp for a header-capable client; /mcp/:token for one that can only be given
+  // a URL. The rest are the discovery paths a client probes for a sign-in
+  // service — claimed here only so they can answer 404 instead of being
+  // swallowed by the single-page app and answered 200.
+  path: [
+    '/mcp',
+    '/mcp/:token',
+    '/.well-known/oauth-authorization-server',
+    '/.well-known/oauth-authorization-server/*',
+    '/.well-known/oauth-protected-resource',
+    '/.well-known/oauth-protected-resource/*',
+    '/.well-known/openid-configuration',
+    '/.well-known/openid-configuration/*',
+    '/register',
+    '/authorize',
+    '/token'
+  ]
 };
