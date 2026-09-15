@@ -3,6 +3,13 @@ name: Build Android APK
 on:
   push:
     branches: ["main", "master"]
+    # Changes that cannot reach the phone should not cost an APK build.
+    paths-ignore:
+      - "mcp/**"
+      - "netlify/**"
+      - "netlify.toml"
+      - "**/*.md"
+      - "firestore.rules"
   workflow_dispatch:
 
 permissions:

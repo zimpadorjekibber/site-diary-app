@@ -123,3 +123,71 @@ Claude  →  mcp/server.js  →  Firestore REST  →  site_diaries/<आपकी
 | `SITE_DIARY_PROJECT_ID` | `khalen-dairy` |
 | `SITE_DIARY_API_KEY` | ऐप वाली ही key |
 | `SITE_DIARY_READONLY` | `0` — `1` करने पर लिखने वाले tools बंद |
+
+---
+
+# फ़ोन से — Remote MCP
+
+ऊपर वाला तरीक़ा तभी चलता है जब कंप्यूटर पर यह फ़ोल्डर मौजूद हो। फ़ोन के Claude ऐप में
+वो नहीं चलेगा — क्योंकि Claude आपके फ़ोन से नहीं, **Anthropic के सर्वर से** जुड़ता है।
+इसलिए server को इंटरनेट पर होना पड़ता है।
+
+वही tools, वही गणना — बस HTTPS पर: [`netlify/functions/mcp.js`](../netlify/functions/mcp.js)।
+Tools दोबारा नहीं लिखे गए, दोनों [`mcp/tools.js`](./tools.js) से ही आते हैं।
+
+## एक बार का सेटअप
+
+### 1. एक गुप्त token बनाइए
+
+यह आपका password है। इसे मुझे या किसी और को मत भेजिए।
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+### 2. Netlify में दो चीज़ें भरिए
+
+**Site configuration → Environment variables:**
+
+| नाम | क्या भरें |
+|---|---|
+| `SITE_DIARY_TOKEN` | ऊपर बना token |
+| `SITE_DIARY_SITE_ID` | ऐप वाली `site-XXXX-XXXX` |
+
+भरने के बाद एक बार **redeploy** कीजिए, वरना नई values नहीं पहुँचेंगी।
+
+### 3. Claude में connector जोड़िए
+
+**Settings → Connectors → Add custom connector**, और URL:
+
+```
+https://<आपकी-साइट>.netlify.app/mcp/<आपका-token>
+```
+
+बस। अब फ़ोन से पूछिए — "आज साइट पर कितना खर्च हुआ?"
+
+## यहाँ सिर्फ़ पढ़ा जा सकता है
+
+फ़ोन वाले रास्ते से **कुछ बदला नहीं जा सकता** — लिखने वाले tools दिखते ही नहीं।
+वजह: stdio वाला server उसी मशीन पर चलता है जिसके सामने आप बैठे हैं; यह वाला इंटरनेट
+पर है और जिसके पास token पहुँच जाए, उसी का हो जाता है। पढ़ना ग़लत हाथ में जाए तो
+नुक़सान कम है, लिखना जाए तो डायरी ही बिगड़ सकती है।
+
+लिखने की ज़रूरत हो तो Netlify में `SITE_DIARY_ALLOW_WRITE` = `1` कर दीजिए — सोच-समझकर।
+
+## ध्यान रखने की बातें
+
+⚠️ **URL ही password है।** जिसके पास वो पूरा URL है, वो आपकी पूरी डायरी पढ़ सकता है।
+किसी को फ़ॉरवर्ड मत कीजिए, screenshot में मत आने दीजिए।
+
+⚠️ **लीक हो जाए तो:** Netlify में `SITE_DIARY_TOKEN` बदल दीजिए और redeploy कर दीजिए —
+पुराना URL उसी वक़्त बेकार हो जाएगा। connector में नया URL डाल दीजिए।
+
+Token header में भी भेजा जा सकता है (`Authorization: Bearer <token>`) — अगर connector
+में header डालने की सुविधा हो तो वो बेहतर है, क्योंकि तब वो URL में नहीं दिखता।
+
+| Env variable | डिफ़ॉल्ट |
+|---|---|
+| `SITE_DIARY_TOKEN` | *(ज़रूरी — न हो तो endpoint बंद रहता है)* |
+| `SITE_DIARY_SITE_ID` | *(ज़रूरी)* |
+| `SITE_DIARY_ALLOW_WRITE` | `0` — `1` करने पर लिखने वाले tools चालू |

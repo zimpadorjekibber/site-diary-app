@@ -2,6 +2,24 @@
   command = "npm run build"
   publish = "dist"
 
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+# The MCP endpoint must be matched before the SPA catch-all below, or every
+# request to it would be answered with index.html.
+[[redirects]]
+  from = "/mcp"
+  to = "/.netlify/functions/mcp"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/mcp/*"
+  to = "/.netlify/functions/mcp"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
