@@ -1569,6 +1569,10 @@ body {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.92rem;
+  /* Fixed layout so the note column gets a real share of the width. Left to
+     auto-sizing, the amount column took what it wanted and the note was squeezed
+     until every word sat on its own line. */
+  table-layout: fixed;
 }
 
 .diary-table th {
@@ -1583,6 +1587,47 @@ body {
 .diary-table td {
   padding: 5px 6px;
   border-bottom: 1px dotted var(--text-muted);
+  vertical-align: top;
+  overflow-wrap: break-word;
+}
+
+.diary-table th:nth-child(1), .diary-table td:nth-child(1) { width: 24%; }
+.diary-table th:nth-child(2), .diary-table td:nth-child(2) { width: 22%; }
+.diary-table th:nth-child(3), .diary-table td:nth-child(3) { width: 36%; }
+.diary-table th:nth-child(4), .diary-table td:nth-child(4) { width: 18%; }
+
+/* On a phone four columns leave ~80px each, which no real note fits into. Each
+   entry becomes a small block instead: name and amount on one line, trade and
+   note underneath — the way it would be read off the page. */
+@media (max-width: 560px) {
+  .diary-table, .diary-table tbody, .diary-table tr, .diary-table td { display: block; width: auto; }
+  .diary-table thead { display: none; }
+
+  .diary-table tr {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "name amount"
+      "meta meta"
+      "note note";
+    gap: 1px 10px;
+    padding: 9px 0;
+    border-bottom: 1px dotted var(--text-muted);
+  }
+  .diary-table td { border: none; padding: 0; width: auto !important; }
+
+  .diary-table td:nth-child(1) { grid-area: name; font-weight: 700; }
+  .diary-table td:nth-child(2) { grid-area: meta; font-size: 0.82rem; color: var(--text-muted); }
+  .diary-table td:nth-child(3) { grid-area: note; font-size: 0.85rem; line-height: 1.4; }
+  .diary-table td:nth-child(4) {
+    grid-area: amount;
+    text-align: right !important;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  /* The "nothing recorded today" row spans the whole block. */
+  .diary-table td[colspan] { grid-column: 1 / -1; grid-row: 1; text-align: center; }
 }
 
 .diary-grand-total {
