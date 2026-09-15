@@ -66,9 +66,6 @@ export const translations = {
 
     // Settings
     settingsTitle: '⚙️ ऐप सेटिंग्स व मास्टर प्रबंधन',
-    clearDemoLabel: '🧹 डमी डेटा साफ़ करें (Start Fresh):',
-    btnClearDemo: '🧹 सभी डमी कारीगर व लेन-देन हटाएँ — नया असली खाता शुरू करें',
-    clearDemoDesc: 'सैंपल कारीगर (Ramesh, Mohan आदि) और फर्जी खर्चे एक क्लिक में हट जाएंगे। आपकी ट्रेड श्रेणियां सुरक्षित रहेंगी।',
     manageWorkers: '👷 कारीगर प्रबंधन (Manage Workers):',
     manageWorkersDesc: 'यदि किसी कारीगर को गलती से गलत ग्रुप में डाल दिया है (जैसे Mason को Carpenter), तो नीचे से चुनें और "सुधारें" दबाएं:',
     btnEditWorkerSettings: '✏️ सुधारें / ग्रुप बदलें',
@@ -151,9 +148,6 @@ export const translations = {
 
     // Settings
     settingsTitle: '⚙️ App Settings & Master Data',
-    clearDemoLabel: '🧹 Clear Demo Data (Start Fresh):',
-    btnClearDemo: '🧹 Remove All Demo Workers & Transactions — Start Fresh',
-    clearDemoDesc: 'Sample workers and fake expenses will be removed. Custom trades will be preserved.',
     manageWorkers: '👷 Manage Workers:',
     manageWorkersDesc: 'If a worker was accidentally assigned to wrong group, select and click "Edit":',
     btnEditWorkerSettings: '✏️ Edit / Change Group',

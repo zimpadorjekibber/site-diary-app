@@ -960,15 +960,15 @@ class App {
                 <!-- Worker Name & Status Details -->
                 <div class="attendance-info-col">
                   <div class="attendance-worker-title">
-                    <span class="attendance-worker-name">${esc(worker.name)}</span>
-                    <span class="tag-badge ${worker.role === 'mistri' ? 'tag-mistri' : 'tag-helper'}">
-                      ${worker.role === 'mistri' ? (this.currentLang === 'en' ? 'Mistri' : 'मिस्त्री') : (this.currentLang === 'en' ? 'Helper' : 'हेल्पर')}
-                    </span>
-                    ${worker.contractType === 'theka'
-                      ? (worker.isThekedar
-                          ? `<span class="tag-badge tag-thekedar" title="${esc(describeTheka(worker))}">📜 ${this.currentLang === 'en' ? 'Contractor' : 'ठेकेदार'}</span>`
-                          : `<span class="tag-badge tag-under-theka">${this.currentLang === 'en' ? 'Under contract' : 'ठेके के अधीन'}</span>`)
-                      : ''}
+                    <!-- The name is what the contractor reads down the column, so it
+                         gets the whole line. Role and contract used to sit here as
+                         badges and squeezed the name to nothing; they live in the
+                         worker's own screen now, one tap away. -->
+                    <button type="button" class="attendance-worker-name" data-open-statement="${esc(worker.id)}"
+                            title="${this.currentLang === 'en' ? 'Tap for full details' : 'पूरा विवरण देखने के लिए दबाएँ'}">
+                      ${esc(worker.name)}
+                      ${worker.isThekedar ? '<span class="thekedar-dot" title="Thekedar">📜</span>' : ''}
+                    </button>
                   </div>
 
                   <div class="attendance-status-line">
@@ -3509,29 +3509,6 @@ class App {
       });
     }
 
-    // Clear Demo Data & Start Fresh with Real Site Data
-    const btnClearDemo = document.getElementById('btnClearDemoData');
-    if (btnClearDemo) {
-      btnClearDemo.addEventListener('click', async () => {
-        if (confirm('क्या आप डमी/सैंपल डेटा हटाकर अपनी साइट का असली हिसाब शुरू करना चाहते हैं?\n\nट्रेड श्रेणियां (बढ़ई, राजमिस्त्री, ब्लॉक ठेका मिस्त्री आदि) सुरक्षित रहेंगी और आप अपने असली कारीगर व खर्चे जोड़ सकेंगे।')) {
-          this.store.resetToClean();
-          // Was `saveToFirebase(this.store.getData())` — no such method, and the
-          // site id was missing, so the cloud copy silently kept the demo data.
-          if (isFirebaseReady()) {
-            try {
-              await saveToFirebase(this.store.getSettings().firebaseSiteId, this.store.data, this.deviceId);
-            } catch (err) {
-              console.error('Firebase clean sync failed:', err);
-            }
-          }
-          this.closeModals();
-          this.populateSelects();
-          this.commit();
-          alert('डमी डेटा सफलतापूर्वक साफ़ कर दिया गया है!\n\nअब आपका खाता पूरी तरह खाली व साफ़ है। आप "+ नया कारीगर" से अपने असली कारीगर जोड़ सकते हैं।');
-        }
-      });
-    }
-
     // Quick Text Entry (typed input fallback for voice)
     const quickEntryInput = document.getElementById('quickEntryInput');
     const btnQuickEntrySubmit = document.getElementById('btnQuickEntrySubmit');
@@ -3645,10 +3622,7 @@ class App {
     }
 
     // Auto-hide Clear Demo Section if data is already clean
-    const clearDemoSection = document.getElementById('clearDemoSection');
-    if (clearDemoSection && this.store.data.isCleanStarted) {
-      clearDemoSection.style.display = 'none';
-    }
+
   }
 
   openAddWorkerModal(tradeId = null) {
@@ -3860,8 +3834,18 @@ class App {
 
     const contractEl = document.getElementById('statementWorkerContract');
     if (contractEl) {
-      contractEl.textContent = ledger.isTheka ? '📜 ठेका' : '👷 दिहाड़ी';
-      contractEl.className = `tag-badge ${ledger.isTheka ? 'tag-theka' : 'tag-dihadi'}`;
+      // "ठेका" alone did not say whether this person holds the contract or works
+      // under someone who does — the difference decides whose money this is.
+      if (!ledger.isTheka) {
+        contractEl.textContent = `👷 दिहाड़ी ₹${worker.dailyRate || 0}/दिन`;
+        contractEl.className = 'tag-badge tag-dihadi';
+      } else if (worker.isThekedar) {
+        contractEl.textContent = `📜 ठेकेदार · ${describeTheka(worker)}`;
+        contractEl.className = 'tag-badge tag-thekedar';
+      } else {
+        contractEl.textContent = '👷 ठेके के अधीन (मजदूरी ठेकेदार देंगे)';
+        contractEl.className = 'tag-badge tag-under-theka';
+      }
     }
 
     const phoneEl = document.getElementById('statementWorkerPhone');

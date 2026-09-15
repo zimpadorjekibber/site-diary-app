@@ -3059,15 +3059,33 @@ body {
   min-width: 0;
 }
 
+/* A button, not a span: tapping the name opens that worker's full details.
+   flex:1 with min-width:0 so a long name truncates instead of pushing the row. */
 .attendance-worker-name {
-  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: left;
+  font-family: inherit;
+  font-size: 1.02rem;
   font-weight: 600;
   color: var(--text-main);
   letter-spacing: -0.012em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
+  /* A dotted underline hints it opens something, without shouting. */
+  text-decoration: underline dotted var(--border-strong);
+  text-underline-offset: 3px;
 }
+.attendance-worker-name:active { color: var(--indigo-primary); }
+.thekedar-dot { font-size: 0.8rem; flex-shrink: 0; }
 
 .attendance-status-line {
   display: flex;
