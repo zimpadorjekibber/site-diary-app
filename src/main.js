@@ -3458,6 +3458,57 @@ class App {
       });
     }
 
+    /* Erase everything. Irreversible, so: offer the backup first, state the exact
+       counts being destroyed, and confirm twice. */
+    const btnErase = document.getElementById('btnEraseEverything');
+    if (btnErase) {
+      btnErase.addEventListener('click', async () => {
+        const workers = this.store.getWorkers().length;
+        const txs = this.store.getTransactions().length;
+        const days = Object.keys(this.store.data.haziri || {}).length;
+
+        if (workers === 0 && txs === 0 && days === 0) {
+          alert('मिटाने के लिए कुछ है ही नहीं — हिसाब पहले से खाली है।');
+          return;
+        }
+
+        if (!confirm(
+          `मिटाया जाएगा:\n\n` +
+          `• ${workers} कारीगर\n` +
+          `• ${txs} लेन-देन\n` +
+          `• ${days} दिन की हाजिरी\n\n` +
+          `यह फ़ोन और क्लाउड, दोनों से हट जाएगा और वापस नहीं आएगा।\n\n` +
+          `आगे बढ़ें?`
+        )) return;
+
+        if (confirm('पहले एक बैकअप फ़ाइल सेव कर लें?\n\nOK = बैकअप सेव करें (सुझाव)\nCancel = बिना बैकअप के आगे बढ़ें')) {
+          document.getElementById('btnExportData')?.click();
+          // Give the download a moment before the data it points at disappears.
+          await new Promise(r => setTimeout(r, 1200));
+        }
+
+        if (!confirm('आख़िरी पुष्टि — सारा हिसाब अभी मिट जाएगा।\n\nमिटाएँ?')) return;
+
+        this.store.eraseAll({ keepTrades: true });
+
+        // Push the empty ledger up, otherwise the cloud keeps the old copy and
+        // the next device to sync pulls all of it straight back.
+        if (isFirebaseReady()) {
+          try {
+            await saveToFirebase(this.store.getSettings().firebaseSiteId, this.store.data, this.deviceId);
+          } catch (err) {
+            alert('फ़ोन से सब हट गया, पर क्लाउड साफ़ नहीं हो सका:\n' + err.message +
+                  '\n\nइंटरनेट आने पर ऐप खोलिए, तब अपने आप साफ़ हो जाएगा।');
+          }
+        }
+
+        this.closeModals();
+        this.populateSelects();
+        this.commit();
+        alert('सब मिटा दिया गया। अब अपने असली कारीगर जोड़ना शुरू कीजिए।');
+      });
+    }
+
     // Clear Demo Data & Start Fresh with Real Site Data
     const btnClearDemo = document.getElementById('btnClearDemoData');
     if (btnClearDemo) {

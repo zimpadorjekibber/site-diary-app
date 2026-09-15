@@ -481,8 +481,37 @@ export class Store {
       workers: [],
       transactions: [],
       haziri: {},
+      haziriMeta: {},
       diaryNotedDates: {},
       settings: (this.data && this.data.settings) ? this.data.settings : DEFAULT_SETTINGS,
+      isCleanStarted: true
+    };
+    this.save();
+    return this.data;
+  }
+
+  /**
+   * Wipes the whole ledger — workers, attendance, every transaction.
+   * Irreversible, so the caller must offer a backup first.
+   *
+   * @param {boolean} keepTrades Keep the trade list (Carpenter, Mason…). The
+   *   trades are site setup rather than ledger data, and rebuilding them by hand
+   *   is tedious, so this defaults to keeping them.
+   *
+   * Settings (reminder time, site id, cloud config) are always kept: losing the
+   * site id would orphan the cloud copy and quietly start a second one.
+   */
+  eraseAll({ keepTrades = true } = {}) {
+    const settings = this.data.settings;
+    this.data = {
+      trades: keepTrades && this.data.trades?.length ? this.data.trades : DEFAULT_TRADES,
+      workers: [],
+      transactions: [],
+      haziri: {},
+      haziriMeta: {},
+      diaryNotedDates: {},
+      settings,
+      // Marks the ledger as deliberately empty so the demo seed never returns.
       isCleanStarted: true
     };
     this.save();
