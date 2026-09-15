@@ -1250,7 +1250,9 @@ export class Store {
       time: tx.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       type: tx.type || 'cash', // 'cash' | 'ration' | 'recharge' | 'other'
       targetType: tx.targetType || 'individual', // 'individual' | 'group'
-      tradeId: tx.tradeId,
+      // null, never undefined: Firestore rejects an undefined field outright,
+      // which failed the whole backup — silently, since the app never saw why.
+      tradeId: tx.tradeId || null,
       workerId: tx.targetType === 'individual' ? tx.workerId : null,
       amount: Number(tx.amount) || 0,
       rationItem: tx.rationItem || '',
@@ -1331,8 +1333,13 @@ export class Store {
     if (!this.activeProject().haziri[date]) {
       this.activeProject().haziri[date] = {};
     }
+    // Only these three values exist. Anything else — a string that slipped
+    // through, a NaN — would poison every wage total that reads this day,
+    // and silently, since NaN spreads through arithmetic without complaint.
+    const n = Number(status);
+    const clean = n === 1 ? 1 : n === 0.5 ? 0.5 : 0;
     this.activeProject().haziri[date][workerId] = {
-      status: Number(status), // 1.0 (full), 0.5 (half), 0 (absent)
+      status: clean, // 1.0 (full), 0.5 (half), 0 (absent)
       otHours: Number(otHours) || 0
     };
     if (!this.activeProject().haziriMeta) this.activeProject().haziriMeta = {};

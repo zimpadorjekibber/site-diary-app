@@ -53,7 +53,10 @@ function getDb(projectId, apiKey) {
 // by exactly this function and that must stay covered.
 export function toPayload(data) {
   const settings = data.settings || {};
-  return {
+  // Round-tripped through JSON at the end: Firestore refuses a document that
+  // contains undefined anywhere, and one stray field is enough to fail the
+  // whole write. JSON drops those keys instead.
+  return stripUndefined({
     projects: data.projects || [],
     activeProjectId: data.activeProjectId || null,
     lending: data.lending || [],
@@ -68,7 +71,11 @@ export function toPayload(data) {
     lastWriterDeviceId: WRITER_DEVICE_ID,
     updatedAt: new Date().toISOString(),
     timestamp: Date.now()
-  };
+  });
+}
+
+function stripUndefined(obj) {
+  return JSON.parse(JSON.stringify(obj));
 }
 
 /** Refuses a write that would destroy what is already there.
