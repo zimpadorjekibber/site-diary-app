@@ -177,14 +177,6 @@
         <span class="nav-tab-icon">👥</span>
         <span class="nav-tab-label" data-i18n="tabGroups">कारीगर खाता</span>
       </button>
-      <button class="nav-tab-btn" data-tab="tab-diary">
-        <span class="nav-tab-icon">📖</span>
-        <span class="nav-tab-label" data-i18n="tabDiary">शाम डायरी</span>
-      </button>
-      <button class="nav-tab-btn" data-tab="tab-lending">
-        <span class="nav-tab-icon">🤝</span>
-        <span class="nav-tab-label">उधार</span>
-      </button>
     </nav>
 
     <!-- TAB 1: TODAY'S TIMELINE -->
@@ -642,18 +634,9 @@
       <div id="lendingItemFields">
         <div class="form-group">
           <label class="form-label" for="lendingItem">कौन सा सामान?</label>
-          <input type="text" id="lendingItem" class="form-input" placeholder="जैसे: पानी का ड्रम, पिलर फर्मा, बल्ली, कुल्हाड़ी" list="lendingItemSuggestions" />
-          <datalist id="lendingItemSuggestions">
-            <option value="पानी का ड्रम"></option>
-            <option value="पिलर फर्मा"></option>
-            <option value="बल्ली"></option>
-            <option value="कुल्हाड़ी"></option>
-            <option value="फावड़ा"></option>
-            <option value="तसला"></option>
-            <option value="सीढ़ी"></option>
-            <option value="मिक्सर मशीन"></option>
-            <option value="शटरिंग प्लेट"></option>
-          </datalist>
+          <input type="text" id="lendingItem" class="form-input" placeholder="नाम यहीं लिख दीजिए" autocomplete="off" />
+          <p class="field-hint">नीचे से चुन लीजिए — या सूची में न हो तो ऊपर अपने शब्दों में लिख दीजिए।</p>
+          <div class="suggest-chips" id="lendingItemChips"></div>
         </div>
         <div class="form-group">
           <label class="form-label" for="lendingQty">कितने? (ज़रूरी नहीं)</label>
@@ -1019,6 +1002,23 @@
         <h3 class="modal-title">⚙️ ऐप सेटिंग्स व मास्टर प्रबंधन</h3>
         <button class="btn-close-modal" data-close-modal>&times;</button>
       </div>
+      <div class="settings-jump-grid">
+        <button type="button" class="settings-jump" data-go-tab="tab-diary">
+          <span class="settings-jump-icon">📖</span>
+          <span class="settings-jump-body">
+            <span class="settings-jump-name">शाम की डायरी</span>
+            <span class="settings-jump-sub">आज क्या-क्या हुआ, लिख लीजिए</span>
+          </span>
+        </button>
+        <button type="button" class="settings-jump" data-go-tab="tab-lending">
+          <span class="settings-jump-icon">🤝</span>
+          <span class="settings-jump-body">
+            <span class="settings-jump-name">उधार रजिस्टर</span>
+            <span class="settings-jump-sub">किसको दिया, किससे लिया</span>
+          </span>
+        </button>
+      </div>
+
       <form id="formSettings">
         <!-- 0. LANGUAGE SELECTION (भाषा चयन) -->
         <div class="form-group" style="background: rgba(15, 23, 42, 0.042); border: 1px solid var(--border-card); border-radius: 10px; padding: 12px 14px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">

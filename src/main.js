@@ -26,6 +26,14 @@ function inr(n) {
   return `₹${(Number(n) || 0).toLocaleString('en-IN')}`;
 }
 
+/* Common village lending items, as a starting point only. Whatever the user
+   types is remembered and joins this list next time, so the suggestions grow
+   into their own vocabulary instead of staying stuck at ours. */
+const LENDING_ITEM_SUGGESTIONS = [
+  'पानी का ड्रम', 'पिलर फर्मा', 'बल्ली', 'कुल्हाड़ी', 'फावड़ा',
+  'तसला', 'सीढ़ी', 'मिक्सर मशीन', 'शटरिंग प्लेट'
+];
+
 const ICON_MAP = {
   'hammer': '🔨',
   'brick-wall': '🧱',
@@ -1076,11 +1084,35 @@ class App {
     if (dateEl) dateEl.value = getTodayString();
 
     this.clearLendingPhoto();
+    this.renderLendingItemChips();
     this.syncLendingKindFields();
     document.querySelectorAll('#lendingKindSwitcher .segment-btn').forEach(b => {
       b.classList.toggle('active', b.getAttribute('data-lend-kind') === 'item');
     });
     document.getElementById('modalLending')?.classList.add('open');
+  }
+
+  /* Suggestions the user can tap, sitting under a box they can also just type
+     into. Deliberately not a <datalist>: the Android WebView renders that as a
+     full-screen popup that reads like a closed list of choices, so the user
+     could not tell that any name was allowed. */
+  renderLendingItemChips() {
+    const box = document.getElementById('lendingItemChips');
+    if (!box) return;
+
+    // Names this user has actually used come first; ours fill in behind them.
+    const used = [];
+    this.store.getLending({ kind: 'item' }).forEach(l => {
+      const name = (l.itemName || '').trim();
+      if (name && !used.includes(name)) used.push(name);
+    });
+    const names = used
+      .concat(LENDING_ITEM_SUGGESTIONS.filter(n => !used.includes(n)))
+      .slice(0, 14);
+
+    box.innerHTML = names.map(n =>
+      `<button type="button" class="suggest-chip" data-lend-item="${esc(n)}">${esc(n)}</button>`
+    ).join('');
   }
 
   syncLendingKindFields() {
@@ -1104,9 +1136,23 @@ class App {
   }
 
   bindLendingEvents() {
+    // Typing by hand drops the picked highlight, so chip and box never disagree.
+    document.getElementById('lendingItem')?.addEventListener('input', () => {
+      document.querySelectorAll('#lendingItemChips .suggest-chip')
+        .forEach(c => c.classList.remove('is-picked'));
+    });
+
     document.addEventListener('click', (e) => {
       const add = e.target.closest('[data-new-lending]');
       if (add) this.openLendingModal(add.getAttribute('data-new-lending'));
+
+      const pickItem = e.target.closest('[data-lend-item]');
+      if (pickItem) {
+        const input = document.getElementById('lendingItem');
+        if (input) input.value = pickItem.getAttribute('data-lend-item');
+        document.querySelectorAll('#lendingItemChips .suggest-chip')
+          .forEach(c => c.classList.toggle('is-picked', c === pickItem));
+      }
 
       const kind = e.target.closest('[data-lend-kind]');
       if (kind) {
@@ -2297,22 +2343,35 @@ class App {
     }).join('');
   }
 
+  /* The single way to change screen. Two tabs (evening diary, lending) have no
+     button in the dock any more — they are reached from settings — so this
+     must not depend on a nav button existing. */
+  goToTab(tabId) {
+    const targetView = document.getElementById(tabId);
+    if (!targetView) return;
+
+    document.querySelectorAll('.nav-tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
+    targetView.classList.add('active');
+    document.querySelector(`.nav-tab-btn[data-tab="${tabId}"]`)?.classList.add('active');
+    this.currentTab = tabId;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    if (tabId === 'tab-monthly') this.renderMonthlyHaziri();
+  }
+
   // --- EVENT BINDINGS ---
   bindEvents() {
     // Navigation Tabs
     document.querySelectorAll('.nav-tab-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tabId = btn.getAttribute('data-tab');
-        document.querySelectorAll('.nav-tab-btn').forEach(b => b.classList.remove('active'));
-        document.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
-        btn.classList.add('active');
-        const targetView = document.getElementById(tabId);
-        if (targetView) targetView.classList.add('active');
-        this.currentTab = tabId;
+      btn.addEventListener('click', () => this.goToTab(btn.getAttribute('data-tab')));
+    });
 
-        if (tabId === 'tab-monthly') {
-          this.renderMonthlyHaziri();
-        }
+    // The two screens that left the dock are reached from settings instead.
+    document.querySelectorAll('[data-go-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        this.closeModals();
+        this.goToTab(btn.getAttribute('data-go-tab'));
       });
     });
 
@@ -2330,8 +2389,7 @@ class App {
     const btnJumpHaziri = document.getElementById('btnJumpToHaziri');
     if (btnJumpHaziri) {
       btnJumpHaziri.addEventListener('click', () => {
-        const haziriTab = document.querySelector('.nav-tab-btn[data-tab="tab-haziri"]');
-        if (haziriTab) haziriTab.click();
+        this.goToTab('tab-haziri');
       });
     }
 
@@ -2353,30 +2411,28 @@ class App {
     const metricHaziri = document.getElementById('metricCardHaziri');
     if (metricHaziri) {
       metricHaziri.addEventListener('click', () => {
-        const haziriTab = document.querySelector('.nav-tab-btn[data-tab="tab-haziri"]');
-        if (haziriTab) haziriTab.click();
+        this.goToTab('tab-haziri');
       });
     }
 
     const pillDiary = document.getElementById('statTodayDiaryStatus');
     if (pillDiary) {
       pillDiary.addEventListener('click', () => {
-        const diaryTab = document.querySelector('.nav-tab-btn[data-tab="tab-diary"]');
-        if (diaryTab) diaryTab.click();
+        this.goToTab('tab-diary');
       });
     }
 
     const btnQuickHaziri = document.getElementById('btnQuickHaziri');
     if (btnQuickHaziri) {
       btnQuickHaziri.addEventListener('click', () => {
-        document.querySelector('.nav-tab-btn[data-tab="tab-haziri"]').click();
+        this.goToTab('tab-haziri');
       });
     }
 
     const btnQuickMonthly = document.getElementById('btnQuickMonthly');
     if (btnQuickMonthly) {
       btnQuickMonthly.addEventListener('click', () => {
-        document.querySelector('.nav-tab-btn[data-tab="tab-monthly"]').click();
+        this.goToTab('tab-monthly');
       });
     }
 
@@ -2437,14 +2493,14 @@ class App {
     const btnQuickDiary = document.getElementById('btnQuickDiary');
     if (btnQuickDiary) {
       btnQuickDiary.addEventListener('click', () => {
-        document.querySelector('.nav-tab-btn[data-tab="tab-diary"]').click();
+        this.goToTab('tab-diary');
       });
     }
 
     const btnBannerOpen = document.getElementById('btnEveningBannerOpen');
     if (btnBannerOpen) {
       btnBannerOpen.addEventListener('click', () => {
-        document.querySelector('.nav-tab-btn[data-tab="tab-diary"]').click();
+        this.goToTab('tab-diary');
       });
     }
 

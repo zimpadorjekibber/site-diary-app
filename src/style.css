@@ -3700,3 +3700,83 @@ body {
   .attendance-row { padding: 13px 18px; min-height: 68px; }
   .attendance-group-header, .attendance-bottom-bar { padding: 14px 18px; }
 }
+/* Tappable suggestions under a free-text box. Not a <datalist>: that renders
+   in the Android WebView as a full-screen popup which reads like a closed
+   list, hiding the fact that the field takes anything. */
+.suggest-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.suggest-chip {
+  padding: 8px 13px;
+  min-height: 36px;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-full);
+  background: var(--bg-subtle);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.suggest-chip.is-picked {
+  background: var(--amber-tint);
+  border-color: var(--amber-primary);
+  color: var(--amber-strong);
+  font-weight: 600;
+}
+
+.field-hint {
+  margin: 6px 0 0;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+/* Doors at the top of settings to the two screens that left the bottom dock.
+   Six tabs truncated every label on a 360px phone; four fit whole. */
+.settings-jump-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.settings-jump {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.settings-jump-icon {
+  font-size: 1.4rem;
+  line-height: 1;
+}
+
+.settings-jump-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-jump-name {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.settings-jump-sub {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
