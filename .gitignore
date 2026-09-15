@@ -40,3 +40,6 @@ android/local.properties
 android/keystore.properties
 *.jks
 *.keystore
+
+# MCP server ki apni dependencies
+mcp/node_modules

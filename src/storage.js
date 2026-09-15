@@ -310,8 +310,33 @@ export function describeTheka(worker, lang = 'hi') {
 }
 
 export class Store {
-  constructor() {
-    this.data = this.load();
+  /**
+   * @param {object} [options]
+   * @param {object} [options.data]     Use this ledger instead of reading localStorage.
+   * @param {boolean} [options.persist] Write changes back to localStorage (default true).
+   *
+   * The MCP server runs in Node, where there is no localStorage, and needs the
+   * ledger it fetched from Firestore. Letting it build a Store around that data
+   * means it reports the same numbers as the app instead of a second, drifting
+   * implementation of the same arithmetic.
+   */
+  constructor(options = {}) {
+    this.persist = options.persist !== false;
+    this.data = options.data ? this.normalise(options.data) : this.load();
+  }
+
+  // A cloud payload may predate fields the calculations expect.
+  normalise(data) {
+    return {
+      trades: data.trades || [],
+      workers: data.workers || [],
+      transactions: data.transactions || [],
+      haziri: data.haziri || {},
+      haziriMeta: data.haziriMeta || {},
+      diaryNotedDates: data.diaryNotedDates || {},
+      isCleanStarted: data.isCleanStarted === true,
+      settings: { ...DEFAULT_SETTINGS, ...(data.settings || {}) }
+    };
   }
 
   getOtHoursPerDay() {
@@ -389,6 +414,8 @@ export class Store {
 
   save(data = this.data) {
     this.data = data;
+    // A read-only Store (the MCP server) has nowhere to write and nothing to save.
+    if (!this.persist) return true;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
       this._lastSaveFailed = false;
@@ -968,5 +995,7 @@ export class Store {
   }
 }
 
-export const store = new Store();
+/* The app's singleton. Guarded because storage.js is also imported by the MCP
+   server in Node, where constructing this would pointlessly seed demo data. */
+export const store = typeof localStorage !== 'undefined' ? new Store() : null;
 export { getTodayString };

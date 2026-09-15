@@ -10,7 +10,8 @@
     "sync": "vite build && cap sync android",
     "apk": "npm run sync && cd android && gradlew.bat assembleDebug",
     "apk:release": "npm run sync && cd android && gradlew.bat assembleRelease",
-    "rules:deploy": "firebase deploy --only firestore:rules"
+    "rules:deploy": "firebase deploy --only firestore:rules",
+    "mcp": "node mcp/server.js"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",
