@@ -470,12 +470,16 @@ body {
   border-color: rgba(21, 150, 109, 0.28);
   background: linear-gradient(135deg, var(--emerald-bg), var(--bg-card));
 }
-.action-bar-trolley-btn {
+/* The tractor and the JCB share the row below the two main actions. They used
+   to be one full-width button; a second one stacked underneath turned the home
+   screen into a wall of buttons. */
+.action-bar-supply-btn {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 13px 14px;
+  gap: 9px;
+  padding: 12px 12px;
   min-height: 62px;
+  min-width: 0;
   border-radius: var(--radius-md);
   border: 1px solid rgba(12, 126, 189, 0.3);
   background: linear-gradient(135deg, var(--blue-bg), var(--bg-card));
@@ -483,18 +487,87 @@ body {
   text-align: left;
   cursor: pointer;
   box-shadow: var(--shadow-sm);
-  /* Spans both columns: it is a third action in a two-column grid. */
-  grid-column: 1 / -1;
   transition: transform 0.18s var(--ease);
 }
-.action-bar-trolley-btn:active { transform: scale(0.975); }
+.action-bar-supply-btn.is-machine {
+  border-color: rgba(124, 58, 237, 0.3);
+  background: linear-gradient(135deg, #f1ecfd, var(--bg-card));
+}
+/* Alone in the row, it takes the whole width rather than leaving a hole. */
+.action-bar-supply-btn.is-solo { grid-column: 1 / -1; }
+.action-bar-supply-btn:active { transform: scale(0.975); }
 /* Before any supplier exists this button is an invitation, not a daily action —
    dashed so it reads as setup rather than something already in use. */
-.action-bar-trolley-btn.is-setup {
+.action-bar-supply-btn.is-setup {
   border-style: dashed;
   background: var(--bg-card);
 }
-.action-bar-trolley-btn.is-setup .action-btn-icon { opacity: 0.75; }
+.action-bar-supply-btn.is-setup .action-btn-icon { opacity: 0.75; }
+/* Narrow columns: the label must shrink rather than push the row wider. */
+.action-bar-supply-btn .action-btn-text { min-width: 0; }
+.action-bar-supply-btn .action-btn-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* JCB slot entry */
+.jcb-time-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.jcb-time-cap {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* What is already down for the day, so the next slot can carry on from it. */
+.jcb-slot-list {
+  display: none;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}
+
+.jcb-slot-head {
+  margin-bottom: 6px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.jcb-slot-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 0.82rem;
+  color: var(--text-main);
+}
+
+.jcb-slot-time {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.jcb-slot-amt { font-weight: 700; white-space: nowrap; }
+
+.jcb-slot-total {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-card);
+  font-size: 0.82rem;
+  color: var(--text-main);
+}
 
 .action-btn-icon {
   width: 38px;
@@ -534,6 +607,9 @@ body {
 @media (max-width: 420px) {
   .action-btn-text small { display: none; }
   .action-bar-haziri-btn, .action-bar-cash-btn { min-height: 56px; }
+  /* The supply buttons keep theirs: their labels are one short word, so the
+     second line costs no height, and it carries the day's running total. */
+  .action-bar-supply-btn .action-btn-text small { display: block; }
 }
 
 /* ===================================================

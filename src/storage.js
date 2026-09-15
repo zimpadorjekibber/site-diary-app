@@ -12,7 +12,12 @@ const DEFAULT_TRADES = [
   { id: 'tile', name: 'Tile & Marble (टाइल मिस्त्री)', icon: '🔲', color: '#10b981' },
   // A supplier, not a craftsman: no attendance, no daily wage. What gets counted
   // is trolley loads delivered, so this trade is flagged and treated differently.
-  { id: 'tractor', name: 'Tractor / ट्रैक्टर (सप्लाई)', icon: '🚜', color: '#0c7ebd', isSupplier: true }
+  { id: 'tractor', name: 'Tractor / ट्रैक्टर (सप्लाई)', icon: '🚜', color: '#0c7ebd',
+    isSupplier: true, supplierKind: 'trolley' },
+  // Also a supplier, but hired by the hour rather than by the load, and the
+  // breaker costs more per hour than the bucket — so it needs its own kind.
+  { id: 'jcb', name: 'JCB / मशीन (किराया)', icon: '🏗️', color: '#7c3aed',
+    isSupplier: true, supplierKind: 'machine' }
 ];
 
 const DEFAULT_WORKERS = [
@@ -108,6 +113,7 @@ export const TX_TYPES = [
   { id: 'diesel',   icon: '⛽', hi: 'डीजल',          en: 'Diesel',        scope: 'site'   },
   { id: 'material', icon: '🧱', hi: 'सामान',         en: 'Material',      scope: 'site'   },
   { id: 'trolley',  icon: '🚜', hi: 'ट्रॉली सप्लाई',  en: 'Trolley Load',  scope: 'site'   },
+  { id: 'machine',  icon: '🏗️', hi: 'JCB / मशीन',     en: 'Machine hire', scope: 'site'   },
   { id: 'other',    icon: '📝', hi: 'अन्य खर्च',      en: 'Other',         scope: 'site'   }
 ];
 
@@ -126,6 +132,42 @@ export const TROLLEY_MATERIALS = [
 
 export function getTrolleyMaterial(id) {
   return TROLLEY_MATERIALS.find(m => m.id === id) || { id, hi: id, en: id };
+}
+
+/* What a JCB is doing in a given hour. The bucket and the breaker are priced
+   differently — the breaker is harder on the machine — so each keeps its own
+   hourly rate on the supplier, the same way each material keeps its own
+   trolley rate. */
+export const MACHINE_WORKS = [
+  { id: 'backhoe', icon: '🚜', hi: 'बैकहो लोडर (खुदाई)', en: 'Backhoe loader (digging)' },
+  { id: 'breaker', icon: '🔨', hi: 'ब्रेकर (तोड़ना)', en: 'Breaker (demolition)' }
+];
+
+export function getMachineWork(id) {
+  return MACHINE_WORKS.find(w => w.id === id) || { id, hi: id, en: id, icon: '🏗️' };
+}
+
+/** Hours between two "HH:MM" times. Work that runs past midnight is real on a
+    site — a slab pour, a night dig — so an end before the start means next day. */
+export function computeHours(startTime, endTime) {
+  if (!startTime || !endTime) return 0;
+  const [sh, sm] = String(startTime).split(':').map(Number);
+  const [eh, em] = String(endTime).split(':').map(Number);
+  if ([sh, sm, eh, em].some(n => !Number.isFinite(n))) return 0;
+  let mins = (eh * 60 + em) - (sh * 60 + sm);
+  if (mins < 0) mins += 24 * 60;
+  return Math.round((mins / 60) * 100) / 100;
+}
+
+/** 3.5 -> "3 घंटे 30 मिनट". Contractors settle in hours and minutes,
+    not decimals, so never show them 3.5. */
+export function formatHours(hours) {
+  const total = Math.round((Number(hours) || 0) * 60);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h && m) return `${h} घंटे ${m} मिनट`;
+  if (h) return `${h} घंटे`;
+  return `${m} मिनट`;
 }
 
 /* ===================================================
@@ -189,10 +231,11 @@ function buildTemplateTrades(templateId) {
   if (template.trades === null) return DEFAULT_TRADES.map(t => ({ ...t }));
 
   const trades = template.trades.map(t => ({ ...t }));
-  // The tractor supplier travels with every template: material gets delivered to
-  // a hotel build or a farm just as much as to a house.
-  const tractor = DEFAULT_TRADES.find(t => t.isSupplier);
-  if (tractor && !trades.some(t => t.id === tractor.id)) trades.push({ ...tractor });
+  // The suppliers travel with every template: material gets delivered, and a
+  // machine gets hired, on a hotel build or a farm just as much as on a house.
+  DEFAULT_TRADES.filter(t => t.isSupplier).forEach(sup => {
+    if (!trades.some(t => t.id === sup.id)) trades.push({ ...sup });
+  });
   return trades;
 }
 
@@ -763,6 +806,15 @@ export class Store {
         }
       });
 
+      // Supplier trades predate there being more than one kind of supplier.
+      // Anything already out there delivers trolleys.
+      project.trades.forEach(t => {
+        if (t.isSupplier && !t.supplierKind) {
+          t.supplierKind = t.id === 'jcb' ? 'machine' : 'trolley';
+          needsSave = true;
+        }
+      });
+
       // Theka used to be a flat amount on any worker, so a trade with three
       // contract workers counted the same contract three times. The amount now
       // belongs to one thekedar; anyone who already had an amount becomes one,
@@ -1063,8 +1115,19 @@ export class Store {
     return !!(trade && trade.isSupplier);
   }
 
-  getSuppliers() {
-    return this.activeProject().workers.filter(w => this.isSupplierTrade(w.tradeId));
+  /** 'trolley' (tractor) or 'machine' (JCB); null for a craftsman's trade. */
+  getSupplierKind(tradeId) {
+    const trade = this.activeProject().trades.find(t => t.id === tradeId);
+    if (!trade || !trade.isSupplier) return null;
+    return trade.supplierKind || 'trolley';
+  }
+
+  /** Suppliers, optionally of one kind only — a JCB owner has no business in
+      the trolley form, and the tractor owner has none in the JCB form. */
+  getSuppliers(kind = null) {
+    return this.activeProject().workers.filter(w =>
+      kind ? this.getSupplierKind(w.tradeId) === kind : this.isSupplierTrade(w.tradeId)
+    );
   }
 
   /** Rate this supplier charges for one trolley of a given material. */
@@ -1119,40 +1182,141 @@ export class Store {
     });
   }
 
+  /* ===================================================
+     JCB / MACHINE HIRE
+
+     A machine is hired by the hour, in slots: 9:00 to 13:00 with the bucket,
+     then 14:00 to 16:30 with the breaker. Each slot is its own record, because
+     the rate can differ between them and because that is how the settlement is
+     read out at the end of the day.
+
+     The hours are worked out from the two times but stay editable: what gets
+     paid for is what the two sides agreed on, and rounding to the half hour is
+     normal. The clock is a starting point, not the referee.
+  =================================================== */
+
+  /** What this machine owner charges per hour for one kind of work. */
+  getMachineRate(workerId, workId) {
+    const w = this.getWorker(workerId);
+    return Number(w?.machineRates?.[workId]) || 0;
+  }
+
+  setMachineRates(workerId, rates) {
+    const clean = {};
+    Object.entries(rates || {}).forEach(([k, v]) => {
+      const n = Number(v);
+      if (n > 0) clean[k] = n;
+    });
+    return this.updateWorker(workerId, { machineRates: clean });
+  }
+
+  /**
+   * Records one slot of machine work.
+   * @returns the created transaction.
+   */
+  addMachineSlot({ workerId, workId, date, startTime, endTime, hours, ratePerHour, note }) {
+    const worker = this.getWorker(workerId);
+    if (!worker) throw new Error('मशीन वाला नहीं मिला');
+
+    // An edited figure wins over the clock; otherwise the clock decides.
+    const billed = Number(hours) > 0 ? Number(hours) : computeHours(startTime, endTime);
+    if (billed <= 0) {
+      throw new Error('कितने बजे से कितने बजे तक चली, वो भरें');
+    }
+
+    const rate = Number(ratePerHour) > 0
+      ? Number(ratePerHour)
+      : this.getMachineRate(workerId, workId);
+    if (rate <= 0) {
+      throw new Error(`${getMachineWork(workId).hi} का घंटे का रेट पहले भरें`);
+    }
+
+    const work = getMachineWork(workId);
+    // Rounded to the rupee: nobody settles a JCB bill in paise.
+    const amount = Math.round(billed * rate);
+
+    return this.addTransaction({
+      date,
+      type: 'machine',
+      targetType: 'group',       // a site cost, not money owed to a worker
+      tradeId: worker.tradeId,
+      supplierId: workerId,
+      workId,
+      startTime: startTime || '',
+      endTime: endTime || '',
+      hours: billed,
+      ratePerHour: rate,
+      rationItem: work.hi,
+      quantity: formatHours(billed),
+      amount,
+      note: note || ''
+    });
+  }
+
+  /** Slots worked on one date — the WhatsApp update, and the "so far today"
+      list that lets the next slot start where the last one ended. */
+  getMachineSlotsForDate(date = getTodayString(), supplierId = null) {
+    return this.activeProject().transactions
+      .filter(t => t.type === 'machine' && t.date === date
+                   && (!supplierId || t.supplierId === supplierId))
+      .sort((a, b) => String(a.startTime || '').localeCompare(String(b.startTime || '')));
+  }
+
   /** Every trolley delivery by this supplier, newest first, with running totals. */
   getSupplierLedger(workerId, { from, to } = {}) {
     const worker = this.getWorker(workerId);
     if (!worker) return null;
 
+    // One ledger serves both kinds of supplier; which counter matters depends
+    // on the trade — loads for a tractor, hours for a machine.
+    const kind = this.getSupplierKind(worker.tradeId) || 'trolley';
+    const txType = kind === 'machine' ? 'machine' : 'trolley';
+
     let deliveries = this.activeProject().transactions.filter(
-      t => t.type === 'trolley' && t.supplierId === workerId
+      t => t.type === txType && t.supplierId === workerId
     );
     if (from) deliveries = deliveries.filter(t => t.date >= from);
     if (to) deliveries = deliveries.filter(t => t.date <= to);
     deliveries.sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
 
     const byMaterial = {};
+    const byWork = {};
     let totalTrips = 0;
+    let totalHours = 0;
     let totalAmount = 0;
     for (const d of deliveries) {
-      const key = d.materialId || 'other';
-      if (!byMaterial[key]) byMaterial[key] = { trips: 0, amount: 0 };
-      byMaterial[key].trips += Number(d.trips) || 0;
-      byMaterial[key].amount += Number(d.amount) || 0;
-      totalTrips += Number(d.trips) || 0;
-      totalAmount += Number(d.amount) || 0;
+      const amount = Number(d.amount) || 0;
+      totalAmount += amount;
+
+      if (txType === 'machine') {
+        const key = d.workId || 'other';
+        if (!byWork[key]) byWork[key] = { hours: 0, amount: 0 };
+        byWork[key].hours += Number(d.hours) || 0;
+        byWork[key].amount += amount;
+        totalHours += Number(d.hours) || 0;
+      } else {
+        const key = d.materialId || 'other';
+        if (!byMaterial[key]) byMaterial[key] = { trips: 0, amount: 0 };
+        byMaterial[key].trips += Number(d.trips) || 0;
+        byMaterial[key].amount += amount;
+        totalTrips += Number(d.trips) || 0;
+      }
     }
+    totalHours = Math.round(totalHours * 100) / 100;
 
     // What the site has actually handed over, so the balance is honest.
     const paid = this.activeProject().transactions
-      .filter(t => t.workerId === workerId && t.type !== 'trolley')
+      .filter(t => t.workerId === workerId && t.type !== 'trolley' && t.type !== 'machine')
       .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
     return {
       worker,
+      kind,
       deliveries,
       byMaterial,
+      byWork,
       totalTrips,
+      totalHours,
       totalAmount,
       totalPaid: paid,
       balanceDue: totalAmount - paid
@@ -1193,7 +1357,13 @@ export class Store {
       supplierId: tx.supplierId || null,
       materialId: tx.materialId || null,
       trips: Number(tx.trips) || 0,
-      ratePerTrolley: Number(tx.ratePerTrolley) || 0
+      ratePerTrolley: Number(tx.ratePerTrolley) || 0,
+      // Machine hire only: which attachment, which slot of the day, how long.
+      workId: tx.workId || null,
+      startTime: tx.startTime || '',
+      endTime: tx.endTime || '',
+      hours: Number(tx.hours) || 0,
+      ratePerHour: Number(tx.ratePerHour) || 0
     };
     this.activeProject().transactions.unshift(newTx);
     this.save();

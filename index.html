@@ -149,12 +149,20 @@
           <small data-i18n="actionCashAdvanceSub">एडवांस या भुगतान लिखें +</small>
         </div>
       </button>
-      <!-- Shown only once a tractor supplier exists; hidden on sites that have none. -->
-      <button type="button" id="btnOpenTrolley" class="action-bar-trolley-btn" style="display: none;" title="ट्रॉली दर्ज करें">
+      <!-- The two suppliers share one row. Four stacked full-width buttons made
+           the home screen a wall; these two are short enough to sit side by side. -->
+      <button type="button" id="btnOpenTrolley" class="action-bar-supply-btn" style="display: none;" title="ट्रॉली दर्ज करें">
         <span class="action-btn-icon">🚜</span>
         <div class="action-btn-text">
-          <strong>ट्रॉली दर्ज करें</strong>
-          <small id="trolleyTodaySummary">रेता, बजरी, बालू +</small>
+          <strong id="trolleyBtnLabel">ट्रॉली</strong>
+          <small id="trolleyTodaySummary">रेता, बजरी +</small>
+        </div>
+      </button>
+      <button type="button" id="btnOpenJcb" class="action-bar-supply-btn is-machine" style="display: none;" title="JCB का समय दर्ज करें">
+        <span class="action-btn-icon">🏗️</span>
+        <div class="action-btn-text">
+          <strong id="jcbBtnLabel">JCB</strong>
+          <small id="jcbTodaySummary">घंटे का हिसाब +</small>
         </div>
       </button>
     </div>
@@ -749,6 +757,88 @@
       <div class="modal-actions">
         <button type="button" class="btn-secondary" data-close-modal>रद्द करें</button>
         <button type="button" class="btn-primary" id="btnSaveTrolley">🚜 दर्ज करें</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- JCB / MACHINE: one slot of work, from this time to that time. -->
+  <div id="modalJcb" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">🏗️ JCB का समय दर्ज करें</h3>
+        <button class="btn-close-modal" data-close-modal>&times;</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="jcbSupplierSelect">मशीन वाला:</label>
+        <select id="jcbSupplierSelect" class="form-select"></select>
+        <p id="jcbNoSupplierNote" style="display: none; font-size: 0.78rem; color: var(--rose-danger); margin-top: 6px;">
+          पहले JCB वाले को जोड़ें — "+ कारीगर" में ट्रेड "🏗️ JCB" चुनें।
+        </p>
+      </div>
+
+      <!-- What is already down for today, so the next slot can carry on from
+           where the last one stopped. -->
+      <div id="jcbTodaySlots" class="jcb-slot-list"></div>
+
+      <div class="form-group">
+        <label class="form-label">कौन सा काम?</label>
+        <div class="trolley-material-grid" id="jcbWorkChips"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">कितने बजे से कितने बजे तक?</label>
+        <div class="jcb-time-row">
+          <div>
+            <span class="jcb-time-cap">से</span>
+            <input type="time" id="jcbStart" class="form-input" />
+          </div>
+          <div>
+            <span class="jcb-time-cap">तक</span>
+            <input type="time" id="jcbEnd" class="form-input" />
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="jcbHours">कितने घंटे का हिसाब?</label>
+        <input type="number" id="jcbHours" class="form-input" step="0.25" min="0" inputmode="decimal" />
+        <p class="field-hint">समय भरते ही अपने-आप आ जाएगा। जो तय हुआ हो, वो यहीं बदल भी सकते हैं।</p>
+      </div>
+
+      <div id="jcbTotalBox" class="trolley-total-box">रेट भरते ही कुल रक़म यहाँ दिखेगी।</div>
+
+      <div class="form-group">
+        <label class="form-label" for="jcbDate">तारीख:</label>
+        <input type="date" id="jcbDate" class="form-input" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="jcbNote">नोट (ज़रूरी नहीं):</label>
+        <input type="text" id="jcbNote" class="form-input" placeholder="जैसे: नींव की खुदाई, पीछे की दीवार" />
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" data-close-modal>रद्द करें</button>
+        <button type="button" class="btn-primary" id="btnSaveJcb">🏗️ दर्ज करें</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MACHINE RATES: the bucket and the breaker are priced apart. -->
+  <div id="modalMachineRates" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">🏗️ घंटे का रेट</h3>
+        <button class="btn-close-modal" data-close-modal>&times;</button>
+      </div>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px;">
+        <strong id="machineRatesWorkerName"></strong> के लिए एक घंटे का दाम। ब्रेकर का रेट आम तौर पर ज़्यादा होता है।
+      </p>
+      <div id="machineRatesFields"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" data-close-modal>रद्द करें</button>
+        <button type="button" class="btn-primary" id="btnSaveMachineRates">💾 रेट सेव करें</button>
       </div>
     </div>
   </div>

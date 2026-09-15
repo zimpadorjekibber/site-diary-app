@@ -1,7 +1,7 @@
 // src/main.js
 // Main Application Controller for Shram & Site Diary
 
-import { store, getTodayString, getDeviceId, getAllTxTypes, getTxTypeMeta, getTxTypeLabel, getThekaTotal, describeTheka, isThekaUnmeasured, TROLLEY_MATERIALS, getTrolleyMaterial, JOB_TEMPLATES } from './storage.js';
+import { store, getTodayString, getDeviceId, getAllTxTypes, getTxTypeMeta, getTxTypeLabel, getThekaTotal, describeTheka, isThekaUnmeasured, TROLLEY_MATERIALS, getTrolleyMaterial, JOB_TEMPLATES, MACHINE_WORKS, getMachineWork, computeHours, formatHours } from './storage.js';
 import { VoiceManager } from './speech.js';
 import { ReminderManager } from './reminder.js';
 import confetti from 'canvas-confetti';
@@ -105,6 +105,8 @@ class App {
     this.lendingPhotoDataUrl = null;
     this.trolleyMaterial = null;
     this.trolleyRatesWorkerId = null;
+    this.jcbWork = null;
+    this.machineRatesWorkerId = null;
     this.modalIsThekedar = true;   // a theka worker holds the contract unless told otherwise
     this.modalThekaMode = 'lumpsum';
     this.newWorkerPhotoDataUrl = null;
@@ -223,6 +225,7 @@ class App {
     this.checkEveningBanner();
     this.initFirebaseIntegration();
     this.bindTrolleyEvents();
+    this.bindJcbEvents();
     this.bindProjectEvents();
     this.bindLendingEvents();
     this.renderProjectHeader();
@@ -594,7 +597,7 @@ class App {
   =================================================== */
 
   openTrolleyModal(supplierId = null) {
-    const suppliers = this.store.getSuppliers();
+    const suppliers = this.store.getSuppliers('trolley');
     const select = document.getElementById('trolleySupplierSelect');
     const note = document.getElementById('trolleyNoSupplierNote');
 
@@ -741,14 +744,339 @@ class App {
     }
   }
 
+  /* ===================================================
+     JCB / MACHINE HIRE
+
+     A machine is hired by the hour and the day comes in slots — dig from nine
+     to one, break from two to half four. Each slot is entered on its own, so
+     the form shows what is already down for the day and starts the next slot
+     at the time the last one ended.
+  =================================================== */
+
+  openJcbModal(supplierId = null) {
+    const suppliers = this.store.getSuppliers('machine');
+    const select = document.getElementById('jcbSupplierSelect');
+    const note = document.getElementById('jcbNoSupplierNote');
+
+    if (suppliers.length === 0) {
+      if (select) select.innerHTML = '<option value="">(कोई JCB वाला नहीं जुड़ा)</option>';
+      if (note) note.style.display = 'block';
+    } else {
+      if (note) note.style.display = 'none';
+      if (select) {
+        select.innerHTML = suppliers
+          .map(w => `<option value="${esc(w.id)}">${esc(w.name)}</option>`)
+          .join('');
+        if (supplierId) select.value = supplierId;
+      }
+    }
+
+    this.jcbWork = null;
+    const dateInput = document.getElementById('jcbDate');
+    if (dateInput) dateInput.value = getTodayString();
+    ['jcbStart', 'jcbEnd', 'jcbHours', 'jcbNote']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+
+    this.renderJcbWorks();
+    this.renderJcbTodaySlots();
+    this.updateJcbTotal();
+    document.getElementById('modalJcb')?.classList.add('open');
+  }
+
+  renderJcbWorks() {
+    const box = document.getElementById('jcbWorkChips');
+    if (!box) return;
+    const supplierId = document.getElementById('jcbSupplierSelect')?.value;
+
+    box.innerHTML = MACHINE_WORKS.map(work => {
+      const rate = supplierId ? this.store.getMachineRate(supplierId, work.id) : 0;
+      const active = this.jcbWork === work.id;
+      return `
+        <button type="button" class="trolley-material-chip ${active ? 'active' : ''} ${rate ? '' : 'no-rate'}"
+                data-machine-work="${esc(work.id)}">
+          ${esc(work.icon)} ${esc(work.hi)}
+          <small>${rate ? `₹${rate.toLocaleString('en-IN')}/घंटा` : 'रेट नहीं भरा'}</small>
+        </button>
+      `;
+    }).join('');
+  }
+
+  /** Today's slots for this machine, and the reason the next one starts where
+      the last ended — "उससे आगे से आगे तक". */
+  renderJcbTodaySlots() {
+    const box = document.getElementById('jcbTodaySlots');
+    if (!box) return;
+    const supplierId = document.getElementById('jcbSupplierSelect')?.value;
+    const date = document.getElementById('jcbDate')?.value || getTodayString();
+    const slots = supplierId ? this.store.getMachineSlotsForDate(date, supplierId) : [];
+
+    if (slots.length === 0) {
+      box.innerHTML = '';
+      box.style.display = 'none';
+      return;
+    }
+
+    const total = slots.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const hours = slots.reduce((sum, t) => sum + (Number(t.hours) || 0), 0);
+    box.style.display = 'block';
+    box.innerHTML = `
+      <div class="jcb-slot-head">इस दिन अब तक दर्ज:</div>
+      ${slots.map(t => `
+        <div class="jcb-slot-row">
+          <span>${esc(getMachineWork(t.workId).hi)}</span>
+          <span class="jcb-slot-time">${esc(t.startTime || '?')} – ${esc(t.endTime || '?')}</span>
+          <span class="jcb-slot-amt">${inr(t.amount)}</span>
+        </div>
+      `).join('')}
+      <div class="jcb-slot-total">कुल ${esc(formatHours(hours))} — <strong>${inr(total)}</strong></div>
+    `;
+
+    // Carry on from where the day left off, unless the user already typed a time.
+    const startEl = document.getElementById('jcbStart');
+    const lastEnd = slots[slots.length - 1]?.endTime;
+    if (startEl && !startEl.value && lastEnd) startEl.value = lastEnd;
+  }
+
+  /** Fills the hours from the two times — but never overwrites a figure the
+      user typed themselves, because the settled number wins over the clock. */
+  syncJcbHoursFromClock() {
+    const start = document.getElementById('jcbStart')?.value;
+    const end = document.getElementById('jcbEnd')?.value;
+    const hoursEl = document.getElementById('jcbHours');
+    if (!hoursEl || !start || !end) return;
+    const hours = computeHours(start, end);
+    if (hours > 0) hoursEl.value = hours;
+  }
+
+  updateJcbTotal() {
+    const box = document.getElementById('jcbTotalBox');
+    if (!box) return;
+    const supplierId = document.getElementById('jcbSupplierSelect')?.value;
+    const hours = Number(document.getElementById('jcbHours')?.value) || 0;
+
+    if (!this.jcbWork) {
+      box.textContent = 'ऊपर से काम चुनिए — बैकहो या ब्रेकर।';
+      box.classList.remove('has-total');
+      return;
+    }
+    const rate = this.store.getMachineRate(supplierId, this.jcbWork);
+    const work = getMachineWork(this.jcbWork);
+    if (!rate) {
+      box.innerHTML = `${esc(work.hi)} का घंटे का रेट अभी तय नहीं है। ` +
+        `<button type="button" id="btnOpenMachineRatesInline" style="background:none;border:none;color:var(--purple-accent);font-weight:700;cursor:pointer;text-decoration:underline;">अभी भरें</button>`;
+      box.classList.remove('has-total');
+      return;
+    }
+    if (hours <= 0) {
+      box.textContent = 'कितने बजे से कितने बजे तक चली, वो भरिए।';
+      box.classList.remove('has-total');
+      return;
+    }
+    box.innerHTML = `${esc(formatHours(hours))} × ₹${rate.toLocaleString('en-IN')}/घंटा<strong>${inr(Math.round(hours * rate))}</strong>`;
+    box.classList.add('has-total');
+  }
+
+  openMachineRatesModal(supplierId) {
+    const worker = this.store.getWorker(supplierId);
+    if (!worker) return;
+    const nameEl = document.getElementById('machineRatesWorkerName');
+    if (nameEl) nameEl.textContent = worker.name;
+
+    const fields = document.getElementById('machineRatesFields');
+    if (fields) {
+      fields.innerHTML = MACHINE_WORKS.map(work => `
+        <div class="trolley-rate-row">
+          <label for="mrate_${esc(work.id)}">${esc(work.icon)} ${esc(work.hi)}</label>
+          <input type="number" class="form-input" id="mrate_${esc(work.id)}" data-rate-work="${esc(work.id)}"
+                 min="0" step="50" placeholder="₹ प्रति घंटा"
+                 value="${this.store.getMachineRate(supplierId, work.id) || ''}" />
+        </div>
+      `).join('');
+    }
+    this.machineRatesWorkerId = supplierId;
+    document.getElementById('modalMachineRates')?.classList.add('open');
+  }
+
+  /** The day's slots, as the machine owner would read them out. */
+  buildJcbWhatsAppMessage(supplierId, date) {
+    const worker = this.store.getWorker(supplierId);
+    const slots = this.store.getMachineSlotsForDate(date, supplierId);
+    if (!worker || slots.length === 0) return '';
+
+    const dayTotal = slots.reduce((s2, t) => s2 + (Number(t.amount) || 0), 0);
+    const dayHours = slots.reduce((s2, t) => s2 + (Number(t.hours) || 0), 0);
+    const ledger = this.store.getSupplierLedger(supplierId);
+
+    let msg = `🏗️ *JCB का हिसाब*\n`;
+    msg += `------------------------------------\n`;
+    msg += `📅 ${formatShortDate(date, 'hi')}\n`;
+    msg += `👤 ${worker.name}\n\n`;
+
+    slots.forEach(t => {
+      const work = getMachineWork(t.workId);
+      msg += `• ${work.hi}\n`;
+      msg += `   ${t.startTime || '?'} – ${t.endTime || '?'} = ${formatHours(t.hours)}\n`;
+      msg += `   ${formatHours(t.hours)} × ₹${(t.ratePerHour || 0).toLocaleString('en-IN')} = ₹${(t.amount || 0).toLocaleString('en-IN')}\n`;
+      if (t.note) msg += `   (${t.note})\n`;
+    });
+
+    msg += `------------------------------------\n`;
+    msg += `*आज कुल:* ${formatHours(dayHours)} — ₹${dayTotal.toLocaleString('en-IN')}\n`;
+
+    if (ledger && ledger.totalAmount !== dayTotal) {
+      msg += `\n*अब तक का पूरा हिसाब:*\n`;
+      msg += `कुल समय: ${formatHours(ledger.totalHours)}\n`;
+      msg += `कुल रक़म: ₹${ledger.totalAmount.toLocaleString('en-IN')}\n`;
+      if (ledger.totalPaid > 0) msg += `दिया गया: ₹${ledger.totalPaid.toLocaleString('en-IN')}\n`;
+      msg += `*बाकी: ₹${ledger.balanceDue.toLocaleString('en-IN')}*\n`;
+    }
+
+    msg += `\n_'श्रम व साइट डायरी' ऐप से_`;
+    return msg;
+  }
+
+  shareJcbOnWhatsApp(supplierId, date) {
+    const worker = this.store.getWorker(supplierId);
+    const msg = this.buildJcbWhatsAppMessage(supplierId, date);
+    if (!msg) {
+      alert('इस तारीख को इनका कोई समय दर्ज नहीं है।');
+      return;
+    }
+    const digits = (worker.phone || '').replace(/[^0-9]/g, '');
+    if (digits.length >= 10) {
+      window.open(getWhatsAppUrl(worker.phone, msg), '_blank');
+    } else {
+      navigator.clipboard.writeText(msg)
+        .then(() => alert('इनका मोबाइल नंबर नहीं है, इसलिए हिसाब कॉपी कर दिया है।\n\nकिसी भी चैट में पेस्ट कर दीजिए।'))
+        .catch(() => prompt('कॉपी करने के लिए Ctrl+C दबाएं:', msg));
+    }
+  }
+
+  bindJcbEvents() {
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#btnOpenJcb, [data-open-jcb]')) {
+        const id = e.target.closest('[data-open-jcb]')?.getAttribute('data-open-jcb');
+        if (!id && this.store.getSuppliers('machine').length === 0) {
+          const jcbTrade = this.store.getTrades().find(t => t.supplierKind === 'machine');
+          this.openAddWorkerModal(jcbTrade ? jcbTrade.id : null);
+          this.showToast('JCB वाले का नाम व नंबर भरें — फिर समय दर्ज कर सकेंगे', 4000);
+          return;
+        }
+        this.openJcbModal(id || null);
+      }
+
+      const workChip = e.target.closest('[data-machine-work]');
+      if (workChip) {
+        this.jcbWork = workChip.getAttribute('data-machine-work');
+        this.renderJcbWorks();
+        this.updateJcbTotal();
+      }
+
+      if (e.target.closest('#btnOpenMachineRatesInline')) {
+        const supplierId = document.getElementById('jcbSupplierSelect')?.value;
+        if (supplierId) this.openMachineRatesModal(supplierId);
+      }
+
+      const rateBtn = e.target.closest('[data-open-machine-rates]');
+      if (rateBtn) this.openMachineRatesModal(rateBtn.getAttribute('data-open-machine-rates'));
+
+      const waBtn = e.target.closest('[data-jcb-wa]');
+      if (waBtn) {
+        this.shareJcbOnWhatsApp(waBtn.getAttribute('data-jcb-wa'),
+                                waBtn.getAttribute('data-jcb-date') || getTodayString());
+      }
+    });
+
+    ['jcbStart', 'jcbEnd'].forEach(id => {
+      document.getElementById(id)?.addEventListener('change', () => {
+        this.syncJcbHoursFromClock();
+        this.updateJcbTotal();
+      });
+    });
+    document.getElementById('jcbHours')?.addEventListener('input', () => this.updateJcbTotal());
+    document.getElementById('jcbSupplierSelect')?.addEventListener('change', () => {
+      this.renderJcbWorks();
+      this.renderJcbTodaySlots();
+      this.updateJcbTotal();
+    });
+    document.getElementById('jcbDate')?.addEventListener('change', () => this.renderJcbTodaySlots());
+
+    document.getElementById('btnSaveJcb')?.addEventListener('click', () => {
+      const supplierId = document.getElementById('jcbSupplierSelect')?.value;
+      if (!supplierId) {
+        alert('पहले JCB वाले को जोड़ें।');
+        return;
+      }
+      if (!this.jcbWork) {
+        alert('कौन सा काम हुआ — बैकहो या ब्रेकर, वो चुनिए।');
+        return;
+      }
+      const startTime = document.getElementById('jcbStart')?.value || '';
+      const endTime = document.getElementById('jcbEnd')?.value || '';
+      const hours = Number(document.getElementById('jcbHours')?.value) || 0;
+      const date = document.getElementById('jcbDate')?.value || getTodayString();
+      const note = document.getElementById('jcbNote')?.value || '';
+
+      let tx;
+      try {
+        tx = this.store.addMachineSlot({ workerId: supplierId, workId: this.jcbWork,
+                                        date, startTime, endTime, hours, note });
+      } catch (err) {
+        alert(err.message);
+        return;
+      }
+
+      this.commit();
+      const worker = this.store.getWorker(supplierId);
+      const work = getMachineWork(this.jcbWork);
+
+      // The day often has a second slot, so offer to stay and add it rather
+      // than making them find the button again.
+      const another = confirm(
+        `✅ दर्ज हो गया\n\n${work.hi} — ${formatHours(tx.hours)} — ${inr(tx.amount)}\n\nइसी दिन का एक और समय जोड़ना है?`
+      );
+
+      if (another) {
+        // Keep the machine and the date; clear the slot so the next one starts
+        // from where this one ended.
+        this.jcbWork = null;
+        ['jcbStart', 'jcbEnd', 'jcbHours', 'jcbNote']
+          .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        this.renderJcbWorks();
+        this.renderJcbTodaySlots();
+        this.updateJcbTotal();
+        return;
+      }
+
+      this.closeModals();
+      if (confirm(`${worker.name} को WhatsApp पर आज का हिसाब भेजें?`)) {
+        this.shareJcbOnWhatsApp(supplierId, date);
+      }
+    });
+
+    document.getElementById('btnSaveMachineRates')?.addEventListener('click', () => {
+      const rates = {};
+      document.querySelectorAll('#machineRatesFields [data-rate-work]').forEach(input => {
+        rates[input.getAttribute('data-rate-work')] = input.value;
+      });
+      this.store.setMachineRates(this.machineRatesWorkerId, rates);
+      document.getElementById('modalMachineRates')?.classList.remove('open');
+      this.renderJcbWorks();
+      this.updateJcbTotal();
+      this.commit();
+      this.showToast('घंटे का रेट सेव हो गया');
+    });
+  }
+
   bindTrolleyEvents() {
     document.addEventListener('click', (e) => {
       if (e.target.closest('#btnOpenTrolley, [data-open-trolley]')) {
         const id = e.target.closest('[data-open-trolley]')?.getAttribute('data-open-trolley');
         // Nothing to record against yet — send them to add the tractor owner,
         // with the trade already chosen, instead of an empty delivery form.
-        if (!id && this.store.getSuppliers().length === 0) {
-          const tractorTrade = this.store.getTrades().find(t => t.isSupplier);
+        if (!id && this.store.getSuppliers('trolley').length === 0) {
+          const tractorTrade = this.store.getTrades()
+            .find(t => t.isSupplier && (t.supplierKind || 'trolley') === 'trolley');
           this.openAddWorkerModal(tractorTrade ? tractorTrade.id : null);
           this.showToast('ट्रैक्टर वाले का नाम व नंबर भरें — फिर ट्रॉली दर्ज कर सकेंगे', 4000);
           return;
@@ -1321,35 +1649,70 @@ class App {
       }
     }
 
-    // Trolley action: only meaningful once a tractor supplier exists.
+    /* The two supplier buttons. Each stays visible as long as its trade exists,
+       even with nobody added yet: hiding them until a supplier existed made the
+       whole feature undiscoverable — nothing on screen said a tractor or a JCB
+       could be added at all. Empty, the button is the invitation to set one up. */
     const trolleyBtn = document.getElementById('btnOpenTrolley');
+    const jcbBtn = document.getElementById('btnOpenJcb');
+
     if (trolleyBtn) {
-      const suppliers = this.store.getSuppliers();
-      // Always visible once the site has a tractor trade. Hiding it until a
-      // supplier existed made the feature undiscoverable: nothing on screen said
-      // a tractor could be added at all. With no supplier yet it becomes the
-      // invitation to set one up.
-      const hasTractorTrade = this.store.getTrades().some(t => t.isSupplier);
-      trolleyBtn.style.display = hasTractorTrade ? '' : 'none';
+      const suppliers = this.store.getSuppliers('trolley');
+      const hasTrade = this.store.getTrades()
+        .some(t => t.isSupplier && (t.supplierKind || 'trolley') === 'trolley');
+      trolleyBtn.style.display = hasTrade ? '' : 'none';
       trolleyBtn.classList.toggle('is-setup', suppliers.length === 0);
-      const strongEl = trolleyBtn.querySelector('strong');
-      if (strongEl) {
-        strongEl.textContent = suppliers.length === 0 ? 'ट्रैक्टर वाला जोड़ें' : 'ट्रॉली दर्ज करें';
+
+      const label = document.getElementById('trolleyBtnLabel');
+      if (label) {
+        label.textContent = suppliers.length === 0
+          ? 'ट्रैक्टर जोड़ें'
+          : 'ट्रॉली';
       }
       const summary = document.getElementById('trolleyTodaySummary');
       if (summary) {
         const todays = this.store.getTrolleyDeliveriesForDate(today);
         if (suppliers.length === 0) {
-          summary.textContent = 'रेता, बजरी, बालू की ट्रॉली गिनने के लिए →';
+          summary.textContent = 'रेता, बजरी गिनने →';
         } else if (todays.length === 0) {
-          summary.textContent = 'रेता, बजरी, बालू +';
+          summary.textContent = 'रेता, बजरी +';
         } else {
           const trips = todays.reduce((n, t) => n + (Number(t.trips) || 0), 0);
           const amt = todays.reduce((n, t) => n + (Number(t.amount) || 0), 0);
-          summary.textContent = `आज ${trips} ट्रॉली · ${inr(amt)} →`;
+          summary.textContent = `आज ${trips} · ${inr(amt)}`;
         }
       }
     }
+
+    if (jcbBtn) {
+      const machines = this.store.getSuppliers('machine');
+      const hasTrade = this.store.getTrades().some(t => t.supplierKind === 'machine');
+      jcbBtn.style.display = hasTrade ? '' : 'none';
+      jcbBtn.classList.toggle('is-setup', machines.length === 0);
+
+      const label = document.getElementById('jcbBtnLabel');
+      if (label) {
+        label.textContent = machines.length === 0 ? 'JCB जोड़ें' : 'JCB';
+      }
+      const summary = document.getElementById('jcbTodaySummary');
+      if (summary) {
+        const todays = this.store.getMachineSlotsForDate(today);
+        if (machines.length === 0) {
+          summary.textContent = 'घंटे का हिसाब →';
+        } else if (todays.length === 0) {
+          summary.textContent = 'खुदाई / ब्रेकर +';
+        } else {
+          const hours = todays.reduce((n, t) => n + (Number(t.hours) || 0), 0);
+          const amt = todays.reduce((n, t) => n + (Number(t.amount) || 0), 0);
+          summary.textContent = `आज ${inr(amt)}`;
+        }
+      }
+    }
+
+    // With only one of them on screen it takes the full width rather than
+    // leaving a hole in the grid.
+    const shown = [trolleyBtn, jcbBtn].filter(b => b && b.style.display !== 'none');
+    [trolleyBtn, jcbBtn].forEach(b => b?.classList.toggle('is-solo', shown.length === 1));
 
     // Diary status
     const isMarked = this.store.isDateMarkedInDiary(today);
