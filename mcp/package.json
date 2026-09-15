@@ -4,7 +4,14 @@
   "private": true,
   "type": "module",
   "description": "Read-only MCP server for Shram & Site Diary",
-  "bin": { "site-diary-mcp": "./server.js" },
-  "scripts": { "start": "node server.js" },
-  "dependencies": { "@modelcontextprotocol/sdk": "^1.30.0" }
+  "bin": {
+    "site-diary-mcp": "./server.js"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "firebase": "^12.19.0"
+  }
 }

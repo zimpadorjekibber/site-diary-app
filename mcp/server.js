@@ -8,14 +8,27 @@
 // and quietly disagree with it, which is exactly the class of bug this project
 // has already been bitten by.
 //
-// Read-only by design. It exposes no tool that can change the ledger.
+// Writes are supported but deliberately narrow: add a worker, mark attendance,
+// log an expense, correct a worker's details. There is no tool that deletes a
+// worker or wipes the ledger — destruction by misread sentence is not a risk
+// worth taking, and the app has those controls behind explicit confirmations.
+// Set SITE_DIARY_READONLY=1 to disable every write tool.
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 
 import { SiteDiaryClient } from './firestore.js';
+import { mutateLedger, findWorker, findTrade, validDate, todayString as writerToday } from './writer.js';
 import { Store, getThekaTotal, describeTheka, getTxTypeLabel } from '../src/storage.js';
+
+const READ_ONLY = process.env.SITE_DIARY_READONLY === '1';
+
+const siteRef = {
+  siteId: process.env.SITE_DIARY_SITE_ID,
+  projectId: process.env.SITE_DIARY_PROJECT_ID,
+  apiKey: process.env.SITE_DIARY_API_KEY
+};
 
 const client = new SiteDiaryClient({
   siteId: process.env.SITE_DIARY_SITE_ID,
@@ -384,21 +397,327 @@ const handlers = {
   }
 };
 
+const WRITE_TOOLS = [
+  {
+    name: 'add_worker',
+    description:
+      'Add a worker to the site. For daily-wage (dihadi) workers give dailyRate. For contract ' +
+      '(theka) work, the contract belongs to ONE person: set isThekedar true for the contractor ' +
+      'and give either thekaAmount, or thekaRate plus thekaUnit. Everyone else working under that ' +
+      'contractor is added with contractType "theka" and isThekedar false, and carries no amount ' +
+      'of their own — their wages come from the contractor, not the site.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: "The worker's name." },
+        trade: { type: 'string', description: 'Trade id or name, e.g. carpenter, mason.' },
+        role: { type: 'string', enum: ['mistri', 'helper'], description: 'mistri (craftsman) or helper.' },
+        contractType: { type: 'string', enum: ['dihadi', 'theka'], description: 'Daily wage or contract. Default dihadi.' },
+        dailyRate: { type: 'number', description: 'Rupees per day. Required for dihadi.' },
+        isThekedar: { type: 'boolean', description: 'True only for the person who holds the contract.' },
+        thekaAmount: { type: 'number', description: 'Lump-sum contract value, for a thekedar.' },
+        thekaRate: { type: 'number', description: 'Rate per unit, e.g. 25 for ₹25 per square ft.' },
+        thekaUnit: { type: 'string', description: 'Unit for the rate, e.g. "square ft".' },
+        thekaQuantity: { type: 'number', description: 'Measured quantity. Omit if not measured yet.' },
+        thekaDescription: { type: 'string', description: 'What the contract covers.' },
+        phone: { type: 'string', description: 'Mobile number.' }
+      },
+      required: ['name', 'trade']
+    }
+  },
+  {
+    name: 'mark_attendance',
+    description:
+      "Record one worker's attendance for a date: present, half day, or absent, with optional " +
+      'overtime hours. Overwrites whatever was recorded for that worker on that date.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        worker: { type: 'string', description: 'Worker name or id.' },
+        status: { type: 'string', enum: ['present', 'half', 'absent'], description: 'Attendance for the day.' },
+        date: { type: 'string', description: 'YYYY-MM-DD. Defaults to today.' },
+        overtimeHours: { type: 'number', description: 'Extra hours worked beyond the normal day.' }
+      },
+      required: ['worker', 'status']
+    }
+  },
+  {
+    name: 'mark_all_present',
+    description:
+      'Mark every worker present for a date — the usual morning action. Optionally limit to one trade. ' +
+      'Does not disturb workers already marked half day or absent unless overwrite is true.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'YYYY-MM-DD. Defaults to today.' },
+        trade: { type: 'string', description: 'Optional trade filter.' },
+        overwrite: { type: 'boolean', description: 'Also overwrite existing half-day/absent marks. Default false.' }
+      }
+    }
+  },
+  {
+    name: 'add_expense',
+    description:
+      'Log money spent. Either against one worker (a cash advance, a recharge — counts toward what ' +
+      'they have been paid) or against a trade group as a shared site cost (ration, cylinder, diesel, ' +
+      'material). Give exactly one of worker or trade.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        amount: { type: 'number', description: 'Rupees.' },
+        type: {
+          type: 'string',
+          description: 'cash, recharge, ration, cylinder, diesel, material, other. Default cash.'
+        },
+        worker: { type: 'string', description: 'Worker this was paid to or spent on.' },
+        trade: { type: 'string', description: 'Trade group this shared cost belongs to.' },
+        note: { type: 'string', description: 'What it was for, in the user\'s own words.' },
+        item: { type: 'string', description: 'Item name, for ration or material.' },
+        quantity: { type: 'string', description: 'e.g. "10 kg", "1 cylinder".' },
+        date: { type: 'string', description: 'YYYY-MM-DD. Defaults to today.' }
+      },
+      required: ['amount']
+    }
+  },
+  {
+    name: 'update_worker',
+    description:
+      "Correct a worker's details — daily rate, phone, trade, role, or the measured quantity on a " +
+      'rate-based contract (which is how a contract total gets finalised once the work is measured). ' +
+      'Only the fields given are changed.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        worker: { type: 'string', description: 'Worker name or id.' },
+        dailyRate: { type: 'number', description: 'New daily wage.' },
+        phone: { type: 'string', description: 'New mobile number.' },
+        trade: { type: 'string', description: 'Move to a different trade.' },
+        role: { type: 'string', enum: ['mistri', 'helper'], description: 'Change role.' },
+        thekaQuantity: { type: 'number', description: 'Measured quantity for a rate contract.' },
+        thekaAmount: { type: 'number', description: 'New lump-sum contract value.' },
+        thekaDescription: { type: 'string', description: 'What the contract covers.' }
+      },
+      required: ['worker']
+    }
+  }
+];
+
+const writeHandlers = {
+  async add_worker(args) {
+    return mutateLedger(siteRef, (store) => {
+      const name = String(args.name || '').trim();
+      if (!name) throw new Error('The worker needs a name.');
+
+      const existing = store.getWorkers().find(w => w.name.toLowerCase() === name.toLowerCase());
+      if (existing) {
+        throw new Error(`"${name}" is already on the site (${store.getTrade(existing.tradeId).name}). Use update_worker to change their details.`);
+      }
+
+      const trade = findTrade(store, args.trade);
+      const isTheka = args.contractType === 'theka';
+      const isThekedar = isTheka && args.isThekedar === true;
+
+      // A daily-wage worker without a rate earns nothing, which silently
+      // understates what the site owes — refuse rather than write that.
+      if (!isTheka && !(Number(args.dailyRate) > 0)) {
+        throw new Error('A dihadi worker needs a dailyRate, otherwise their wages compute to zero.');
+      }
+      if (isThekedar && !(Number(args.thekaAmount) > 0) && !(Number(args.thekaRate) > 0)) {
+        throw new Error('A thekedar needs either thekaAmount (lump sum) or thekaRate with thekaUnit.');
+      }
+
+      const worker = store.addWorker({
+        name,
+        tradeId: trade.id,
+        role: args.role === 'helper' ? 'helper' : 'mistri',
+        contractType: isTheka ? 'theka' : 'dihadi',
+        dailyRate: args.dailyRate,
+        isThekedar,
+        thekaMode: Number(args.thekaRate) > 0 ? 'rate' : 'lumpsum',
+        thekaAmount: args.thekaAmount,
+        thekaRate: args.thekaRate,
+        thekaUnit: args.thekaUnit,
+        thekaQuantity: args.thekaQuantity,
+        thekaDescription: args.thekaDescription,
+        phone: args.phone
+      });
+
+      return {
+        added: worker.name,
+        trade: trade.name,
+        role: worker.role,
+        contract: isTheka
+          ? (isThekedar ? describeTheka(worker, 'en') : 'works under the contractor — carries no amount of their own')
+          : `₹${worker.dailyRate}/day`,
+        note: 'Open the app on the phone to pull this in.'
+      };
+    });
+  },
+
+  async mark_attendance(args) {
+    return mutateLedger(siteRef, (store) => {
+      const worker = findWorker(store, args.worker);
+      const date = validDate(args.date);
+      const status = args.status === 'present' ? 1 : args.status === 'half' ? 0.5 : 0;
+      const ot = Number(args.overtimeHours) || 0;
+
+      if (status === 0 && ot > 0) {
+        throw new Error('An absent worker cannot have overtime hours.');
+      }
+
+      store.setWorkerHaziri(date, worker.id, status, ot);
+      return {
+        worker: worker.name,
+        date,
+        status: args.status,
+        overtimeHours: ot,
+        note: 'Open the app on the phone to pull this in.'
+      };
+    });
+  },
+
+  async mark_all_present(args) {
+    return mutateLedger(siteRef, (store) => {
+      const date = validDate(args.date);
+      const trade = args.trade ? findTrade(store, args.trade) : null;
+      const workers = trade ? store.getWorkers(trade.id) : store.getWorkers();
+
+      if (workers.length === 0) {
+        throw new Error(trade ? `No workers in ${trade.name}.` : 'No workers on the site yet.');
+      }
+
+      const existing = store.getHaziri(date);
+      const marked = [];
+      const leftAlone = [];
+
+      for (const w of workers) {
+        const already = existing[w.id];
+        // Someone deliberately marked half day or absent; do not quietly undo it.
+        if (already && already.status !== 1 && !args.overwrite) {
+          leftAlone.push(w.name);
+          continue;
+        }
+        store.setWorkerHaziri(date, w.id, 1, already?.otHours || 0);
+        marked.push(w.name);
+      }
+
+      return {
+        date,
+        trade: trade ? trade.name : 'all trades',
+        markedPresent: marked,
+        leftUnchanged: leftAlone.length
+          ? { workers: leftAlone, reason: 'already marked half day or absent — pass overwrite: true to change them' }
+          : undefined,
+        note: 'Open the app on the phone to pull this in.'
+      };
+    });
+  },
+
+  async add_expense(args) {
+    return mutateLedger(siteRef, (store) => {
+      const amount = Number(args.amount);
+      if (!(amount > 0)) throw new Error('Amount must be a positive number of rupees.');
+
+      if (args.worker && args.trade) {
+        throw new Error('Give either worker (paid to one person) or trade (a shared site cost), not both.');
+      }
+      if (!args.worker && !args.trade) {
+        throw new Error('Who was this for? Give worker for a payment to one person, or trade for a shared cost.');
+      }
+
+      const date = validDate(args.date);
+      let worker = null;
+      let trade;
+
+      if (args.worker) {
+        worker = findWorker(store, args.worker);
+        trade = store.getTrade(worker.tradeId);
+      } else {
+        trade = findTrade(store, args.trade);
+      }
+
+      const tx = store.addTransaction({
+        date,
+        type: args.type || 'cash',
+        targetType: worker ? 'individual' : 'group',
+        tradeId: trade.id,
+        workerId: worker ? worker.id : null,
+        amount,
+        rationItem: args.item || '',
+        quantity: args.quantity || '',
+        note: args.note || ''
+      });
+
+      return {
+        logged: `₹${amount.toLocaleString('en-IN')}`,
+        type: getTxTypeLabel(tx.type, 'en'),
+        paidTo: worker ? worker.name : `${trade.name} (shared)`,
+        date,
+        note: 'Open the app on the phone to pull this in.'
+      };
+    });
+  },
+
+  async update_worker(args) {
+    return mutateLedger(siteRef, (store) => {
+      const worker = findWorker(store, args.worker);
+      const updates = {};
+
+      if (args.dailyRate !== undefined) {
+        if (!(Number(args.dailyRate) >= 0)) throw new Error('dailyRate must be a number.');
+        updates.dailyRate = Number(args.dailyRate);
+      }
+      if (args.phone !== undefined) updates.phone = String(args.phone).trim();
+      if (args.role !== undefined) updates.role = args.role === 'helper' ? 'helper' : 'mistri';
+      if (args.trade !== undefined) updates.tradeId = findTrade(store, args.trade).id;
+      if (args.thekaDescription !== undefined) updates.thekaDescription = String(args.thekaDescription);
+
+      if (args.thekaQuantity !== undefined || args.thekaAmount !== undefined) {
+        if (!worker.isThekedar) {
+          throw new Error(`${worker.name} does not hold a contract — only the thekedar carries an amount.`);
+        }
+        if (args.thekaQuantity !== undefined) updates.thekaQuantity = Number(args.thekaQuantity) || 0;
+        if (args.thekaAmount !== undefined) updates.thekaAmount = Number(args.thekaAmount) || 0;
+      }
+
+      if (Object.keys(updates).length === 0) {
+        throw new Error('Nothing to change — give at least one field to update.');
+      }
+
+      const updated = store.updateWorker(worker.id, updates);
+      return {
+        worker: updated.name,
+        changed: Object.keys(updates),
+        contract: updated.contractType === 'theka' ? describeTheka(updated, 'en') : `₹${updated.dailyRate}/day`,
+        note: 'Open the app on the phone to pull this in.'
+      };
+    });
+  }
+};
+
+/* Read-only mode drops the write tools entirely, so Claude never sees a
+   capability it is not allowed to use. */
+const ALL_TOOLS = READ_ONLY ? TOOLS : [...TOOLS, ...WRITE_TOOLS];
+const ALL_HANDLERS = READ_ONLY ? handlers : { ...handlers, ...writeHandlers };
+
 const server = new Server(
   { name: 'site-diary', version: '1.0.0' },
   { capabilities: { tools: {} } }
 );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOLS }));
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: ALL_TOOLS }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-  const handler = handlers[name];
+  const handler = ALL_HANDLERS[name];
   if (!handler) {
     return { isError: true, content: [{ type: 'text', text: `Unknown tool: ${name}` }] };
   }
   try {
     const result = await handler(args || {});
+    // A write changes the ledger the read tools cache; drop it so a follow-up
+    // question does not answer from the state before the change.
+    if (writeHandlers[name]) client._cache = null;
     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
   } catch (err) {
     return { isError: true, content: [{ type: 'text', text: err.message }] };
