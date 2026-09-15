@@ -6,19 +6,11 @@
   directory = "netlify/functions"
   node_bundler = "esbuild"
 
-# The MCP endpoint must be matched before the SPA catch-all below, or every
-# request to it would be answered with index.html.
-[[redirects]]
-  from = "/mcp"
-  to = "/.netlify/functions/mcp"
-  status = 200
-  force = true
-
-[[redirects]]
-  from = "/mcp/*"
-  to = "/.netlify/functions/mcp"
-  status = 200
-  force = true
+# No redirect for /mcp. The function declares its own paths (see the `config`
+# export in netlify/functions/mcp.js), and a forced redirect to the old
+# /.netlify/functions/ address sent every request to a route that no longer
+# exists once a v2 function claims a path of its own — which then fell
+# through to the SPA catch-all and answered MCP calls with index.html.
 
 [[redirects]]
   from = "/*"
