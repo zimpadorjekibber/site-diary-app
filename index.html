@@ -24,15 +24,18 @@
     
     <!-- HEADER (Sleek, Uncluttered Mobile App Bar) -->
     <header class="app-header">
-      <div class="brand-section">
-        <div class="brand-icon">🔨</div>
+      <!-- The header says which job you are in, because every screen below it is
+           scoped to that job. Tapping it switches. -->
+      <button type="button" class="brand-section" id="btnProjectSwitch" title="काम बदलें">
+        <div class="brand-icon" id="activeProjectIcon">🏠</div>
         <div>
-          <h1 class="brand-title" data-i18n="appTitle">श्रम और साइट डायरी</h1>
+          <h1 class="brand-title" id="activeProjectName">मेरा काम</h1>
           <p class="brand-subtitle">
             <span id="currentDateDisplay">शनिवार, 12 सितम्बर 2026</span>
+            <span class="brand-switch-hint">▾</span>
           </p>
         </div>
-      </div>
+      </button>
       <div class="header-actions">
         <!-- Standing answer to "is my hisaab backed up?" — a failed cloud save
              used to be invisible outside the console. -->
@@ -580,6 +583,25 @@
   <!-- TROLLEY DELIVERY: a tractor owner is a supplier, so what gets recorded is
        loads delivered, not attendance. Rate per trolley is set up once per
        material; day to day only the count changes. -->
+  <!-- PROJECTS: each job keeps its own workers, attendance and expenses. -->
+  <div id="modalProjects" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">🏗️ आपके काम</h3>
+        <button class="btn-close-modal" data-close-modal>&times;</button>
+      </div>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px;">
+        हर काम की अपनी अलग डायरी है — अपने कारीगर, अपनी हाजिरी, अपना खर्च।
+        उधार का रजिस्टर सब कामों में एक ही रहता है।
+      </p>
+      <div id="projectsList"></div>
+      <button type="button" class="btn-add-project" id="btnAddProject">＋ नया काम जोड़ें</button>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" data-close-modal>बंद करें</button>
+      </div>
+    </div>
+  </div>
+
   <div id="modalTrolley" class="modal-overlay">
     <div class="modal-card">
       <div class="modal-header">

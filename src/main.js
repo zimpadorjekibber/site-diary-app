@@ -211,6 +211,8 @@ class App {
     this.checkEveningBanner();
     this.initFirebaseIntegration();
     this.bindTrolleyEvents();
+    this.bindProjectEvents();
+    this.renderProjectHeader();
   }
 
   applyLanguage(lang, reRender = true) {
@@ -514,8 +516,11 @@ class App {
     this.renderMonthlyHaziri();
     this.renderGroupsLedger();
     this.renderDiarySheet();
-    this.scheduleSync('haziri');
     this.checkEveningBanner();
+    this.renderProjectHeader();
+    // No scheduleSync here: renderAll runs on every tab switch and re-render, and
+    // syncing from it is what used to write the whole database on each one. Only
+    // commit() — called after a real change — schedules a sync.
     this.updateSyncIndicator();
   }
 
@@ -828,6 +833,123 @@ class App {
       this.updateTrolleyTotal();
       this.commit();
       this.showToast('ट्रॉली के रेट सेव हो गए');
+    });
+  }
+
+  /* ===================================================
+     PROJECTS (काम)
+
+     A contractor runs several jobs at once. Each keeps its own workers,
+     attendance and expenses, so switching jobs re-renders everything below the
+     header. Per-screen state that belonged to the previous job is reset too,
+     otherwise a trade tab or an open worker statement carries across.
+  =================================================== */
+
+  renderProjectHeader() {
+    const project = this.store.activeProject();
+    if (!project) return;
+    const iconEl = document.getElementById('activeProjectIcon');
+    const nameEl = document.getElementById('activeProjectName');
+    if (iconEl) iconEl.textContent = project.icon || '🏗';
+    if (nameEl) nameEl.textContent = project.name;
+    // With only one job there is nothing to switch to, so drop the hint.
+    const hint = document.querySelector('.brand-switch-hint');
+    if (hint) hint.style.display = this.store.getProjects().length > 1 ? '' : 'none';
+  }
+
+  openProjectsModal() {
+    this.renderProjectsList();
+    document.getElementById('modalProjects')?.classList.add('open');
+  }
+
+  renderProjectsList() {
+    const box = document.getElementById('projectsList');
+    if (!box) return;
+
+    box.innerHTML = this.store.getProjects().map(p => {
+      const s = this.store.getProjectSummary(p.id);
+      return `
+        <div class="project-row ${s.isActive ? 'is-active' : ''}">
+          <button type="button" class="project-pick" data-pick-project="${esc(p.id)}">
+            <span class="project-row-icon">${esc(s.icon)}</span>
+            <span class="project-row-body">
+              <span class="project-row-name">${esc(s.name)}${s.isActive ? ' <em>· अभी खुला</em>' : ''}</span>
+              <span class="project-row-meta">${s.workers} कारीगर · ${s.daysTracked} दिन · ${inr(s.totalSpent)}</span>
+              ${s.note ? `<span class="project-row-note">${esc(s.note)}</span>` : ''}
+            </span>
+          </button>
+          <button type="button" class="project-edit" data-edit-project="${esc(p.id)}" title="नाम बदलें या हटाएँ">✏️</button>
+        </div>
+      `;
+    }).join('');
+  }
+
+  switchProject(id) {
+    if (!this.store.setActiveProject(id)) return;
+    this.closeModals();
+    this.activeHaziriTradeId = null;
+    this.activeStatementWorkerId = null;
+    this.selectedHaziriDate = getTodayString();
+    this.populateSelects();
+    this.renderProjectHeader();
+    this.commit();
+    this.showToast(this.store.activeProject().name + ' खुल गया');
+  }
+
+  promptNewProject() {
+    const name = prompt('नए काम का नाम?' + '\n\n' + 'जैसे: नहर का काम, बाउंड्री वॉल, रोड टारिंग');
+    if (!name || !name.trim()) return;
+    const project = this.store.addProject(name.trim());
+    this.closeModals();
+    this.activeHaziriTradeId = null;
+    this.selectedHaziriDate = getTodayString();
+    this.populateSelects();
+    this.renderProjectHeader();
+    this.commit();
+    this.showToast('"' + project.name + '" बन गया — अब इसमें कारीगर जोड़िए', 4000);
+  }
+
+  editProject(id) {
+    const project = this.store.getProject(id);
+    if (!project) return;
+    const summary = this.store.getProjectSummary(id);
+
+    const name = prompt('काम का नाम:', project.name);
+    if (name === null) return;           // cancelled
+
+    // Clearing the name is how the user asks to delete the job.
+    if (!name.trim()) {
+      if (this.store.getProjects().length <= 1) {
+        alert('यह आख़िरी काम है — इसे हटाया नहीं जा सकता।');
+        return;
+      }
+      const warning = '"' + project.name + '" को हटाएँ?' + '\n\n' +
+        'इसके ' + summary.workers + ' कारीगर, ' + summary.transactions + ' लेन-देन और ' +
+        summary.daysTracked + ' दिन की हाजिरी हमेशा के लिए चली जाएगी।' + '\n\n' + 'हटाएँ?';
+      if (!confirm(warning)) return;
+      this.store.deleteProject(id);
+      this.renderProjectsList();
+      this.renderProjectHeader();
+      this.commit();
+      this.showToast('काम हटा दिया गया');
+      return;
+    }
+
+    const note = prompt('छोटा विवरण (ज़रूरी नहीं):', project.note || '');
+    this.store.updateProject(id, { name: name.trim(), note: note === null ? project.note : note });
+    this.renderProjectsList();
+    this.renderProjectHeader();
+    this.commit();
+  }
+
+  bindProjectEvents() {
+    document.getElementById('btnProjectSwitch')?.addEventListener('click', () => this.openProjectsModal());
+    document.getElementById('btnAddProject')?.addEventListener('click', () => this.promptNewProject());
+    document.addEventListener('click', (e) => {
+      const pick = e.target.closest('[data-pick-project]');
+      if (pick) this.switchProject(pick.getAttribute('data-pick-project'));
+      const edit = e.target.closest('[data-edit-project]');
+      if (edit) this.editProject(edit.getAttribute('data-edit-project'));
     });
   }
 

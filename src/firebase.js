@@ -85,14 +85,11 @@ const FIRESTORE_DOC_LIMIT = 1024 * 1024;
 export function buildSyncPayload(data, deviceId) {
   const settings = data.settings || {};
   return {
-    trades: data.trades || [],
-    workers: data.workers || [],
-    transactions: data.transactions || [],
-    haziri: data.haziri || {},
-    haziriMeta: data.haziriMeta || {},
-    diaryNotedDates: data.diaryNotedDates || {},
-    // Preserved so restoring a site does not re-seed the demo workers.
-    isCleanStarted: data.isCleanStarted === true,
+    // Every job the contractor is running, each with its own ledger.
+    projects: data.projects || [],
+    activeProjectId: data.activeProjectId || null,
+    // Lending is personal and shared across jobs, so it sits outside projects.
+    lending: data.lending || [],
     settings: {
       eveningReminderTime: settings.eveningReminderTime || '19:30',
       reminderEnabled: settings.reminderEnabled !== false,

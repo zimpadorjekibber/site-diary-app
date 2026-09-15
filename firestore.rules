@@ -30,7 +30,18 @@ service cloud.firestore {
         return siteId.matches('^site-[A-Z2-9]{4}-[A-Z2-9]{4}$');
       }
 
-      function looksLikeLedger() {
+      // Two shapes are accepted. The current one keeps each job in `projects`;
+      // the older flat one is still written by phones that have not updated yet,
+      // and rejecting those would silently stop their backups.
+      function isCurrentShape() {
+        return request.resource.data.keys().hasOnly([
+                 'projects', 'activeProjectId', 'lending', 'settings',
+                 'lastWriterDeviceId', 'updatedAt', 'timestamp'
+               ])
+               && request.resource.data.projects is list;
+      }
+
+      function isLegacyShape() {
         return request.resource.data.keys().hasOnly([
                  'trades', 'workers', 'transactions', 'haziri', 'haziriMeta',
                  'diaryNotedDates', 'isCleanStarted', 'settings',
@@ -39,6 +50,10 @@ service cloud.firestore {
                && request.resource.data.workers is list
                && request.resource.data.trades is list
                && request.resource.data.transactions is list;
+      }
+
+      function looksLikeLedger() {
+        return isCurrentShape() || isLegacyShape();
       }
 
       // Installs made before per-site ids all wrote to one shared document

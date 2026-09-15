@@ -348,15 +348,145 @@ export class Store {
 
   // A cloud payload may predate fields the calculations expect.
   normalise(data) {
+    // Accepts either shape: the current one, or a pre-projects payload from an
+    // older device that has not updated yet.
+    const projects = Array.isArray(data.projects) && data.projects.length
+      ? data.projects
+      : [{
+          id: data.activeProjectId || makeId('proj'),
+          name: 'मेरा काम',
+          icon: '🏠',
+          note: '',
+          createdAt: Date.now(),
+          trades: data.trades || [],
+          workers: data.workers || [],
+          transactions: data.transactions || [],
+          haziri: data.haziri || {},
+          haziriMeta: data.haziriMeta || {},
+          diaryNotedDates: data.diaryNotedDates || {},
+          isCleanStarted: data.isCleanStarted === true
+        }];
+
     return {
-      trades: data.trades || [],
-      workers: data.workers || [],
-      transactions: data.transactions || [],
-      haziri: data.haziri || {},
-      haziriMeta: data.haziriMeta || {},
-      diaryNotedDates: data.diaryNotedDates || {},
-      isCleanStarted: data.isCleanStarted === true,
+      projects: projects.map(p => ({
+        ...p,
+        trades: p.trades || [],
+        workers: p.workers || [],
+        transactions: p.transactions || [],
+        haziri: p.haziri || {},
+        haziriMeta: p.haziriMeta || {},
+        diaryNotedDates: p.diaryNotedDates || {}
+      })),
+      activeProjectId: projects.some(p => p.id === data.activeProjectId)
+        ? data.activeProjectId
+        : projects[0].id,
+      lending: Array.isArray(data.lending) ? data.lending : [],
       settings: { ...DEFAULT_SETTINGS, ...(data.settings || {}) }
+    };
+  }
+
+  /* ===================================================
+     PROJECTS (काम)
+
+     A contractor runs several jobs at once — a house, a canal, a boundary wall,
+     road tarring — and each keeps its own workers, attendance and expenses. Each
+     is stored as a self-contained ledger inside `projects`, and everything below
+     reads through activeProject() rather than touching this.data directly.
+
+     Settings and the lending register stay outside projects: settings describe
+     the phone, and lending in a village is personal, not tied to one job.
+  =================================================== */
+
+  /** The ledger currently being worked on. Never returns null. */
+  activeProject() {
+    const list = this.data.projects || [];
+    return list.find(p => p.id === this.data.activeProjectId) || list[0];
+  }
+
+  getProjects() {
+    return this.data.projects || [];
+  }
+
+  getProject(id) {
+    return (this.data.projects || []).find(p => p.id === id) || null;
+  }
+
+  getActiveProjectId() {
+    return this.activeProject()?.id || null;
+  }
+
+  setActiveProject(id) {
+    if (!this.getProject(id)) return false;
+    this.data.activeProjectId = id;
+    this.save();
+    return true;
+  }
+
+  addProject(name, { icon = '🏗️', note = '' } = {}) {
+    const clean = String(name || '').trim();
+    if (!clean) throw new Error('काम का नाम डालें');
+    const project = {
+      id: makeId('proj'),
+      name: clean,
+      icon,
+      note: String(note || '').trim(),
+      createdAt: Date.now(),
+      // A fresh job starts with the standard trades but nobody in them.
+      trades: DEFAULT_TRADES.map(t => ({ ...t })),
+      workers: [],
+      transactions: [],
+      haziri: {},
+      haziriMeta: {},
+      diaryNotedDates: {},
+      isCleanStarted: true
+    };
+    this.data.projects.push(project);
+    this.data.activeProjectId = project.id;
+    this.save();
+    return project;
+  }
+
+  updateProject(id, updates) {
+    const p = this.getProject(id);
+    if (!p) return null;
+    if (updates.name !== undefined) p.name = String(updates.name).trim() || p.name;
+    if (updates.icon !== undefined) p.icon = updates.icon;
+    if (updates.note !== undefined) p.note = String(updates.note).trim();
+    this.save();
+    return p;
+  }
+
+  /** Refuses to leave the app with no ledger at all. */
+  deleteProject(id) {
+    if ((this.data.projects || []).length <= 1) {
+      return { ok: false, reason: 'last_project' };
+    }
+    const p = this.getProject(id);
+    if (!p) return { ok: false, reason: 'not_found' };
+
+    this.data.projects = this.data.projects.filter(x => x.id !== id);
+    if (this.data.activeProjectId === id) {
+      this.data.activeProjectId = this.data.projects[0].id;
+    }
+    this.save();
+    return { ok: true, deleted: p.name };
+  }
+
+  /** Totals across every job, for the projects screen. */
+  getProjectSummary(id) {
+    const p = this.getProject(id);
+    if (!p) return null;
+    const spent = (p.transactions || []).reduce((s, t) => s + (Number(t.amount) || 0), 0);
+    return {
+      id: p.id,
+      name: p.name,
+      icon: p.icon || '🏗️',
+      note: p.note || '',
+      workers: (p.workers || []).length,
+      transactions: (p.transactions || []).length,
+      daysTracked: Object.keys(p.haziri || {}).length,
+      totalSpent: spent,
+      isActive: p.id === this.data.activeProjectId
     };
   }
 
@@ -365,72 +495,148 @@ export class Store {
     return n > 0 ? n : 8;
   }
 
+  /**
+   * Brings a stored payload up to the current shape. Returns null if it is not
+   * recognisable as a ledger at all, so the caller can fall back to a fresh one.
+   *
+   * Every step here has to be safe on real data — this runs against the owner's
+   * live accounts on every app start.
+   */
+  migrate(parsed) {
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    let needsSave = false;
+
+    /* v3: everything used to live at the top level, one job per install. It now
+       lives inside `projects` so a contractor can run a house, a canal and a
+       boundary wall side by side. The existing ledger becomes the first job with
+       all of its data intact — nothing is dropped or reset. */
+    if (!Array.isArray(parsed.projects)) {
+      if (!parsed.workers || !parsed.trades) return null;   // not a ledger
+      parsed.projects = [{
+        id: makeId('proj'),
+        name: 'मेरा काम',
+        icon: '🏠',
+        note: '',
+        createdAt: Date.now(),
+        trades: parsed.trades,
+        workers: parsed.workers,
+        transactions: parsed.transactions || [],
+        haziri: parsed.haziri || {},
+        haziriMeta: parsed.haziriMeta || {},
+        diaryNotedDates: parsed.diaryNotedDates || {},
+        isCleanStarted: parsed.isCleanStarted === true
+      }];
+      parsed.activeProjectId = parsed.projects[0].id;
+      // The originals are removed only after the copy is in place.
+      delete parsed.trades;
+      delete parsed.workers;
+      delete parsed.transactions;
+      delete parsed.haziri;
+      delete parsed.haziriMeta;
+      delete parsed.diaryNotedDates;
+      delete parsed.isCleanStarted;
+      needsSave = true;
+    }
+
+    if (parsed.projects.length === 0) return null;
+    if (!parsed.projects.some(p => p.id === parsed.activeProjectId)) {
+      parsed.activeProjectId = parsed.projects[0].id;
+      needsSave = true;
+    }
+
+    // Lending is personal and shared across every job.
+    if (!Array.isArray(parsed.lending)) {
+      parsed.lending = [];
+      needsSave = true;
+    }
+
+    parsed.settings = { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) };
+    if (!parsed.settings.firebaseConfig || !parsed.settings.firebaseConfig.apiKey) {
+      parsed.settings.firebaseConfig = DEFAULT_FIREBASE_CONFIG;
+      parsed.settings.firebaseAutoSync = true;
+      needsSave = true;
+    }
+    // Installs created before per-site ids all pointed at one shared document.
+    if (!parsed.settings.firebaseSiteId || parsed.settings.firebaseSiteId === 'khalen-dairy') {
+      parsed.settings.firebaseSiteId = getOrCreateSiteId();
+      needsSave = true;
+    }
+
+    for (const project of parsed.projects) {
+      project.trades = project.trades || [];
+      project.workers = project.workers || [];
+      project.transactions = project.transactions || [];
+      project.haziri = project.haziri || {};
+      project.haziriMeta = project.haziriMeta || {};
+      project.diaryNotedDates = project.diaryNotedDates || {};
+
+      // New built-in supplier trades reach existing jobs too; DEFAULT_TRADES only
+      // applies to a first run. Trades the user deleted stay deleted.
+      DEFAULT_TRADES.forEach(def => {
+        if (def.isSupplier && !project.trades.some(t => t.id === def.id)) {
+          project.trades.push({ ...def });
+          needsSave = true;
+        }
+      });
+
+      // Theka used to be a flat amount on any worker, so a trade with three
+      // contract workers counted the same contract three times. The amount now
+      // belongs to one thekedar; anyone who already had an amount becomes one,
+      // which keeps existing numbers unchanged until the user says otherwise.
+      project.workers.forEach(w => {
+        if (w.contractType === 'theka' && w.isThekedar === undefined) {
+          w.isThekedar = (Number(w.thekaAmount) || 0) > 0;
+          w.thekaMode = w.isThekedar ? 'lumpsum' : null;
+          needsSave = true;
+        }
+      });
+
+      // A restored-from-cloud payload used to lose this flag, which let the demo
+      // seed re-inject eight fake workers into a real register.
+      if (project.workers.length > 0 &&
+          !project.workers.some(w => String(w.id).startsWith('w') && w.id.length <= 3)) {
+        project.isCleanStarted = true;
+        needsSave = true;
+      }
+    }
+
+    if (needsSave) this.save(parsed);
+    return parsed;
+  }
+
   load() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && parsed.workers && parsed.trades) {
-          // If existing haziri has less than 5 dates and not clean-started, merge with seed
-          if (!parsed.isCleanStarted && (!parsed.haziri || Object.keys(parsed.haziri).length < 5)) {
-            parsed.haziri = { ...getInitialSeedHaziri(), ...(parsed.haziri || {}) };
-            this.save(parsed);
-          }
-          parsed.settings = { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) };
-          let needsSave = false;
-          if (!parsed.settings.firebaseConfig || !parsed.settings.firebaseConfig.apiKey) {
-            parsed.settings.firebaseConfig = DEFAULT_FIREBASE_CONFIG;
-            parsed.settings.firebaseAutoSync = true;
-            needsSave = true;
-          }
-          // Migration: installs created before per-site ids all pointed at the same
-          // shared document. Move them onto their own, keeping a custom id if set.
-          if (!parsed.settings.firebaseSiteId || parsed.settings.firebaseSiteId === 'khalen-dairy') {
-            parsed.settings.firebaseSiteId = getOrCreateSiteId();
-            needsSave = true;
-          }
-          // New built-in trades have to reach existing installs too — DEFAULT_TRADES
-          // only applies on a first run, so without this the tractor trade would
-          // exist for new users only. Trades the user deleted stay deleted.
-          DEFAULT_TRADES.forEach(def => {
-            if (def.isSupplier && !parsed.trades.some(t => t.id === def.id)) {
-              parsed.trades.push({ ...def });
-              needsSave = true;
-            }
-          });
-
-          // Theka used to be a flat amount on any worker, so a trade with three
-          // contract workers counted the same contract three times. The amount now
-          // belongs to one thekedar; anyone who already had an amount becomes one,
-          // which keeps existing numbers unchanged until the user says otherwise.
-          parsed.workers.forEach(w => {
-            if (w.contractType === 'theka' && w.isThekedar === undefined) {
-              w.isThekedar = (Number(w.thekaAmount) || 0) > 0;
-              w.thekaMode = w.isThekedar ? 'lumpsum' : null;
-              needsSave = true;
-            }
-          });
-
-          // A restored-from-cloud payload used to lose this flag, which let the demo
-          // seed below re-inject 8 fake workers into a real site's register.
-          if (parsed.workers.length > 0 && !parsed.workers.some(w => String(w.id).startsWith('w') && w.id.length <= 3)) {
-            parsed.isCleanStarted = true;
-            needsSave = true;
-          }
-          if (needsSave) this.save(parsed);
-          return parsed;
-        }
+        const migrated = this.migrate(parsed);
+        if (migrated) return migrated;
       }
     } catch (e) {
       console.warn('Failed to load from storage, using defaults:', e);
     }
 
-    const initial = {
-      trades: DEFAULT_TRADES,
+    // A first run starts with one job holding the sample data, so the app has
+    // something to show before anything real is entered.
+    const firstProject = {
+      id: makeId('proj'),
+      name: 'मेरा काम',
+      icon: '🏠',
+      note: '',
+      createdAt: Date.now(),
+      trades: DEFAULT_TRADES.map(t => ({ ...t })),
       workers: DEFAULT_WORKERS,
       transactions: getInitialSeedTransactions(),
       haziri: getInitialSeedHaziri(),
-      diaryNotedDates: {}, // { "2026-09-12": timestamp }
+      haziriMeta: {},
+      diaryNotedDates: {},
+      isCleanStarted: false
+    };
+    const initial = {
+      projects: [firstProject],
+      activeProjectId: firstProject.id,
+      lending: [],
       settings: { ...DEFAULT_SETTINGS, firebaseSiteId: getOrCreateSiteId() }
     };
     this.save(initial);
@@ -507,62 +713,48 @@ export class Store {
   }
 
   resetToClean() {
-    this.data = {
-      trades: (this.data && this.data.trades && this.data.trades.length > 0) ? this.data.trades : DEFAULT_TRADES,
-      workers: [],
-      transactions: [],
-      haziri: {},
-      haziriMeta: {},
-      diaryNotedDates: {},
-      settings: (this.data && this.data.settings) ? this.data.settings : DEFAULT_SETTINGS,
-      isCleanStarted: true
-    };
-    this.save();
-    return this.data;
+    return this.eraseAll({ keepTrades: true });
   }
 
   /**
-   * Wipes the whole ledger — workers, attendance, every transaction.
+   * Wipes THIS job's ledger — its workers, attendance and every transaction.
    * Irreversible, so the caller must offer a backup first.
    *
-   * @param {boolean} keepTrades Keep the trade list (Carpenter, Mason…). The
-   *   trades are site setup rather than ledger data, and rebuilding them by hand
-   *   is tedious, so this defaults to keeping them.
+   * Scoped to the active project on purpose: other jobs, the lending register and
+   * settings are untouched. Losing the site id would orphan the cloud copy and
+   * quietly start a second one.
    *
-   * Settings (reminder time, site id, cloud config) are always kept: losing the
-   * site id would orphan the cloud copy and quietly start a second one.
+   * @param {boolean} keepTrades Keep the trade list (Carpenter, Mason…), which is
+   *   job setup rather than ledger data and is tedious to rebuild by hand.
    */
   eraseAll({ keepTrades = true } = {}) {
-    const settings = this.data.settings;
-    this.data = {
-      trades: keepTrades && this.data.trades?.length ? this.data.trades : DEFAULT_TRADES,
-      workers: [],
-      transactions: [],
-      haziri: {},
-      haziriMeta: {},
-      diaryNotedDates: {},
-      settings,
-      // Marks the ledger as deliberately empty so the demo seed never returns.
-      isCleanStarted: true
-    };
+    const project = this.activeProject();
+    project.trades = keepTrades && project.trades?.length ? project.trades : DEFAULT_TRADES.map(t => ({ ...t }));
+    project.workers = [];
+    project.transactions = [];
+    project.haziri = {};
+    project.haziriMeta = {};
+    project.diaryNotedDates = {};
+    // Marks the ledger as deliberately empty so the demo seed never returns.
+    project.isCleanStarted = true;
     this.save();
-    return this.data;
+    return project;
   }
 
   // --- TRADES ---
   getTrades() {
-    return this.data.trades;
+    return this.activeProject().trades;
   }
 
   addTrade(name, icon = 'briefcase', color = '#f59e0b') {
     const id = makeId('trade');
-    this.data.trades.push({ id, name, icon, color });
+    this.activeProject().trades.push({ id, name, icon, color });
     this.save();
     return id;
   }
 
   getTrade(id) {
-    return this.data.trades.find(t => t.id === id) || { id, name: 'Unknown Trade', color: '#64748b' };
+    return this.activeProject().trades.find(t => t.id === id) || { id, name: 'Unknown Trade', color: '#64748b' };
   }
 
   // Refuses to orphan workers. Deleting a trade used to leave its workers pointing
@@ -573,16 +765,16 @@ export class Store {
     if (attached.length > 0) {
       return { ok: false, reason: 'has_workers', workers: attached };
     }
-    this.data.trades = this.data.trades.filter(t => t.id !== id);
+    this.activeProject().trades = this.activeProject().trades.filter(t => t.id !== id);
     this.save();
     return { ok: true };
   }
 
   moveTradeWorkers(fromTradeId, toTradeId) {
-    this.data.workers.forEach(w => {
+    this.activeProject().workers.forEach(w => {
       if (w.tradeId === fromTradeId) w.tradeId = toTradeId;
     });
-    (this.data.transactions || []).forEach(tx => {
+    (this.activeProject().transactions || []).forEach(tx => {
       if (tx.tradeId === fromTradeId) tx.tradeId = toTradeId;
     });
     this.save();
@@ -590,12 +782,12 @@ export class Store {
 
   // --- WORKERS ---
   getWorkers(tradeId = null) {
-    if (!tradeId || tradeId === 'all') return this.data.workers;
-    return this.data.workers.filter(w => w.tradeId === tradeId);
+    if (!tradeId || tradeId === 'all') return this.activeProject().workers;
+    return this.activeProject().workers.filter(w => w.tradeId === tradeId);
   }
 
   getWorker(id) {
-    return this.data.workers.find(w => w.id === id);
+    return this.activeProject().workers.find(w => w.id === id);
   }
 
   addWorker({ name, tradeId, role, contractType, dailyRate, isThekedar, thekaMode,
@@ -623,20 +815,20 @@ export class Store {
       phone: (phone || '').trim(),
       photoUrl: photoUrl || null
     };
-    this.data.workers.push(worker);
+    this.activeProject().workers.push(worker);
     this.save();
     return worker;
   }
 
   updateWorker(id, updates) {
-    const idx = this.data.workers.findIndex(w => w.id === id);
+    const idx = this.activeProject().workers.findIndex(w => w.id === id);
     if (idx !== -1) {
-      const oldTradeId = this.data.workers[idx].tradeId;
-      this.data.workers[idx] = { ...this.data.workers[idx], ...updates };
+      const oldTradeId = this.activeProject().workers[idx].tradeId;
+      this.activeProject().workers[idx] = { ...this.activeProject().workers[idx], ...updates };
 
       // If tradeId changed, also update all individual transactions for this worker so they belong to the new trade
-      if (updates.tradeId && updates.tradeId !== oldTradeId && this.data.transactions) {
-        this.data.transactions.forEach(tx => {
+      if (updates.tradeId && updates.tradeId !== oldTradeId && this.activeProject().transactions) {
+        this.activeProject().transactions.forEach(tx => {
           if (tx.workerId === id) {
             tx.tradeId = updates.tradeId;
           }
@@ -644,7 +836,7 @@ export class Store {
       }
 
       this.save();
-      return this.data.workers[idx];
+      return this.activeProject().workers[idx];
     }
     return null;
   }
@@ -655,17 +847,17 @@ export class Store {
   deleteWorker(id) {
     const worker = this.getWorker(id);
     if (worker) {
-      (this.data.transactions || []).forEach(tx => {
+      (this.activeProject().transactions || []).forEach(tx => {
         if (tx.workerId === id && !tx.workerName) tx.workerName = worker.name;
       });
     }
-    Object.keys(this.data.haziri || {}).forEach(date => {
-      if (this.data.haziri[date] && this.data.haziri[date][id]) {
-        delete this.data.haziri[date][id];
-        if (Object.keys(this.data.haziri[date]).length === 0) delete this.data.haziri[date];
+    Object.keys(this.activeProject().haziri || {}).forEach(date => {
+      if (this.activeProject().haziri[date] && this.activeProject().haziri[date][id]) {
+        delete this.activeProject().haziri[date][id];
+        if (Object.keys(this.activeProject().haziri[date]).length === 0) delete this.activeProject().haziri[date];
       }
     });
-    this.data.workers = this.data.workers.filter(w => w.id !== id);
+    this.activeProject().workers = this.activeProject().workers.filter(w => w.id !== id);
     this.save();
   }
 
@@ -684,12 +876,12 @@ export class Store {
   =================================================== */
 
   isSupplierTrade(tradeId) {
-    const trade = this.data.trades.find(t => t.id === tradeId);
+    const trade = this.activeProject().trades.find(t => t.id === tradeId);
     return !!(trade && trade.isSupplier);
   }
 
   getSuppliers() {
-    return this.data.workers.filter(w => this.isSupplierTrade(w.tradeId));
+    return this.activeProject().workers.filter(w => this.isSupplierTrade(w.tradeId));
   }
 
   /** Rate this supplier charges for one trolley of a given material. */
@@ -749,7 +941,7 @@ export class Store {
     const worker = this.getWorker(workerId);
     if (!worker) return null;
 
-    let deliveries = this.data.transactions.filter(
+    let deliveries = this.activeProject().transactions.filter(
       t => t.type === 'trolley' && t.supplierId === workerId
     );
     if (from) deliveries = deliveries.filter(t => t.date >= from);
@@ -769,7 +961,7 @@ export class Store {
     }
 
     // What the site has actually handed over, so the balance is honest.
-    const paid = this.data.transactions
+    const paid = this.activeProject().transactions
       .filter(t => t.workerId === workerId && t.type !== 'trolley')
       .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
@@ -786,15 +978,15 @@ export class Store {
 
   /** Trolleys delivered on one date, grouped by supplier — the WhatsApp update. */
   getTrolleyDeliveriesForDate(date = getTodayString(), supplierId = null) {
-    return this.data.transactions.filter(
+    return this.activeProject().transactions.filter(
       t => t.type === 'trolley' && t.date === date && (!supplierId || t.supplierId === supplierId)
     );
   }
 
   // --- TRANSACTIONS ---
   getTransactions(date = null) {
-    if (!date) return this.data.transactions;
-    return this.data.transactions.filter(t => t.date === date);
+    if (!date) return this.activeProject().transactions;
+    return this.activeProject().transactions.filter(t => t.date === date);
   }
 
   addTransaction(tx) {
@@ -820,45 +1012,45 @@ export class Store {
       trips: Number(tx.trips) || 0,
       ratePerTrolley: Number(tx.ratePerTrolley) || 0
     };
-    this.data.transactions.unshift(newTx);
+    this.activeProject().transactions.unshift(newTx);
     this.save();
     return newTx;
   }
 
   deleteTransaction(id) {
-    this.data.transactions = this.data.transactions.filter(t => t.id !== id);
+    this.activeProject().transactions = this.activeProject().transactions.filter(t => t.id !== id);
     this.save();
   }
 
   getTransaction(id) {
-    return this.data.transactions.find(t => t.id === id) || null;
+    return this.activeProject().transactions.find(t => t.id === id) || null;
   }
 
   updateTransaction(id, updates) {
-    const idx = this.data.transactions.findIndex(t => t.id === id);
+    const idx = this.activeProject().transactions.findIndex(t => t.id === id);
     if (idx !== -1) {
-      this.data.transactions[idx] = {
-        ...this.data.transactions[idx],
+      this.activeProject().transactions[idx] = {
+        ...this.activeProject().transactions[idx],
         ...updates,
-        amount: updates.amount !== undefined ? Number(updates.amount) || 0 : this.data.transactions[idx].amount
+        amount: updates.amount !== undefined ? Number(updates.amount) || 0 : this.activeProject().transactions[idx].amount
       };
       this.save();
-      return this.data.transactions[idx];
+      return this.activeProject().transactions[idx];
     }
     return null;
   }
 
   getWorkerTransactions(workerId) {
-    return this.data.transactions
+    return this.activeProject().transactions
       .filter(t => t.workerId === workerId)
       .sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
   }
 
   getWorkerHaziriHistory(workerId) {
     const history = [];
-    const dates = Object.keys(this.data.haziri).sort().reverse();
+    const dates = Object.keys(this.activeProject().haziri).sort().reverse();
     for (const date of dates) {
-      const rec = this.data.haziri[date] ? this.data.haziri[date][workerId] : null;
+      const rec = this.activeProject().haziri[date] ? this.activeProject().haziri[date][workerId] : null;
       if (rec) {
         history.push({
           date,
@@ -872,27 +1064,27 @@ export class Store {
 
   // --- HAZIRI (ATTENDANCE) ---
   getHaziri(date = getTodayString()) {
-    return this.data.haziri[date] || {};
+    return this.activeProject().haziri[date] || {};
   }
 
   setWorkerHaziri(date, workerId, status, otHours = 0) {
-    if (!this.data.haziri[date]) {
-      this.data.haziri[date] = {};
+    if (!this.activeProject().haziri[date]) {
+      this.activeProject().haziri[date] = {};
     }
-    this.data.haziri[date][workerId] = {
+    this.activeProject().haziri[date][workerId] = {
       status: Number(status), // 1.0 (full), 0.5 (half), 0 (absent)
       otHours: Number(otHours) || 0
     };
-    if (!this.data.haziriMeta) this.data.haziriMeta = {};
-    this.data.haziriMeta[date] = { savedAt: Date.now(), deviceId: getDeviceId() };
+    if (!this.activeProject().haziriMeta) this.activeProject().haziriMeta = {};
+    this.activeProject().haziriMeta[date] = { savedAt: Date.now(), deviceId: getDeviceId() };
     this.save();
   }
 
   // Backs the "already saved — editing will overwrite" notice on the attendance
   // screen. Returns null for a date nobody has marked yet.
   getHaziriSavedAt(date) {
-    const meta = this.data.haziriMeta && this.data.haziriMeta[date];
-    const hasRows = this.data.haziri[date] && Object.keys(this.data.haziri[date]).length > 0;
+    const meta = this.activeProject().haziriMeta && this.activeProject().haziriMeta[date];
+    const hasRows = this.activeProject().haziri[date] && Object.keys(this.activeProject().haziri[date]).length > 0;
     if (!hasRows) return null;
 
     if (!meta) return { savedAt: null, byLabel: '' };
@@ -931,7 +1123,7 @@ export class Store {
       const dailyStatuses = {};
 
       days.forEach(({ dateStr }) => {
-        const dayHaziri = this.data.haziri[dateStr];
+        const dayHaziri = this.activeProject().haziri[dateStr];
         const record = dayHaziri ? dayHaziri[worker.id] : null;
         if (record) {
           dailyStatuses[dateStr] = record;
@@ -962,9 +1154,9 @@ export class Store {
       // Payments made in this month. Uses the same "what counts as paid to this
       // worker" rule as getWorkerLedger() so the two screens can never disagree.
       const monthPrefix = `${year}-${String(month).padStart(2, '0')}`;
-      const workerMonthTxs = this.data.transactions.filter(t => t.workerId === worker.id && t.date.startsWith(monthPrefix));
+      const workerMonthTxs = this.activeProject().transactions.filter(t => t.workerId === worker.id && t.date.startsWith(monthPrefix));
       const totalPaidMonth = sumWorkerPayments(workerMonthTxs);
-      const totalPaidLifetime = sumWorkerPayments(this.data.transactions.filter(t => t.workerId === worker.id));
+      const totalPaidLifetime = sumWorkerPayments(this.activeProject().transactions.filter(t => t.workerId === worker.id));
 
       return {
         worker,
@@ -999,14 +1191,14 @@ export class Store {
 
   // --- DIARY MARKED TRACKER ---
   isDateMarkedInDiary(date = getTodayString()) {
-    return !!this.data.diaryNotedDates[date];
+    return !!this.activeProject().diaryNotedDates[date];
   }
 
   setMarkedInDiary(date = getTodayString(), marked = true) {
     if (marked) {
-      this.data.diaryNotedDates[date] = Date.now();
+      this.activeProject().diaryNotedDates[date] = Date.now();
     } else {
-      delete this.data.diaryNotedDates[date];
+      delete this.activeProject().diaryNotedDates[date];
     }
     this.save();
   }
@@ -1035,8 +1227,8 @@ export class Store {
     let totalEarned = 0;
     const absentDates = [];
 
-    Object.keys(this.data.haziri).forEach(date => {
-      const record = this.data.haziri[date][workerId];
+    Object.keys(this.activeProject().haziri).forEach(date => {
+      const record = this.activeProject().haziri[date][workerId];
       if (record) {
         if (record.status > 0) {
           totalHaziriDays += record.status;
@@ -1061,7 +1253,7 @@ export class Store {
     // Everything charged to this worker by name — cash, recharge, diesel, material,
     // anything. Restricting this to cash+recharge was hiding real payments from the
     // balance, so a worker paid ₹2,000 in material still showed the full amount due.
-    const workerTxs = this.data.transactions.filter(t => t.workerId === workerId);
+    const workerTxs = this.activeProject().transactions.filter(t => t.workerId === workerId);
     const totalCashPaid = workerTxs
       .filter(t => t.type === 'cash')
       .reduce((sum, t) => sum + (t.amount || 0), 0);
@@ -1109,7 +1301,7 @@ export class Store {
   getGroupLedger(tradeId) {
     const trade = this.getTrade(tradeId);
     const workers = this.getWorkers(tradeId);
-    const groupTxs = this.data.transactions.filter(t => t.tradeId === tradeId && t.targetType === 'group');
+    const groupTxs = this.activeProject().transactions.filter(t => t.tradeId === tradeId && t.targetType === 'group');
 
     const totalGroupRationCost = groupTxs
       .filter(t => t.type === 'ration')
