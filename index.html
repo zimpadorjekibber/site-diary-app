@@ -984,10 +984,26 @@
                 गूगल के ऑफिशियल डेटाबेस (Firestore) पर डेटा बैकअप रहता है।
               </p>
 
+              <!-- The site id used to sit behind a five-tap easter egg. It is the
+                   key to this site's whole ledger and is needed to set up the MCP
+                   server, so it belongs in plain sight with a copy button. -->
+              <div class="site-id-box">
+                <div class="site-id-head">
+                  <span>🔑 आपकी साइट आईडी</span>
+                  <button type="button" id="btnCopySiteId" class="btn-copy-site-id">📋 कॉपी</button>
+                </div>
+                <code id="siteIdDisplay" class="site-id-value">—</code>
+                <p class="site-id-note">
+                  इसी आईडी से आपका हिसाब बाकी साइटों से अलग रहता है। दूसरे फ़ोन पर वही
+                  हिसाब लाना हो तो यही आईडी डालें। <strong>इसे password की तरह सँभालें</strong> —
+                  जिसके पास यह होगी, वो आपका हिसाब पढ़ सकता है।
+                </p>
+              </div>
+
               <div id="firebaseDevConfig" style="display: none; margin-top: 12px; border-top: 1px dashed rgba(15, 23, 42, 0.105); padding-top: 10px;">
                 <div style="margin-top: 8px;">
                   <label style="font-size: 0.76rem; color: var(--text-muted);">साइट ID:</label>
-                  <input type="text" id="firebaseSiteIdInput" class="form-input" placeholder="जैसे: khalen-dairy" style="margin-bottom: 8px; font-size: 0.85rem;" />
+                  <input type="text" id="firebaseSiteIdInput" class="form-input" placeholder="जैसे: site-ABCD-1234" style="margin-bottom: 8px; font-size: 0.85rem;" />
                 </div>
                 <div>
                   <label style="font-size: 0.76rem; color: var(--text-muted);">Firebase Config JSON:</label>

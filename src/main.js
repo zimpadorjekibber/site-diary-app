@@ -3107,6 +3107,9 @@ class App {
       const fbSiteIdInput = document.getElementById('firebaseSiteIdInput');
       if (fbSiteIdInput) fbSiteIdInput.value = s.firebaseSiteId || '';
 
+      const siteIdDisplay = document.getElementById('siteIdDisplay');
+      if (siteIdDisplay) siteIdDisplay.textContent = s.firebaseSiteId || '—';
+
       const fbConfigInput = document.getElementById('firebaseConfigInput');
       if (fbConfigInput) {
         fbConfigInput.value = s.firebaseConfig ? JSON.stringify(s.firebaseConfig, null, 2) : '';
@@ -3568,6 +3571,23 @@ class App {
               }
             }
           );
+        }
+      });
+    }
+
+    const btnCopySiteId = document.getElementById('btnCopySiteId');
+    if (btnCopySiteId) {
+      btnCopySiteId.addEventListener('click', async () => {
+        const id = this.store.getSettings().firebaseSiteId || '';
+        if (!id) return;
+        try {
+          await navigator.clipboard.writeText(id);
+          const original = btnCopySiteId.textContent;
+          btnCopySiteId.textContent = '✓ कॉपी हो गई';
+          setTimeout(() => { btnCopySiteId.textContent = original; }, 1800);
+        } catch {
+          // Clipboard is blocked in some WebViews; showing the id is still useful.
+          prompt('साइट आईडी कॉपी करें:', id);
         }
       });
     }

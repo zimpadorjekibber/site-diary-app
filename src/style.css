@@ -1423,6 +1423,66 @@ body {
 }
 
 /* ===================================================
+   SITE ID — the key to this site's ledger
+=================================================== */
+.site-id-box {
+  margin-top: 12px;
+  padding: 12px 13px;
+  border-radius: var(--radius-md);
+  background: var(--amber-tint);
+  border: 1px solid rgba(224, 140, 7, 0.3);
+}
+
+.site-id-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--amber-strong);
+  margin-bottom: 8px;
+}
+
+.btn-copy-site-id {
+  flex-shrink: 0;
+  padding: 5px 11px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(224, 140, 7, 0.45);
+  background: var(--bg-card);
+  font-family: inherit;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--amber-strong);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn-copy-site-id:active { transform: scale(0.94); }
+
+.site-id-value {
+  display: block;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  font-family: ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: 0.04em;
+  /* Long enough to wrap on a narrow phone; must stay fully readable. */
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.site-id-note {
+  font-size: 0.72rem;
+  color: #8a5a00;
+  line-height: 1.45;
+  margin-top: 7px;
+}
+
+/* ===================================================
    STORAGE METER
 =================================================== */
 .storage-meter {
