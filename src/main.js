@@ -2305,50 +2305,6 @@ class App {
       });
     }
 
-    /* The kvdb.io sync these buttons drove is gone — it pushed the whole
-       unencrypted ledger to a public bucket whose id shipped in the source.
-       Firebase covers cloud sync; these now do a local file backup/restore,
-       which needs no third party at all. */
-    const btnPushCloud = document.getElementById('btnPushToCloud');
-    if (btnPushCloud) {
-      btnPushCloud.addEventListener('click', () => {
-        try {
-          this.store.downloadBackupFile();
-          this.showToast(this.currentLang === 'en'
-            ? 'Backup file downloaded'
-            : 'बैकअप फ़ाइल डाउनलोड हो गई');
-        } catch (err) {
-          alert('बैकअप विफल: ' + err.message);
-        }
-      });
-    }
-
-    const btnPullCloud = document.getElementById('btnPullFromCloud');
-    if (btnPullCloud) {
-      btnPullCloud.addEventListener('click', () => {
-        const picker = document.createElement('input');
-        picker.type = 'file';
-        picker.accept = 'application/json,.json';
-        picker.addEventListener('change', async () => {
-          const file = picker.files && picker.files[0];
-          if (!file) return;
-          if (!confirm('चेतावनी: बैकअप फ़ाइल से डेटा लाने पर मौजूदा हिसाब बदल जाएगा। जारी रखें?')) return;
-          try {
-            const text = await file.text();
-            if (this.store.importData(text)) {
-              alert('✅ बैकअप फ़ाइल से पूरा हिसाब वापस आ गया!');
-              location.reload();
-            } else {
-              alert('यह फ़ाइल साइट डायरी का बैकअप नहीं लगती।');
-            }
-          } catch (err) {
-            alert('फ़ाइल पढ़ने में दिक्कत: ' + err.message);
-          }
-        });
-        picker.click();
-      });
-    }
-
     // Haziri Date Picker & Chip Wrap
     const haziriDate = document.getElementById('haziriDatePicker');
     const haziriDateWrap = document.getElementById('haziriDateWrap');
@@ -3460,6 +3416,11 @@ class App {
       fileImport.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
+        // Restoring replaces the whole ledger. It used to do so without asking.
+        if (!confirm('चेतावनी: बैकअप फ़ाइल से डेटा लाने पर इस फ़ोन का मौजूदा पूरा हिसाब बदल जाएगा।\n\nजारी रखें?')) {
+          fileImport.value = '';
+          return;
+        }
         const reader = new FileReader();
         reader.onload = (event) => {
           const success = this.store.importData(event.target.result);
@@ -3467,10 +3428,11 @@ class App {
             alert('डेटा सफलतापूर्वक रीस्टोर हो गया!');
             location.reload();
           } else {
-            alert('अमान्य बैकअप फ़ाइल!');
+            alert('यह फ़ाइल साइट डायरी का बैकअप नहीं लगती।');
           }
         };
         reader.readAsText(file);
+        fileImport.value = '';
       });
     }
 

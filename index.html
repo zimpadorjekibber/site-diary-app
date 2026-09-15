@@ -932,23 +932,6 @@
             🛠️ उन्नत सेटिंग्स (फ़ाइल बैकअप, स्टोरेज, Firebase) ▾
           </summary>
           <div style="padding-top: 12px;">
-            <!-- Local file backup. Replaces the old kvdb.io "sync key", which sent
-                 the whole unencrypted ledger to a public key-value bucket. -->
-            <div class="form-group" style="margin-bottom: 16px;">
-              <label class="form-label">💾 फ़ाइल बैकअप (आपके फ़ोन में):</label>
-              <div style="display: flex; gap: 8px;">
-                <button type="button" id="btnPushToCloud" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: var(--emerald-success); color: var(--emerald-success); font-weight: 600;">
-                  📤 बैकअप फ़ाइल सेव करें
-                </button>
-                <button type="button" id="btnPullFromCloud" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: var(--blue-accent); color: var(--blue-accent); font-weight: 600;">
-                  📥 फ़ाइल से वापस लाएं
-                </button>
-              </div>
-              <p style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px;">
-                पूरा हिसाब एक JSON फ़ाइल में सेव होता है। इसे WhatsApp या Google Drive पर रखकर किसी भी फ़ोन में वापस लाया जा सकता है।
-              </p>
-            </div>
-
             <!-- Storage meter: photos and voice clips are stored inline, and a full
                  quota used to fail writes silently. -->
             <div class="form-group" style="margin-bottom: 16px;">
@@ -1015,18 +998,22 @@
               </div>
             </div>
 
-            <!-- Local JSON backup -->
+            <!-- Local file backup. This is the only backup section: dropping the
+                 old kvdb.io sync briefly left a second, identical one above. -->
             <div class="form-group" style="border-top: 1px solid rgba(15, 23, 42, 0.063); padding-top: 12px;">
-              <label class="form-label">लोकल फ़ाइल बैकअप (JSON Backup):</label>
+              <label class="form-label">💾 फ़ाइल बैकअप (आपके फ़ोन में):</label>
               <div style="display: flex; gap: 8px;">
-                <button type="button" id="btnExportData" class="btn-secondary" style="flex: 1; font-size: 0.8rem;">
-                  📥 बैकअप डाउनलोड
+                <button type="button" id="btnExportData" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: var(--emerald-success); color: var(--emerald-success); font-weight: 600;">
+                  📥 बैकअप सेव करें
                 </button>
-                <button type="button" id="btnImportData" class="btn-secondary" style="flex: 1; font-size: 0.8rem;">
-                  📤 बैकअप रीस्टोर
+                <button type="button" id="btnImportData" class="btn-secondary" style="flex: 1; font-size: 0.8rem; border-color: var(--blue-accent); color: var(--blue-accent); font-weight: 600;">
+                  📤 फ़ाइल से वापस लाएं
                 </button>
                 <input type="file" id="fileImportInput" accept=".json" style="display: none;" />
               </div>
+              <p style="font-size: 0.72rem; color: var(--text-muted); margin-top: 6px;">
+                पूरा हिसाब एक JSON फ़ाइल में सेव होता है। इसे WhatsApp या Google Drive पर रखकर किसी भी फ़ोन में वापस लाया जा सकता है।
+              </p>
             </div>
           </div>
         </details>
