@@ -334,8 +334,29 @@ class App {
   // The realtime callback used to only console.log, so an incoming update was
   // thrown away while this device kept uploading — one-way sync that silently
   // overwrote the other phone. Now remote changes are actually applied.
+  /* Does this look like a ledger at all?
+
+     Both shapes count: the current one, which carries `projects`, and the
+     pre-projects one a phone on an older build still sends. The old check
+     asked only for top-level `workers` and `trades`, so once uploads moved
+     inside `projects` every incoming update was dropped on the floor and
+     sync quietly stopped working in one direction. */
+  looksLikeLedger(d) {
+    if (!d || typeof d !== 'object') return false;
+    if (Array.isArray(d.projects)) return true;
+    return Array.isArray(d.workers) && Array.isArray(d.trades);
+  }
+
+  /** Workers across every job — the measure of whether a ledger holds anything. */
+  countWorkers(data) {
+    if (!data) return 0;
+    const inProjects = (data.projects || [])
+      .reduce((n, p) => n + (p.workers || []).length, 0);
+    return inProjects + (Array.isArray(data.workers) ? data.workers.length : 0);
+  }
+
   onRemoteData(remoteData) {
-    if (!remoteData || !remoteData.workers || !remoteData.trades) return;
+    if (!this.looksLikeLedger(remoteData)) return;
 
     // Ignore the echo of our own write.
     if (remoteData.lastWriterDeviceId && remoteData.lastWriterDeviceId === this.deviceId) {
@@ -359,16 +380,32 @@ class App {
   }
 
   applyRemoteData(remoteData) {
+    // normalise() understands both shapes and migrates the old one, so this
+    // no longer flattens projects and lending away the way hand-copying the
+    // old top-level fields did.
+    const incoming = this.store.normalise(remoteData);
+
+    /* An empty ledger must never silently replace a full one.
+
+       This is not hypothetical: a bug in the MCP writer once wrote back an
+       empty document, and nothing here stood between that and the phone's
+       own copy. Sync exists to carry work between devices, and no ordinary
+       edit on another phone turns a site with workers into a site with
+       none. So keep what is here, push it back up, and say so — the local
+       copy is the one with something to lose. */
+    if (this.countWorkers(this.store.data) > 0 && this.countWorkers(incoming) === 0) {
+      this.scheduleSync('empty-remote-rejected');
+      this.showToast(this.currentLang === 'en'
+        ? 'Cloud copy was empty — kept this phone\u2019s ledger and sent it back up'
+        : 'क्लाउड वाली copy खाली थी — '
+          + 'इस फ़ोन का हिसाब सुरक्षित है, वही वापस चढ़ा दिया', 6000);
+      return;
+    }
+
     this.store.data = {
-      trades: remoteData.trades || this.store.data.trades,
-      workers: remoteData.workers || [],
-      transactions: remoteData.transactions || [],
-      haziri: remoteData.haziri || {},
-      haziriMeta: remoteData.haziriMeta || {},
-      diaryNotedDates: remoteData.diaryNotedDates || {},
-      isCleanStarted: remoteData.isCleanStarted === true || this.store.data.isCleanStarted === true,
-      // Device-local settings (this phone's Firebase config, its site id) must not
-      // be replaced by another device's copy.
+      ...incoming,
+      // Device-local settings (this phone's Firebase config, its site id) must
+      // not be replaced by another device's copy.
       settings: {
         ...this.store.getSettings(),
         ...(remoteData.settings || {})
@@ -376,6 +413,9 @@ class App {
     };
     this.store.save();
     this.suppressNextSync = true; // rendering the result must not bounce it back
+    this.activeHaziriTradeId = null;   // the job may have changed under us
+    this.populateSelects();
+    this.renderProjectHeader();
     this.renderAll();
     this.updateSyncIndicator('synced');
     this.showToast(this.currentLang === 'en'
@@ -5253,7 +5293,10 @@ class App {
 
 // Instantiate on DOM load
 window.addEventListener('DOMContentLoaded', () => {
-  new App();
+  const app = new App();
+  // Reachable from the console on the dev server only, so sync behaviour can be
+  // exercised by hand. Stripped from the built app.
+  if (import.meta.env?.DEV) window.__app = app;
 
   // Clear any pattern attributes globally to prevent any browser format errors
   const clearPatterns = () => {

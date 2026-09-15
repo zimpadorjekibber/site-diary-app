@@ -49,7 +49,9 @@ function getDb(projectId, apiKey) {
  *  those fields read `undefined` here, so every write replaced the whole
  *  document with empty arrays and dropped `projects` and `lending` entirely.
  *  One write was enough to wipe the cloud copy of a site's ledger. */
-function toPayload(data) {
+// Exported so the shape can be tested directly; the ledger was once emptied
+// by exactly this function and that must stay covered.
+export function toPayload(data) {
   const settings = data.settings || {};
   return {
     projects: data.projects || [],
@@ -76,7 +78,7 @@ function toPayload(data) {
  *  outgoing payload has lost the workers or the jobs the incoming document
  *  had, something is wrong with this code rather than with the request —
  *  and the right move is to write nothing at all. */
-function refuseIfDestructive(before, after) {
+export function refuseIfDestructive(before, after) {
   const countWorkers = d => (d?.projects || []).reduce((n, p) => n + (p.workers || []).length, 0)
     + (Array.isArray(d?.workers) ? d.workers.length : 0);
 
