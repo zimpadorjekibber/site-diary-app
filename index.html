@@ -639,10 +639,59 @@
 
         <!-- Theka Specific Fields -->
         <div id="thekaDetailsGroup" style="display: none;">
+          <!-- The contract belongs to ONE person. Marking every worker in a trade
+               as theka used to count the same contract once per worker. -->
           <div class="form-group">
-            <label class="form-label">कुल तय ठेका राशि (Total Contract Amount in ₹):</label>
-            <input type="number" id="workerThekaAmount" class="form-input" placeholder="जैसे: 35000 या 50000" min="0" />
+            <label class="form-label">ठेका किसके नाम पर है?</label>
+            <div class="segmented-control" id="workerThekedarSwitcher">
+              <button type="button" class="segment-btn active" data-thekedar="yes">📜 यही ठेकेदार हैं</button>
+              <button type="button" class="segment-btn" data-thekedar="no">👷 ठेकेदार के अधीन</button>
+            </div>
+            <p style="font-size: 0.74rem; color: var(--text-muted); margin-top: 6px;" id="thekedarHelpText">
+              ठेके की पूरी रक़म इन्हीं के नाम पर चढ़ेगी। इनके साथ काम करने वाले बाकी कारीगरों को "ठेकेदार के अधीन" चुनें — उनकी हाजिरी लगेगी पर अलग रक़म नहीं जुड़ेगी।
+            </p>
           </div>
+
+          <div id="thekedarAmountFields">
+            <div class="form-group">
+              <label class="form-label">ठेका किस हिसाब से तय हुआ?</label>
+              <div class="segmented-control" id="workerThekaModeSwitcher">
+                <button type="button" class="segment-btn active" data-theka-mode="lumpsum">💰 एकमुश्त रक़म</button>
+                <button type="button" class="segment-btn" data-theka-mode="rate">📐 दर × नाप</button>
+              </div>
+            </div>
+
+            <div class="form-group" id="thekaLumpsumGroup">
+              <label class="form-label">कुल तय ठेका राशि (Total Contract Amount in ₹):</label>
+              <input type="number" id="workerThekaAmount" class="form-input" placeholder="जैसे: 35000 या 50000" min="0" />
+            </div>
+
+            <div id="thekaRateGroup" style="display: none;">
+              <div class="form-group">
+                <label class="form-label">दर व इकाई (जैसे: ₹25 प्रति square ft):</label>
+                <div style="display: flex; gap: 8px;">
+                  <input type="number" id="workerThekaRate" class="form-input" placeholder="25" min="0" step="0.01" style="flex: 1; min-width: 0;" />
+                  <input type="text" id="workerThekaUnit" class="form-input" placeholder="square ft" list="thekaUnitSuggestions" style="flex: 1.4; min-width: 0;" />
+                </div>
+                <datalist id="thekaUnitSuggestions">
+                  <option value="square ft"></option>
+                  <option value="running ft"></option>
+                  <option value="square meter"></option>
+                  <option value="नग / piece"></option>
+                  <option value="बोरी"></option>
+                  <option value="कमरा"></option>
+                </datalist>
+              </div>
+              <div class="form-group">
+                <label class="form-label">कुल नाप (Measurement) — अभी न पता हो तो खाली छोड़ दें:</label>
+                <input type="number" id="workerThekaQuantity" class="form-input" placeholder="जैसे: 400" min="0" step="0.01" />
+              </div>
+              <div id="thekaRatePreview" class="theka-preview">
+                नाप भरते ही कुल रक़म यहाँ दिखेगी।
+              </div>
+            </div>
+          </div>
+
           <div class="form-group">
             <label class="form-label">ठेके का काम व विवरण (Contract Scope):</label>
             <input type="text" id="workerThekaDesc" class="form-input" placeholder="जैसे: पूरे घर का नल फिटिंग, 4 कमरों का पेंट..." />

@@ -1349,6 +1349,42 @@ body {
 .tag-dihadi  { background: var(--emerald-bg);  color: var(--emerald-success); }
 
 /* ===================================================
+   THEKA (CONTRACT) FIELDS
+=================================================== */
+.theka-preview {
+  padding: 11px 13px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  border: 1px dashed var(--border-strong);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+.theka-preview.has-total {
+  background: var(--emerald-bg);
+  border-style: solid;
+  border-color: rgba(21, 150, 109, 0.3);
+  color: var(--emerald-success);
+}
+.theka-preview strong {
+  color: var(--text-main);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.theka-preview.has-total strong { color: var(--emerald-success); }
+
+/* Marks the one person a contract is booked against. */
+.tag-thekedar {
+  background: #f3e8ff;
+  color: var(--purple-accent);
+}
+.tag-under-theka {
+  background: var(--bg-sunken);
+  color: var(--text-dim);
+}
+
+/* ===================================================
    STORAGE METER
 =================================================== */
 .storage-meter {

@@ -1,7 +1,7 @@
 // src/main.js
 // Main Application Controller for Shram & Site Diary
 
-import { store, getTodayString, getDeviceId, getAllTxTypes, getTxTypeMeta, getTxTypeLabel } from './storage.js';
+import { store, getTodayString, getDeviceId, getAllTxTypes, getTxTypeMeta, getTxTypeLabel, getThekaTotal, describeTheka, isThekaUnmeasured } from './storage.js';
 import { VoiceManager } from './speech.js';
 import { ReminderManager } from './reminder.js';
 import confetti from 'canvas-confetti';
@@ -91,6 +91,8 @@ class App {
     this.modalTargetType = 'individual';
     this.modalWorkerRole = 'mistri';
     this.modalContractType = 'dihadi';
+    this.modalIsThekedar = true;   // a theka worker holds the contract unless told otherwise
+    this.modalThekaMode = 'lumpsum';
     this.newWorkerPhotoDataUrl = null;
 
     // Voice & Reminder managers
@@ -492,6 +494,57 @@ class App {
     this.updateSyncIndicator();
   }
 
+  /* Shows only the theka fields that apply: the crew working under a thekedar
+     has no amount of its own, and a lump-sum contract has no rate or measurement. */
+  syncThekaFields() {
+    const amountFields = document.getElementById('thekedarAmountFields');
+    const helpText = document.getElementById('thekedarHelpText');
+    const lumpsum = document.getElementById('thekaLumpsumGroup');
+    const rateGroup = document.getElementById('thekaRateGroup');
+    const amtInput = document.getElementById('workerThekaAmount');
+
+    if (amountFields) amountFields.style.display = this.modalIsThekedar ? 'block' : 'none';
+    if (helpText) {
+      helpText.textContent = this.modalIsThekedar
+        ? 'ठेके की पूरी रक़म इन्हीं के नाम पर चढ़ेगी। इनके साथ काम करने वाले बाकी कारीगरों को "ठेकेदार के अधीन" चुनें — उनकी हाजिरी लगेगी पर अलग रक़म नहीं जुड़ेगी।'
+        : 'इनकी रोज़ाना हाजिरी लगेगी, पर ठेके की रक़म ठेकेदार के नाम पर ही रहेगी — यहाँ दोबारा नहीं जुड़ेगी।';
+    }
+
+    const isRate = this.modalThekaMode === 'rate';
+    if (lumpsum) lumpsum.style.display = isRate ? 'none' : 'block';
+    if (rateGroup) rateGroup.style.display = isRate ? 'block' : 'none';
+    // Only require an amount when this person actually holds a lump-sum contract.
+    if (amtInput) {
+      if (this.modalIsThekedar && !isRate) amtInput.setAttribute('required', 'true');
+      else amtInput.removeAttribute('required');
+    }
+    this.updateThekaPreview();
+  }
+
+  updateThekaPreview() {
+    const box = document.getElementById('thekaRatePreview');
+    if (!box) return;
+    const rate = Number(document.getElementById('workerThekaRate')?.value) || 0;
+    const unit = (document.getElementById('workerThekaUnit')?.value || '').trim();
+    const qty = Number(document.getElementById('workerThekaQuantity')?.value) || 0;
+
+    if (!rate) {
+      box.textContent = 'दर भरते ही कुल रक़म यहाँ दिखेगी।';
+      box.classList.remove('has-total');
+      return;
+    }
+    if (!qty) {
+      // A rate contract with no measurement yet is normal, not an error.
+      box.innerHTML = `दर <strong>₹${rate.toLocaleString('en-IN')}</strong> प्रति ${esc(unit || 'इकाई')} दर्ज है। ` +
+        `नाप बाद में भर देंगे तो कुल रक़म अपने आप बन जाएगी।`;
+      box.classList.remove('has-total');
+      return;
+    }
+    box.innerHTML = `₹${rate.toLocaleString('en-IN')} × ${qty.toLocaleString('en-IN')} ${esc(unit || 'इकाई')} = ` +
+      `<strong>${inr(rate * qty)}</strong>`;
+    box.classList.add('has-total');
+  }
+
   // Call this after anything that CHANGES data (not after merely re-rendering).
   commit(reason = 'edit') {
     this.renderAll();
@@ -889,7 +942,11 @@ class App {
                     <span class="tag-badge ${worker.role === 'mistri' ? 'tag-mistri' : 'tag-helper'}">
                       ${worker.role === 'mistri' ? (this.currentLang === 'en' ? 'Mistri' : 'मिस्त्री') : (this.currentLang === 'en' ? 'Helper' : 'हेल्पर')}
                     </span>
-                    ${worker.contractType === 'theka' ? `<span class="tag-badge tag-theka">${this.currentLang === 'en' ? 'Theka' : 'ठेका'}</span>` : ''}
+                    ${worker.contractType === 'theka'
+                      ? (worker.isThekedar
+                          ? `<span class="tag-badge tag-thekedar" title="${esc(describeTheka(worker))}">📜 ${this.currentLang === 'en' ? 'Contractor' : 'ठेकेदार'}</span>`
+                          : `<span class="tag-badge tag-under-theka">${this.currentLang === 'en' ? 'Under contract' : 'ठेके के अधीन'}</span>`)
+                      : ''}
                   </div>
 
                   <div class="attendance-status-line">
@@ -2610,7 +2667,7 @@ class App {
           if (dihadiGroup) dihadiGroup.style.display = 'none';
           if (thekaGroup) thekaGroup.style.display = 'block';
           if (dailyRateInput) dailyRateInput.removeAttribute('required');
-          if (thekaAmtInput) thekaAmtInput.setAttribute('required', 'true');
+          this.syncThekaFields();
         } else {
           if (dihadiGroup) dihadiGroup.style.display = 'block';
           if (thekaGroup) thekaGroup.style.display = 'none';
@@ -2618,6 +2675,30 @@ class App {
           if (thekaAmtInput) thekaAmtInput.removeAttribute('required');
         }
       });
+    });
+
+    // Theka: who holds the contract, and how it was agreed
+    document.querySelectorAll('#workerThekedarSwitcher .segment-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#workerThekedarSwitcher .segment-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.modalIsThekedar = btn.getAttribute('data-thekedar') === 'yes';
+        this.syncThekaFields();
+      });
+    });
+
+    document.querySelectorAll('#workerThekaModeSwitcher .segment-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#workerThekaModeSwitcher .segment-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.modalThekaMode = btn.getAttribute('data-theka-mode');
+        this.syncThekaFields();
+      });
+    });
+
+    ['workerThekaRate', 'workerThekaUnit', 'workerThekaQuantity'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', () => this.updateThekaPreview());
     });
 
     // Worker Photo Upload & Camera Events
@@ -2681,9 +2762,19 @@ class App {
         }
         const tradeId = document.getElementById('workerTradeSelect').value;
         const dailyRate = this.modalContractType === 'dihadi' ? (Number(document.getElementById('workerDailyRate').value) || 0) : 0;
-        const thekaAmount = this.modalContractType === 'theka' ? (Number(document.getElementById('workerThekaAmount').value) || 0) : 0;
+        const isTheka = this.modalContractType === 'theka';
+        const thekaAmount = isTheka ? (Number(document.getElementById('workerThekaAmount').value) || 0) : 0;
+        const thekaRate = isTheka ? (Number(document.getElementById('workerThekaRate')?.value) || 0) : 0;
+        const thekaUnit = isTheka ? (document.getElementById('workerThekaUnit')?.value || '') : '';
+        const thekaQuantity = isTheka ? (Number(document.getElementById('workerThekaQuantity')?.value) || 0) : 0;
         const thekaDescription = document.getElementById('workerThekaDesc') ? document.getElementById('workerThekaDesc').value : '';
         const phone = (document.getElementById('workerPhone').value || '').trim();
+
+        // A rate contract needs a rate; the measurement can come later.
+        if (isTheka && this.modalIsThekedar && this.modalThekaMode === 'rate' && !thekaRate) {
+          alert('ठेके की दर दर्ज करें (जैसे: 25 प्रति square ft)।');
+          return;
+        }
 
         this.store.addWorker({
           name,
@@ -2691,7 +2782,12 @@ class App {
           role: this.modalWorkerRole,
           contractType: this.modalContractType,
           dailyRate,
+          isThekedar: this.modalIsThekedar,
+          thekaMode: this.modalThekaMode,
           thekaAmount,
+          thekaRate,
+          thekaUnit,
+          thekaQuantity,
           thekaDescription,
           phone,
           photoUrl: this.newWorkerPhotoDataUrl
@@ -2725,6 +2821,15 @@ class App {
         const thekaGroup = document.getElementById('thekaDetailsGroup');
         if (dihadiGroup) dihadiGroup.style.display = 'block';
         if (thekaGroup) thekaGroup.style.display = 'none';
+        this.modalIsThekedar = true;
+        this.modalThekaMode = 'lumpsum';
+        document.querySelectorAll('#workerThekedarSwitcher .segment-btn').forEach(b => {
+          b.classList.toggle('active', b.getAttribute('data-thekedar') === 'yes');
+        });
+        document.querySelectorAll('#workerThekaModeSwitcher .segment-btn').forEach(b => {
+          b.classList.toggle('active', b.getAttribute('data-theka-mode') === 'lumpsum');
+        });
+        this.syncThekaFields();
 
         this.closeModals();
         this.populateSelects();

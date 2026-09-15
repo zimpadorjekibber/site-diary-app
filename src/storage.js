@@ -252,10 +252,61 @@ function getInitialSeedHaziri() {
    cash, recharge, or a bag of cement bought in their name. The old code only
    counted cash+recharge in the ledger but counted everything in the muster roll,
    so the same worker showed two different balances on two screens. */
+/* Ids must not collide. `prefix + Date.now()` alone does, because two records
+   added in the same millisecond — which happens on any bulk add, or simply by
+   tapping quickly — end up sharing an id, and every lookup then returns whichever
+   one is first in the array. */
+function makeId(prefix) {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function sumWorkerPayments(txs) {
   return txs
     .filter(t => t.targetType !== 'group')
     .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+}
+
+/* A theka is worth either a flat sum ("₹35,000 for the whole job") or a rate
+   times a measurement ("₹25 per sq ft × 400 sq ft"). The measurement is often
+   unknown until the work is finished, so quantity 0 is normal and simply means
+   "not measured yet" — the contract shows as pending rather than as ₹0 earned. */
+export function getThekaTotal(worker) {
+  if (!worker || worker.contractType !== 'theka' || !worker.isThekedar) return 0;
+  if (worker.thekaMode === 'rate') {
+    return (Number(worker.thekaRate) || 0) * (Number(worker.thekaQuantity) || 0);
+  }
+  return Number(worker.thekaAmount) || 0;
+}
+
+// True when a rate contract has been agreed but not yet measured.
+export function isThekaUnmeasured(worker) {
+  return !!worker
+    && worker.contractType === 'theka'
+    && worker.isThekedar
+    && worker.thekaMode === 'rate'
+    && (Number(worker.thekaRate) || 0) > 0
+    && !(Number(worker.thekaQuantity) > 0);
+}
+
+// "₹25 × 400 sq ft" or "₹35,000 (एकमुश्त)" — one phrasing used by every screen.
+export function describeTheka(worker, lang = 'hi') {
+  if (!worker || worker.contractType !== 'theka') return '';
+  if (!worker.isThekedar) {
+    return lang === 'en' ? 'Works under the contractor' : 'ठेकेदार के अधीन';
+  }
+  if (worker.thekaMode === 'rate') {
+    const rate = Number(worker.thekaRate) || 0;
+    const unit = worker.thekaUnit || (lang === 'en' ? 'unit' : 'इकाई');
+    const qty = Number(worker.thekaQuantity) || 0;
+    if (qty > 0) {
+      return `₹${rate.toLocaleString('en-IN')} × ${qty.toLocaleString('en-IN')} ${unit}`;
+    }
+    return lang === 'en'
+      ? `₹${rate.toLocaleString('en-IN')} per ${unit} — not measured yet`
+      : `₹${rate.toLocaleString('en-IN')} प्रति ${unit} — नाप अभी बाकी`;
+  }
+  const amt = Number(worker.thekaAmount) || 0;
+  return lang === 'en' ? `₹${amt.toLocaleString('en-IN')} (lump sum)` : `₹${amt.toLocaleString('en-IN')} (एकमुश्त)`;
 }
 
 export class Store {
@@ -292,6 +343,18 @@ export class Store {
             parsed.settings.firebaseSiteId = getOrCreateSiteId();
             needsSave = true;
           }
+          // Theka used to be a flat amount on any worker, so a trade with three
+          // contract workers counted the same contract three times. The amount now
+          // belongs to one thekedar; anyone who already had an amount becomes one,
+          // which keeps existing numbers unchanged until the user says otherwise.
+          parsed.workers.forEach(w => {
+            if (w.contractType === 'theka' && w.isThekedar === undefined) {
+              w.isThekedar = (Number(w.thekaAmount) || 0) > 0;
+              w.thekaMode = w.isThekedar ? 'lumpsum' : null;
+              needsSave = true;
+            }
+          });
+
           // A restored-from-cloud payload used to lose this flag, which let the demo
           // seed below re-inject 8 fake workers into a real site's register.
           if (parsed.workers.length > 0 && !parsed.workers.some(w => String(w.id).startsWith('w') && w.id.length <= 3)) {
@@ -405,7 +468,7 @@ export class Store {
   }
 
   addTrade(name, icon = 'briefcase', color = '#f59e0b') {
-    const id = 'trade_' + Date.now();
+    const id = makeId('trade');
     this.data.trades.push({ id, name, icon, color });
     this.save();
     return id;
@@ -448,17 +511,27 @@ export class Store {
     return this.data.workers.find(w => w.id === id);
   }
 
-  addWorker({ name, tradeId, role, contractType, dailyRate, thekaAmount, thekaDescription, phone, photoUrl }) {
-    const id = 'w_' + Date.now();
+  addWorker({ name, tradeId, role, contractType, dailyRate, isThekedar, thekaMode,
+              thekaAmount, thekaRate, thekaUnit, thekaQuantity, thekaDescription, phone, photoUrl }) {
+    const id = makeId('w');
     const isTheka = contractType === 'theka';
+    // The contract belongs to one person — the thekedar. Everyone else working
+    // under him has attendance but no separate amount, otherwise the same
+    // contract gets counted once per worker in the trade.
+    const holdsContract = isTheka && !!isThekedar;
     const worker = {
       id,
       name: name.trim(),
       tradeId,
       role: role || 'mistri', // 'mistri' or 'helper'
       contractType: isTheka ? 'theka' : 'dihadi',
+      isThekedar: holdsContract,
       dailyRate: isTheka ? 0 : (Number(dailyRate) || 0),
-      thekaAmount: isTheka ? (Number(thekaAmount) || 0) : 0,
+      thekaMode: holdsContract ? (thekaMode === 'rate' ? 'rate' : 'lumpsum') : null,
+      thekaAmount: holdsContract && thekaMode !== 'rate' ? (Number(thekaAmount) || 0) : 0,
+      thekaRate: holdsContract && thekaMode === 'rate' ? (Number(thekaRate) || 0) : 0,
+      thekaUnit: holdsContract && thekaMode === 'rate' ? (thekaUnit || '').trim() : '',
+      thekaQuantity: holdsContract && thekaMode === 'rate' ? (Number(thekaQuantity) || 0) : 0,
       thekaDescription: (thekaDescription || '').trim(),
       phone: (phone || '').trim(),
       photoUrl: photoUrl || null
@@ -517,7 +590,7 @@ export class Store {
 
   addTransaction(tx) {
     const newTx = {
-      id: 'tx_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      id: makeId('tx'),
       date: tx.date || getTodayString(),
       time: tx.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       type: tx.type || 'cash', // 'cash' | 'ration' | 'recharge' | 'other'
@@ -681,6 +754,7 @@ export class Store {
         worker,
         trade: this.getTrade(worker.tradeId),
         isTheka,
+        isThekedar: !!worker.isThekedar,
         dailyStatuses,
         totalPresent,
         totalAbsent,
@@ -688,9 +762,12 @@ export class Store {
         totalEarnedMonth,
         totalPaidMonth,
         totalPaidLifetime,
-        thekaAmount: worker.thekaAmount || 0,
+        thekaAmount: getThekaTotal(worker),
+        thekaLabel: describeTheka(worker),
+        // Only the thekedar carries the contract; the crew working under him is
+        // paid by him, so their balance is just what the site advanced them.
         netBalance: isTheka
-          ? ((worker.thekaAmount || 0) - totalPaidLifetime)
+          ? (getThekaTotal(worker) - totalPaidLifetime)
           : (totalEarnedMonth - totalPaidMonth)
       };
     });
@@ -762,7 +839,7 @@ export class Store {
     });
 
     if (isTheka) {
-      totalEarned = worker.thekaAmount || 0;
+      totalEarned = getThekaTotal(worker);
     }
 
     // Everything charged to this worker by name — cash, recharge, diesel, material,
@@ -797,7 +874,10 @@ export class Store {
       absentDates,
       totalDaysTracked,
       presenceRate,
-      thekaAmount: worker.thekaAmount || 0,
+      isThekedar: !!worker.isThekedar,
+      thekaAmount: getThekaTotal(worker),
+      thekaLabel: describeTheka(worker),
+      thekaUnmeasured: isThekaUnmeasured(worker),
       thekaDescription: worker.thekaDescription || '',
       totalEarned,
       totalCashPaid,
