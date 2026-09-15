@@ -4296,6 +4296,20 @@ class App {
       });
     }
 
+    // Brings back the standard trades a job has lost, without disturbing the
+    // ones it still has or the workers inside them.
+    document.getElementById('btnRestoreTrades')?.addEventListener('click', () => {
+      const added = this.store.restoreDefaultTrades();
+      if (added.length === 0) {
+        this.showToast('सारे ट्रेड पहले से मौजूद हैं');
+        return;
+      }
+      this.populateSelects();
+      this.renderExistingTradesList();
+      this.commit();
+      this.showToast(added.length + ' ट्रेड वापस आ गए: ' + added.join(', '), 5000);
+    });
+
     const btnSettingsAddTrade = document.getElementById('btnSettingsAddTrade');
     if (btnSettingsAddTrade) {
       btnSettingsAddTrade.addEventListener('click', () => {

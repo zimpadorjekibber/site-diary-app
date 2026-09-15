@@ -1110,6 +1110,27 @@ export class Store {
      tractors.
   =================================================== */
 
+  /** Puts back any built-in trade this job is missing.
+
+      Only adds — a trade already present keeps its name, its icon and every
+      worker attached to it, so this is always safe to press. It exists because
+      there was no way back from losing the standard trades, whether they were
+      deleted on purpose years ago or lost to a bad sync.
+
+      @returns the names of the trades that were added. */
+  restoreDefaultTrades() {
+    const project = this.activeProject();
+    const added = [];
+    DEFAULT_TRADES.forEach(def => {
+      if (!project.trades.some(t => t.id === def.id)) {
+        project.trades.push({ ...def });
+        added.push(def.name);
+      }
+    });
+    if (added.length) this.save();
+    return added;
+  }
+
   isSupplierTrade(tradeId) {
     const trade = this.activeProject().trades.find(t => t.id === tradeId);
     return !!(trade && trade.isSupplier);
