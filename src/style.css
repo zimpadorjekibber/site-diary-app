@@ -488,6 +488,13 @@ body {
   transition: transform 0.18s var(--ease);
 }
 .action-bar-trolley-btn:active { transform: scale(0.975); }
+/* Before any supplier exists this button is an invitation, not a daily action —
+   dashed so it reads as setup rather than something already in use. */
+.action-bar-trolley-btn.is-setup {
+  border-style: dashed;
+  background: var(--bg-card);
+}
+.action-bar-trolley-btn.is-setup .action-btn-icon { opacity: 0.75; }
 
 .action-btn-icon {
   width: 38px;

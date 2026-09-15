@@ -726,6 +726,14 @@ class App {
     document.addEventListener('click', (e) => {
       if (e.target.closest('#btnOpenTrolley, [data-open-trolley]')) {
         const id = e.target.closest('[data-open-trolley]')?.getAttribute('data-open-trolley');
+        // Nothing to record against yet — send them to add the tractor owner,
+        // with the trade already chosen, instead of an empty delivery form.
+        if (!id && this.store.getSuppliers().length === 0) {
+          const tractorTrade = this.store.getTrades().find(t => t.isSupplier);
+          this.openAddWorkerModal(tractorTrade ? tractorTrade.id : null);
+          this.showToast('ट्रैक्टर वाले का नाम व नंबर भरें — फिर ट्रॉली दर्ज कर सकेंगे', 4000);
+          return;
+        }
         this.openTrolleyModal(id || null);
       }
 
@@ -892,11 +900,23 @@ class App {
     const trolleyBtn = document.getElementById('btnOpenTrolley');
     if (trolleyBtn) {
       const suppliers = this.store.getSuppliers();
-      trolleyBtn.style.display = suppliers.length > 0 ? '' : 'none';
+      // Always visible once the site has a tractor trade. Hiding it until a
+      // supplier existed made the feature undiscoverable: nothing on screen said
+      // a tractor could be added at all. With no supplier yet it becomes the
+      // invitation to set one up.
+      const hasTractorTrade = this.store.getTrades().some(t => t.isSupplier);
+      trolleyBtn.style.display = hasTractorTrade ? '' : 'none';
+      trolleyBtn.classList.toggle('is-setup', suppliers.length === 0);
+      const strongEl = trolleyBtn.querySelector('strong');
+      if (strongEl) {
+        strongEl.textContent = suppliers.length === 0 ? 'ट्रैक्टर वाला जोड़ें' : 'ट्रॉली दर्ज करें';
+      }
       const summary = document.getElementById('trolleyTodaySummary');
       if (summary) {
         const todays = this.store.getTrolleyDeliveriesForDate(today);
-        if (todays.length === 0) {
+        if (suppliers.length === 0) {
+          summary.textContent = 'रेता, बजरी, बालू की ट्रॉली गिनने के लिए →';
+        } else if (todays.length === 0) {
           summary.textContent = 'रेता, बजरी, बालू +';
         } else {
           const trips = todays.reduce((n, t) => n + (Number(t.trips) || 0), 0);
