@@ -82,9 +82,30 @@ html {
    left and right under the thumb. Wide content scrolls inside its own container
    instead (see .muster-table-wrapper, .filter-bar, .attendance-group-tabs-scroll). */
 html, body {
+  width: 100%;
   max-width: 100%;
   overflow-x: hidden;
-  overscroll-behavior-x: none;
+  /* Only vertical gestures move the page. pan-y makes the browser reject sideways
+     swipes outright rather than starting a horizontal pan it then has to undo,
+     and overscroll-behavior kills the rubber-band bounce at the edges. Children
+     that genuinely scroll sideways (the muster table, the chip strips) opt back
+     in with touch-action: pan-x. */
+  touch-action: pan-y;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* Horizontal scrollers have to re-enable the sideways gesture for themselves. */
+.muster-table-wrapper,
+.filter-bar,
+.attendance-group-tabs-scroll,
+.statement-table-wrap,
+.quick-trade-chips,
+.quick-amount-chips,
+.ration-items-pills,
+.trade-icon-picker {
+  touch-action: pan-x pan-y;
 }
 
 body {
@@ -118,7 +139,9 @@ body {
 .app-container {
   max-width: 1080px;
   margin: 0 auto;
-  padding: 0 16px 40px;
+  /* viewport-fit=cover lets the page reach the screen edges, so the side padding
+     has to clear the rounded corners and any camera cutout in landscape. */
+  padding: 0 calc(16px + env(safe-area-inset-right, 0px)) 40px calc(16px + env(safe-area-inset-left, 0px));
 }
 
 /* ===================================================
@@ -129,7 +152,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 4px 12px;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 4px 12px;
   margin-bottom: 14px;
   position: sticky;
   top: 0;

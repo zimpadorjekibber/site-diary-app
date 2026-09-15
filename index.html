@@ -3,7 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="google" content="notranslate" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Locked to the device screen. Without maximum-scale/user-scalable a stray
+       pinch or double-tap zooms the page, and the zoomed canvas then pans under
+       every swipe — which reads as the screen wandering. viewport-fit=cover lets
+       the layout reach under the notch; safe-area insets keep content clear of it. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>श्रम व साइट डायरी - Voice & Text Site Transactions & Evening Diary</title>
   <meta name="theme-color" content="#f59e0b" />
   <meta name="description" content="श्रम और साइट डायरी - Voice & Text Site Transactions, Muster Roll & Evening Diary" />
