@@ -41,17 +41,20 @@ function getDb(projectId, apiKey) {
   return db;
 }
 
-/** Same field set the security rules accept, and the app expects. */
+/** The same field set the app itself writes (see buildSyncPayload in
+ *  src/firebase.js), and the same one the security rules accept.
+ *
+ *  This used to write the pre-projects shape — trades, workers and
+ *  transactions at the top level. After the ledger moved inside `projects`,
+ *  those fields read `undefined` here, so every write replaced the whole
+ *  document with empty arrays and dropped `projects` and `lending` entirely.
+ *  One write was enough to wipe the cloud copy of a site's ledger. */
 function toPayload(data) {
   const settings = data.settings || {};
   return {
-    trades: data.trades || [],
-    workers: data.workers || [],
-    transactions: data.transactions || [],
-    haziri: data.haziri || {},
-    haziriMeta: data.haziriMeta || {},
-    diaryNotedDates: data.diaryNotedDates || {},
-    isCleanStarted: data.isCleanStarted === true,
+    projects: data.projects || [],
+    activeProjectId: data.activeProjectId || null,
+    lending: data.lending || [],
     settings: {
       eveningReminderTime: settings.eveningReminderTime || '19:30',
       reminderEnabled: settings.reminderEnabled !== false,
@@ -64,6 +67,37 @@ function toPayload(data) {
     updatedAt: new Date().toISOString(),
     timestamp: Date.now()
   };
+}
+
+/** Refuses a write that would destroy what is already there.
+ *
+ *  A tool here only ever adds a worker, marks attendance or logs an expense.
+ *  None of those can legitimately reduce the ledger to nothing, so if the
+ *  outgoing payload has lost the workers or the jobs the incoming document
+ *  had, something is wrong with this code rather than with the request —
+ *  and the right move is to write nothing at all. */
+function refuseIfDestructive(before, after) {
+  const countWorkers = d => (d?.projects || []).reduce((n, p) => n + (p.workers || []).length, 0)
+    + (Array.isArray(d?.workers) ? d.workers.length : 0);
+
+  const had = countWorkers(before);
+  const has = countWorkers(after);
+  if (had > 0 && has === 0) {
+    throw new Error(
+      `Refusing to write: the ledger had ${had} workers and the update has none. ` +
+      'Nothing was changed. This is a bug in the MCP writer, not in your request.'
+    );
+  }
+
+  const hadProjects = (before?.projects || []).length;
+  const hasProjects = (after?.projects || []).length;
+  if (hadProjects > 0 && hasProjects === 0) {
+    throw new Error(
+      `Refusing to write: the ledger had ${hadProjects} jobs and the update has none. ` +
+      'Nothing was changed.'
+    );
+  }
+  return after;
 }
 
 /**
@@ -92,9 +126,11 @@ export async function mutateLedger({ siteId, projectId, apiKey }, apply) {
       );
     }
 
-    const store = new Store({ data: snap.data(), persist: false });
+    const before = snap.data();
+    const store = new Store({ data: before, persist: false });
     const result = apply(store);
-    tx.set(ref, toPayload(store.data));
+    // Checked inside the transaction, so a refusal writes nothing at all.
+    tx.set(ref, refuseIfDestructive(before, toPayload(store.data)));
     return result;
   });
 }
