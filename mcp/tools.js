@@ -73,7 +73,9 @@ function describeWorker(store, w) {
   /* The stored role is only ever mistri or helper; holding the contract is a
      separate flag. But a man who reads "Mistri" next to a seven-lakh contract
      looks like a day labourer with a typo, so say what he actually is. */
-  const role = w.isThekedar ? 'Thekedar' : (w.role === 'mistri' ? 'Mistri' : 'Helper');
+  const role = w.isThekedar
+    ? (w.worksHimself === false ? 'Thekedar (does not work on site)' : 'Thekedar (works on site too)')
+    : (w.role === 'mistri' ? 'Mistri' : 'Helper');
   const base = {
     id: w.id,
     name: w.name,
@@ -84,6 +86,7 @@ function describeWorker(store, w) {
   };
   if (w.contractType === 'theka') {
     base.isThekedar = !!w.isThekedar;
+    if (w.isThekedar) base.worksHimself = w.worksHimself !== false;
     base.contract = describeTheka(w, 'en');
     base.contractValue = getThekaTotal(w);
   } else {
@@ -413,6 +416,7 @@ const WRITE_TOOLS = [
         contractType: { type: 'string', enum: ['dihadi', 'theka'], description: 'Daily wage or contract. Default dihadi.' },
         dailyRate: { type: 'number', description: 'Rupees per day. Required for dihadi.' },
         isThekedar: { type: 'boolean', description: 'True only for the person who holds the contract.' },
+        worksHimself: { type: 'boolean', description: 'For a thekedar: does he work the job himself, or only give out the contract? Default true.' },
         thekaAmount: { type: 'number', description: 'Lump-sum contract value. May be left out and filled in later.' },
         thekaRate: { type: 'number', description: 'Rate per unit, e.g. 25 for ₹25 per square ft.' },
         thekaUnit: { type: 'string', description: 'Unit for the rate, e.g. "square ft".' },
@@ -492,6 +496,7 @@ const WRITE_TOOLS = [
         dailyRate: { type: 'number', description: 'New daily wage. Giving this to someone on contract moves them to daily wages.' },
         contractType: { type: 'string', enum: ['dihadi', 'theka'], description: 'Move between daily wages and contract work.' },
         isThekedar: { type: 'boolean', description: 'Whether this person holds the contract.' },
+        worksHimself: { type: 'boolean', description: 'For a thekedar: true if he works the job himself, false if he only gives out the contract.' },
         thekaRate: { type: 'number', description: 'Rate per unit for a measured contract, e.g. 25.' },
         thekaUnit: { type: 'string', description: 'Unit for that rate, e.g. "square ft".' },
         phone: { type: 'string', description: 'New mobile number.' },
@@ -562,6 +567,7 @@ const writeHandlers = {
         contractType: isTheka ? 'theka' : 'dihadi',
         dailyRate: args.dailyRate,
         isThekedar,
+        worksHimself: args.worksHimself,
         thekaMode: Number(args.thekaRate) > 0 ? 'rate' : 'lumpsum',
         thekaAmount: args.thekaAmount,
         thekaRate: args.thekaRate,
@@ -746,6 +752,14 @@ const writeHandlers = {
       if (args.isThekedar !== undefined) {
         updates.isThekedar = args.isThekedar === true;
         if (updates.isThekedar) updates.contractType = 'theka';
+      }
+
+      if (args.worksHimself !== undefined) {
+        const willHold = updates.isThekedar !== undefined ? updates.isThekedar : worker.isThekedar;
+        if (!willHold) {
+          throw new Error(`${worker.name} does not hold a contract, so there is nothing to say about whether he works it himself.`);
+        }
+        updates.worksHimself = args.worksHimself === true;
       }
 
       if (args.thekaQuantity !== undefined || args.thekaAmount !== undefined

@@ -99,6 +99,7 @@ class App {
     this.modalTargetType = 'individual';
     this.modalWorkerRole = 'mistri';
     this.modalContractType = 'dihadi';
+    this.modalWorksHimself = true;
     this.lendingFilter = 'pending';
     this.lendingDirection = 'given';
     this.lendingKind = 'item';
@@ -602,6 +603,8 @@ class App {
     const amtInput = document.getElementById('workerThekaAmount');
 
     if (amountFields) amountFields.style.display = this.modalIsThekedar ? 'block' : 'none';
+    const worksRow = document.getElementById('thekedarWorksRow');
+    if (worksRow) worksRow.style.display = this.modalIsThekedar ? 'block' : 'none';
     if (helpText) {
       helpText.textContent = this.modalIsThekedar
         ? 'ठेके की पूरी रक़म इन्हीं के नाम पर चढ़ेगी। इनके साथ काम करने वाले बाकी कारीगरों को "ठेकेदार के अधीन" चुनें — उनकी हाजिरी लगेगी पर अलग रक़म नहीं जुड़ेगी।'
@@ -3806,6 +3809,15 @@ class App {
         this.modalIsThekedar = btn.getAttribute('data-thekedar') === 'yes';
         this.syncThekaFields();
       });
+
+    document.querySelectorAll('#workerWorksHimselfSwitcher .segment-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#workerWorksHimselfSwitcher .segment-btn')
+          .forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.modalWorksHimself = btn.getAttribute('data-works-himself') === 'yes';
+      });
+    });
     });
 
     document.querySelectorAll('#workerThekaModeSwitcher .segment-btn').forEach(btn => {
@@ -3902,6 +3914,7 @@ class App {
           tradeId,
           role: this.modalWorkerRole,
           contractType: this.modalContractType,
+          worksHimself: this.modalWorksHimself,
           dailyRate,
           isThekedar: this.modalIsThekedar,
           thekaMode: this.modalThekaMode,
@@ -3946,6 +3959,9 @@ class App {
         this.modalThekaMode = 'lumpsum';
         document.querySelectorAll('#workerThekedarSwitcher .segment-btn').forEach(b => {
           b.classList.toggle('active', b.getAttribute('data-thekedar') === 'yes');
+        });
+        document.querySelectorAll('#workerWorksHimselfSwitcher .segment-btn').forEach(b => {
+          b.classList.toggle('active', b.getAttribute('data-works-himself') === 'yes');
         });
         document.querySelectorAll('#workerThekaModeSwitcher .segment-btn').forEach(b => {
           b.classList.toggle('active', b.getAttribute('data-theka-mode') === 'lumpsum');
@@ -4804,6 +4820,7 @@ class App {
     }
     if (workerPhotoPlaceholder) workerPhotoPlaceholder.style.display = 'block';
     // Reset contract switcher
+    this.modalWorksHimself = true;
     this.modalContractType = 'dihadi';
     document.querySelectorAll('#workerContractSwitcher .segment-btn').forEach(b => {
       b.classList.toggle('active', b.getAttribute('data-contract') === 'dihadi');

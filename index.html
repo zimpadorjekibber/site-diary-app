@@ -946,6 +946,20 @@
             </p>
           </div>
 
+          <!-- Two kinds of thekedar: one puts his men on the job, the other works
+               it himself as well. It decides whether marking him present means
+               anything at all. -->
+          <div class="form-group" id="thekedarWorksRow">
+            <label class="form-label">ठेकेदार खुद काम भी करते हैं?</label>
+            <div class="segmented-control" id="workerWorksHimselfSwitcher">
+              <button type="button" class="segment-btn active" data-works-himself="yes">🔨 हाँ, खुद भी काम करते हैं</button>
+              <button type="button" class="segment-btn" data-works-himself="no">📜 नहीं, सिर्फ़ ठेका देते हैं</button>
+            </div>
+            <p style="font-size: 0.74rem; color: var(--text-muted); margin-top: 6px;">
+              सिर्फ़ ठेका देने वालों की हाजिरी लगाने का कोई मतलब नहीं — वो साइट पर रोज़ नहीं होते।
+            </p>
+          </div>
+
           <div id="thekedarAmountFields">
             <div class="form-group">
               <label class="form-label">ठेका किस हिसाब से तय हुआ?</label>

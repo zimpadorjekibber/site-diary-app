@@ -911,7 +911,7 @@ export class Store {
     return this.activeProject().workers.find(w => w.id === id);
   }
 
-  addWorker({ name, tradeId, role, contractType, dailyRate, isThekedar, thekaMode,
+  addWorker({ name, tradeId, role, contractType, dailyRate, isThekedar, worksHimself, thekaMode,
               thekaAmount, thekaRate, thekaUnit, thekaQuantity, thekaDescription, phone, photoUrl }) {
     const id = makeId('w');
     const isTheka = contractType === 'theka';
@@ -927,6 +927,12 @@ export class Store {
       contractType: isTheka ? 'theka' : 'dihadi',
       isThekedar: holdsContract,
       dailyRate: isTheka ? 0 : (Number(dailyRate) || 0),
+      /* Two kinds of thekedar. One takes the contract and puts his own men on it
+         without touching a tool; the other works the job himself alongside them.
+         It matters for attendance — marking the first sort present means nothing,
+         and the second sort is on site every day like anyone else. Defaults to
+         true, which is the commoner case on a village site. */
+      worksHimself: holdsContract ? worksHimself !== false : true,
       thekaMode: holdsContract ? (thekaMode === 'rate' ? 'rate' : 'lumpsum') : null,
       thekaAmount: holdsContract && thekaMode !== 'rate' ? (Number(thekaAmount) || 0) : 0,
       thekaRate: holdsContract && thekaMode === 'rate' ? (Number(thekaRate) || 0) : 0,
