@@ -146,6 +146,14 @@
           <small data-i18n="actionCashAdvanceSub">एडवांस या भुगतान लिखें +</small>
         </div>
       </button>
+      <!-- Shown only once a tractor supplier exists; hidden on sites that have none. -->
+      <button type="button" id="btnOpenTrolley" class="action-bar-trolley-btn" style="display: none;" title="ट्रॉली दर्ज करें">
+        <span class="action-btn-icon">🚜</span>
+        <div class="action-btn-text">
+          <strong>ट्रॉली दर्ज करें</strong>
+          <small id="trolleyTodaySummary">रेता, बजरी, बालू +</small>
+        </div>
+      </button>
     </div>
 
     <!-- NAVIGATION TABS (DESKTOP TOP / MOBILE FIXED BOTTOM DOCK) -->
@@ -569,6 +577,82 @@
   <!-- ===================================================
        MODAL 2: ADD WORKER (MISTRI / HELPER)
   =================================================== -->
+  <!-- TROLLEY DELIVERY: a tractor owner is a supplier, so what gets recorded is
+       loads delivered, not attendance. Rate per trolley is set up once per
+       material; day to day only the count changes. -->
+  <div id="modalTrolley" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">🚜 ट्रॉली दर्ज करें</h3>
+        <button class="btn-close-modal" data-close-modal>&times;</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="trolleySupplierSelect">ट्रैक्टर वाला (Supplier):</label>
+        <select id="trolleySupplierSelect" class="form-select"></select>
+        <p id="trolleyNoSupplierNote" style="display: none; font-size: 0.78rem; color: var(--rose-danger); margin-top: 6px;">
+          पहले ट्रैक्टर वाले को जोड़ें — "+ कारीगर" में ट्रेड "🚜 Tractor" चुनें।
+        </p>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">क्या सामान आया?</label>
+        <div class="trolley-material-grid" id="trolleyMaterialChips"></div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">कितनी ट्रॉली आईं?</label>
+        <div class="trip-stepper">
+          <button type="button" class="trip-step-btn" id="btnTripMinus" aria-label="कम करें">−</button>
+          <input type="number" id="trolleyTrips" class="trip-count" value="1" min="1" max="50" inputmode="numeric" />
+          <button type="button" class="trip-step-btn" id="btnTripPlus" aria-label="बढ़ाएँ">+</button>
+        </div>
+        <div class="trolley-quick-counts">
+          <button type="button" class="trolley-quick-btn" data-trips="1">1</button>
+          <button type="button" class="trolley-quick-btn" data-trips="2">2</button>
+          <button type="button" class="trolley-quick-btn" data-trips="3">3</button>
+          <button type="button" class="trolley-quick-btn" data-trips="4">4</button>
+        </div>
+      </div>
+
+      <div id="trolleyTotalBox" class="trolley-total-box">रेट भरते ही कुल रक़म यहाँ दिखेगी।</div>
+
+      <div class="form-group">
+        <label class="form-label" for="trolleyDate">तारीख:</label>
+        <input type="date" id="trolleyDate" class="form-input" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="trolleyNote">नोट (ज़रूरी नहीं):</label>
+        <input type="text" id="trolleyNote" class="form-input" placeholder="जैसे: पीछे वाले प्लॉट में उतारी" />
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" data-close-modal>रद्द करें</button>
+        <button type="button" class="btn-primary" id="btnSaveTrolley">🚜 दर्ज करें</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TROLLEY RATES: set once per material, per supplier. -->
+  <div id="modalTrolleyRates" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">🚜 ट्रॉली का रेट</h3>
+        <button class="btn-close-modal" data-close-modal>&times;</button>
+      </div>
+      <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 14px;">
+        <strong id="trolleyRatesWorkerName"></strong> के लिए एक ट्रॉली का दाम। दूरी के हिसाब से जो तय हुआ,
+        वही भर दीजिए। जिस सामान का रेट तय नहीं, उसे खाली छोड़ दें।
+      </p>
+      <div id="trolleyRatesFields"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" data-close-modal>रद्द करें</button>
+        <button type="button" class="btn-primary" id="btnSaveTrolleyRates">💾 रेट सेव करें</button>
+      </div>
+    </div>
+  </div>
+
   <div id="modalAddWorker" class="modal-overlay">
     <div class="modal-card">
       <div class="modal-header">

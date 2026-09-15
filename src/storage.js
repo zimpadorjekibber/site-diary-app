@@ -9,7 +9,10 @@ const DEFAULT_TRADES = [
   { id: 'plumber', name: 'Plumber (प्लंबर)', icon: '🔧', color: '#06b6d4' },
   { id: 'painter', name: 'Painter (पेंटर)', icon: '🎨', color: '#8b5cf6' },
   { id: 'electrician', name: 'Electrician (बिजली मिस्त्री)', icon: '⚡', color: '#eab308' },
-  { id: 'tile', name: 'Tile & Marble (टाइल मिस्त्री)', icon: '🔲', color: '#10b981' }
+  { id: 'tile', name: 'Tile & Marble (टाइल मिस्त्री)', icon: '🔲', color: '#10b981' },
+  // A supplier, not a craftsman: no attendance, no daily wage. What gets counted
+  // is trolley loads delivered, so this trade is flagged and treated differently.
+  { id: 'tractor', name: 'Tractor / ट्रैक्टर (सप्लाई)', icon: '🚜', color: '#0c7ebd', isSupplier: true }
 ];
 
 const DEFAULT_WORKERS = [
@@ -104,8 +107,26 @@ export const TX_TYPES = [
   { id: 'cylinder', icon: '🔥', hi: 'गैस सिलेंडर',    en: 'Gas Cylinder',  scope: 'site'   },
   { id: 'diesel',   icon: '⛽', hi: 'डीजल',          en: 'Diesel',        scope: 'site'   },
   { id: 'material', icon: '🧱', hi: 'सामान',         en: 'Material',      scope: 'site'   },
+  { id: 'trolley',  icon: '🚜', hi: 'ट्रॉली सप्लाई',  en: 'Trolley Load',  scope: 'site'   },
   { id: 'other',    icon: '📝', hi: 'अन्य खर्च',      en: 'Other',         scope: 'site'   }
 ];
+
+/* Materials a tractor delivers by the trolley. Each keeps its own rate because
+   the owner confirmed they differ — reta is not priced like bajri. The rates
+   live on the supplier (a worker record), not here; these are just the defaults
+   offered when setting one up. */
+export const TROLLEY_MATERIALS = [
+  { id: 'reta',   hi: 'रेता',   en: 'Reta (sand)' },
+  { id: 'balu',   hi: 'बालू',   en: 'Balu (fine sand)' },
+  { id: 'bajri',  hi: 'बजरी',   en: 'Bajri (gravel)' },
+  { id: 'gitti',  hi: 'गिट्टी',  en: 'Gitti (crushed stone)' },
+  { id: 'mitti',  hi: 'मिट्टी',  en: 'Mitti (soil)' },
+  { id: 'malba',  hi: 'मलबा',   en: 'Malba (debris)' }
+];
+
+export function getTrolleyMaterial(id) {
+  return TROLLEY_MATERIALS.find(m => m.id === id) || { id, hi: id, en: id };
+}
 
 export function getCustomTxTypes() {
   try {
@@ -368,6 +389,16 @@ export class Store {
             parsed.settings.firebaseSiteId = getOrCreateSiteId();
             needsSave = true;
           }
+          // New built-in trades have to reach existing installs too — DEFAULT_TRADES
+          // only applies on a first run, so without this the tractor trade would
+          // exist for new users only. Trades the user deleted stay deleted.
+          DEFAULT_TRADES.forEach(def => {
+            if (def.isSupplier && !parsed.trades.some(t => t.id === def.id)) {
+              parsed.trades.push({ ...def });
+              needsSave = true;
+            }
+          });
+
           // Theka used to be a flat amount on any worker, so a trade with three
           // contract workers counted the same contract three times. The amount now
           // belongs to one thekedar; anyone who already had an amount becomes one,
@@ -638,6 +669,128 @@ export class Store {
     this.save();
   }
 
+  /* ===================================================
+     TRACTOR / TROLLEY SUPPLY
+
+     A tractor owner is a supplier, not a craftsman: nothing is gained by marking
+     him present, and he has no daily wage. What matters is how many trolley loads
+     arrived on a day — often more than one, and the count varies with distance.
+
+     Each material carries its own rate (reta is not priced like bajri), stored on
+     the supplier as { materialId: ratePerTrolley }. A delivery is recorded as an
+     ordinary transaction of type 'trolley', so it flows into the day's total, the
+     evening diary and every report without any of them needing to know about
+     tractors.
+  =================================================== */
+
+  isSupplierTrade(tradeId) {
+    const trade = this.data.trades.find(t => t.id === tradeId);
+    return !!(trade && trade.isSupplier);
+  }
+
+  getSuppliers() {
+    return this.data.workers.filter(w => this.isSupplierTrade(w.tradeId));
+  }
+
+  /** Rate this supplier charges for one trolley of a given material. */
+  getTrolleyRate(workerId, materialId) {
+    const w = this.getWorker(workerId);
+    return Number(w?.trolleyRates?.[materialId]) || 0;
+  }
+
+  setTrolleyRates(workerId, rates) {
+    const clean = {};
+    Object.entries(rates || {}).forEach(([k, v]) => {
+      const n = Number(v);
+      if (n > 0) clean[k] = n;
+    });
+    return this.updateWorker(workerId, { trolleyRates: clean });
+  }
+
+  /**
+   * Records trolley loads delivered on one date.
+   * @returns the created transaction, or null if the rate is not set up yet.
+   */
+  addTrolleyDelivery({ workerId, materialId, trips, date, note, ratePerTrolley }) {
+    const worker = this.getWorker(workerId);
+    if (!worker) throw new Error('सप्लायर नहीं मिला');
+
+    const count = Number(trips) || 0;
+    if (count <= 0) throw new Error('कितनी ट्रॉली आईं, वो संख्या डालें');
+
+    // An explicit rate wins — a one-off trip may be priced differently — but the
+    // supplier's own rate is the normal path.
+    const rate = Number(ratePerTrolley) > 0
+      ? Number(ratePerTrolley)
+      : this.getTrolleyRate(workerId, materialId);
+    if (rate <= 0) {
+      throw new Error(`${getTrolleyMaterial(materialId).hi} का ट्रॉली रेट पहले भरें`);
+    }
+
+    const material = getTrolleyMaterial(materialId);
+    return this.addTransaction({
+      date,
+      type: 'trolley',
+      targetType: 'group',       // a site cost, not money owed to a worker
+      tradeId: worker.tradeId,
+      supplierId: workerId,      // who delivered, for the WhatsApp update
+      materialId,
+      trips: count,
+      ratePerTrolley: rate,
+      rationItem: material.hi,
+      quantity: `${count} ट्रॉली`,
+      amount: count * rate,
+      note: note || ''
+    });
+  }
+
+  /** Every trolley delivery by this supplier, newest first, with running totals. */
+  getSupplierLedger(workerId, { from, to } = {}) {
+    const worker = this.getWorker(workerId);
+    if (!worker) return null;
+
+    let deliveries = this.data.transactions.filter(
+      t => t.type === 'trolley' && t.supplierId === workerId
+    );
+    if (from) deliveries = deliveries.filter(t => t.date >= from);
+    if (to) deliveries = deliveries.filter(t => t.date <= to);
+    deliveries.sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
+
+    const byMaterial = {};
+    let totalTrips = 0;
+    let totalAmount = 0;
+    for (const d of deliveries) {
+      const key = d.materialId || 'other';
+      if (!byMaterial[key]) byMaterial[key] = { trips: 0, amount: 0 };
+      byMaterial[key].trips += Number(d.trips) || 0;
+      byMaterial[key].amount += Number(d.amount) || 0;
+      totalTrips += Number(d.trips) || 0;
+      totalAmount += Number(d.amount) || 0;
+    }
+
+    // What the site has actually handed over, so the balance is honest.
+    const paid = this.data.transactions
+      .filter(t => t.workerId === workerId && t.type !== 'trolley')
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+
+    return {
+      worker,
+      deliveries,
+      byMaterial,
+      totalTrips,
+      totalAmount,
+      totalPaid: paid,
+      balanceDue: totalAmount - paid
+    };
+  }
+
+  /** Trolleys delivered on one date, grouped by supplier — the WhatsApp update. */
+  getTrolleyDeliveriesForDate(date = getTodayString(), supplierId = null) {
+    return this.data.transactions.filter(
+      t => t.type === 'trolley' && t.date === date && (!supplierId || t.supplierId === supplierId)
+    );
+  }
+
   // --- TRANSACTIONS ---
   getTransactions(date = null) {
     if (!date) return this.data.transactions;
@@ -658,7 +811,14 @@ export class Store {
       quantity: tx.quantity || '',
       subType: tx.subType || 'general',
       note: tx.note || '',
-      audioDataUrl: tx.audioDataUrl || null // backup voice audio recording
+      audioDataUrl: tx.audioDataUrl || null, // backup voice audio recording
+      // Trolley deliveries only. Kept on the transaction so a delivery is a
+      // first-class record — who brought it, what, how many loads, at what rate —
+      // rather than something reconstructed from a free-text note later.
+      supplierId: tx.supplierId || null,
+      materialId: tx.materialId || null,
+      trips: Number(tx.trips) || 0,
+      ratePerTrolley: Number(tx.ratePerTrolley) || 0
     };
     this.data.transactions.unshift(newTx);
     this.save();

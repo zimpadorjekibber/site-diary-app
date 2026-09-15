@@ -1,7 +1,7 @@
 // src/main.js
 // Main Application Controller for Shram & Site Diary
 
-import { store, getTodayString, getDeviceId, getAllTxTypes, getTxTypeMeta, getTxTypeLabel, getThekaTotal, describeTheka, isThekaUnmeasured } from './storage.js';
+import { store, getTodayString, getDeviceId, getAllTxTypes, getTxTypeMeta, getTxTypeLabel, getThekaTotal, describeTheka, isThekaUnmeasured, TROLLEY_MATERIALS, getTrolleyMaterial } from './storage.js';
 import { VoiceManager } from './speech.js';
 import { ReminderManager } from './reminder.js';
 import confetti from 'canvas-confetti';
@@ -91,6 +91,8 @@ class App {
     this.modalTargetType = 'individual';
     this.modalWorkerRole = 'mistri';
     this.modalContractType = 'dihadi';
+    this.trolleyMaterial = null;
+    this.trolleyRatesWorkerId = null;
     this.modalIsThekedar = true;   // a theka worker holds the contract unless told otherwise
     this.modalThekaMode = 'lumpsum';
     this.newWorkerPhotoDataUrl = null;
@@ -208,6 +210,7 @@ class App {
     this.startClock();
     this.checkEveningBanner();
     this.initFirebaseIntegration();
+    this.bindTrolleyEvents();
   }
 
   applyLanguage(lang, reRender = true) {
@@ -567,6 +570,259 @@ class App {
     box.classList.add('has-total');
   }
 
+  /* ===================================================
+     TROLLEY DELIVERY
+  =================================================== */
+
+  openTrolleyModal(supplierId = null) {
+    const suppliers = this.store.getSuppliers();
+    const select = document.getElementById('trolleySupplierSelect');
+    const note = document.getElementById('trolleyNoSupplierNote');
+
+    if (suppliers.length === 0) {
+      // Nothing to record against yet; say so instead of showing an empty form.
+      if (select) select.innerHTML = '<option value="">(कोई ट्रैक्टर वाला नहीं जुड़ा)</option>';
+      if (note) note.style.display = 'block';
+    } else {
+      if (note) note.style.display = 'none';
+      if (select) {
+        select.innerHTML = suppliers
+          .map(w => `<option value="${esc(w.id)}">${esc(w.name)}</option>`)
+          .join('');
+        if (supplierId) select.value = supplierId;
+      }
+    }
+
+    this.trolleyMaterial = null;
+    const tripsInput = document.getElementById('trolleyTrips');
+    if (tripsInput) tripsInput.value = 1;
+    const dateInput = document.getElementById('trolleyDate');
+    if (dateInput) dateInput.value = getTodayString();
+    const noteInput = document.getElementById('trolleyNote');
+    if (noteInput) noteInput.value = '';
+
+    this.renderTrolleyMaterials();
+    this.updateTrolleyTotal();
+    document.getElementById('modalTrolley')?.classList.add('open');
+  }
+
+  renderTrolleyMaterials() {
+    const box = document.getElementById('trolleyMaterialChips');
+    if (!box) return;
+    const supplierId = document.getElementById('trolleySupplierSelect')?.value;
+
+    box.innerHTML = TROLLEY_MATERIALS.map(mat => {
+      const rate = supplierId ? this.store.getTrolleyRate(supplierId, mat.id) : 0;
+      const active = this.trolleyMaterial === mat.id;
+      return `
+        <button type="button" class="trolley-material-chip ${active ? 'active' : ''} ${rate ? '' : 'no-rate'}"
+                data-material="${esc(mat.id)}">
+          ${esc(mat.hi)}
+          <small>${rate ? `₹${rate.toLocaleString('en-IN')}/ट्रॉली` : 'रेट नहीं भरा'}</small>
+        </button>
+      `;
+    }).join('');
+  }
+
+  updateTrolleyTotal() {
+    const box = document.getElementById('trolleyTotalBox');
+    if (!box) return;
+    const supplierId = document.getElementById('trolleySupplierSelect')?.value;
+    const trips = Number(document.getElementById('trolleyTrips')?.value) || 0;
+
+    if (!this.trolleyMaterial) {
+      box.textContent = 'ऊपर से सामान चुनिए।';
+      box.classList.remove('has-total');
+      return;
+    }
+    const rate = this.store.getTrolleyRate(supplierId, this.trolleyMaterial);
+    const mat = getTrolleyMaterial(this.trolleyMaterial);
+    if (!rate) {
+      box.innerHTML = `${esc(mat.hi)} का रेट अभी तय नहीं है। ` +
+        `<button type="button" id="btnOpenTrolleyRatesInline" style="background:none;border:none;color:var(--blue-accent);font-weight:700;cursor:pointer;text-decoration:underline;">अभी भरें</button>`;
+      box.classList.remove('has-total');
+      return;
+    }
+    box.innerHTML = `${trips} ट्रॉली ${esc(mat.hi)} × ₹${rate.toLocaleString('en-IN')}<strong>${inr(trips * rate)}</strong>`;
+    box.classList.add('has-total');
+  }
+
+  openTrolleyRatesModal(supplierId) {
+    const worker = this.store.getWorker(supplierId);
+    if (!worker) return;
+    const nameEl = document.getElementById('trolleyRatesWorkerName');
+    if (nameEl) nameEl.textContent = worker.name;
+
+    const fields = document.getElementById('trolleyRatesFields');
+    if (fields) {
+      fields.innerHTML = TROLLEY_MATERIALS.map(mat => `
+        <div class="trolley-rate-row">
+          <label for="rate_${esc(mat.id)}">${esc(mat.hi)}</label>
+          <input type="number" class="form-input" id="rate_${esc(mat.id)}" data-rate-material="${esc(mat.id)}"
+                 min="0" step="10" placeholder="₹ प्रति ट्रॉली"
+                 value="${this.store.getTrolleyRate(supplierId, mat.id) || ''}" />
+        </div>
+      `).join('');
+    }
+    this.trolleyRatesWorkerId = supplierId;
+    document.getElementById('modalTrolleyRates')?.classList.add('open');
+  }
+
+  /** The message the tractor owner receives — his record of what was delivered. */
+  buildTrolleyWhatsAppMessage(supplierId, date) {
+    const worker = this.store.getWorker(supplierId);
+    const deliveries = this.store.getTrolleyDeliveriesForDate(date, supplierId);
+    if (!worker || deliveries.length === 0) return '';
+
+    const dayTotal = deliveries.reduce((s, d) => s + (Number(d.amount) || 0), 0);
+    const dayTrips = deliveries.reduce((s, d) => s + (Number(d.trips) || 0), 0);
+    const ledger = this.store.getSupplierLedger(supplierId);
+
+    let msg = `🚜 *ट्रॉली हिसाब*\n`;
+    msg += `------------------------------------\n`;
+    msg += `📅 ${formatShortDate(date, 'hi')}\n`;
+    msg += `👤 ${worker.name}\n\n`;
+
+    deliveries.forEach(d => {
+      const mat = getTrolleyMaterial(d.materialId);
+      msg += `• ${mat.hi} — ${d.trips} ट्रॉली × ₹${(d.ratePerTrolley || 0).toLocaleString('en-IN')} = ₹${(d.amount || 0).toLocaleString('en-IN')}\n`;
+      if (d.note) msg += `   (${d.note})\n`;
+    });
+
+    msg += `------------------------------------\n`;
+    msg += `*आज कुल:* ${dayTrips} ट्रॉली — ₹${dayTotal.toLocaleString('en-IN')}\n`;
+
+    if (ledger && ledger.totalAmount !== dayTotal) {
+      msg += `\n*अब तक का पूरा हिसाब:*\n`;
+      msg += `कुल ट्रॉली: ${ledger.totalTrips}\n`;
+      msg += `कुल रक़म: ₹${ledger.totalAmount.toLocaleString('en-IN')}\n`;
+      if (ledger.totalPaid > 0) msg += `दिया गया: ₹${ledger.totalPaid.toLocaleString('en-IN')}\n`;
+      msg += `*बाकी: ₹${ledger.balanceDue.toLocaleString('en-IN')}*\n`;
+    }
+
+    msg += `\n_'श्रम व साइट डायरी' ऐप से_`;
+    return msg;
+  }
+
+  shareTrolleyOnWhatsApp(supplierId, date) {
+    const worker = this.store.getWorker(supplierId);
+    const msg = this.buildTrolleyWhatsAppMessage(supplierId, date);
+    if (!msg) {
+      alert('इस तारीख को इनकी कोई ट्रॉली दर्ज नहीं है।');
+      return;
+    }
+    const digits = (worker.phone || '').replace(/[^0-9]/g, '');
+    if (digits.length >= 10) {
+      window.open(getWhatsAppUrl(worker.phone, msg), '_blank');
+    } else {
+      // No number saved — copying still lets them paste it into any chat.
+      navigator.clipboard.writeText(msg)
+        .then(() => alert('इनका मोबाइल नंबर नहीं है, इसलिए हिसाब कॉपी कर दिया है।\n\nकिसी भी चैट में पेस्ट कर दीजिए।'))
+        .catch(() => prompt('कॉपी करने के लिए Ctrl+C दबाएं:', msg));
+    }
+  }
+
+  bindTrolleyEvents() {
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('#btnOpenTrolley, [data-open-trolley]')) {
+        const id = e.target.closest('[data-open-trolley]')?.getAttribute('data-open-trolley');
+        this.openTrolleyModal(id || null);
+      }
+
+      const matChip = e.target.closest('[data-material]');
+      if (matChip) {
+        this.trolleyMaterial = matChip.getAttribute('data-material');
+        this.renderTrolleyMaterials();
+        this.updateTrolleyTotal();
+      }
+
+      const quick = e.target.closest('[data-trips]');
+      if (quick) {
+        const input = document.getElementById('trolleyTrips');
+        if (input) input.value = quick.getAttribute('data-trips');
+        document.querySelectorAll('.trolley-quick-btn').forEach(b => b.classList.toggle('active', b === quick));
+        this.updateTrolleyTotal();
+      }
+
+      if (e.target.closest('#btnOpenTrolleyRatesInline')) {
+        const supplierId = document.getElementById('trolleySupplierSelect')?.value;
+        if (supplierId) this.openTrolleyRatesModal(supplierId);
+      }
+
+      const rateBtn = e.target.closest('[data-open-trolley-rates]');
+      if (rateBtn) this.openTrolleyRatesModal(rateBtn.getAttribute('data-open-trolley-rates'));
+
+      const waBtn = e.target.closest('[data-trolley-wa]');
+      if (waBtn) {
+        this.shareTrolleyOnWhatsApp(waBtn.getAttribute('data-trolley-wa'), waBtn.getAttribute('data-trolley-date') || getTodayString());
+      }
+    });
+
+    const step = (delta) => {
+      const input = document.getElementById('trolleyTrips');
+      if (!input) return;
+      input.value = Math.max(1, Math.min(50, (Number(input.value) || 1) + delta));
+      document.querySelectorAll('.trolley-quick-btn').forEach(b => b.classList.remove('active'));
+      this.updateTrolleyTotal();
+    };
+    document.getElementById('btnTripMinus')?.addEventListener('click', () => step(-1));
+    document.getElementById('btnTripPlus')?.addEventListener('click', () => step(1));
+    document.getElementById('trolleyTrips')?.addEventListener('input', () => this.updateTrolleyTotal());
+    document.getElementById('trolleySupplierSelect')?.addEventListener('change', () => {
+      this.renderTrolleyMaterials();
+      this.updateTrolleyTotal();
+    });
+
+    document.getElementById('btnSaveTrolley')?.addEventListener('click', () => {
+      const supplierId = document.getElementById('trolleySupplierSelect')?.value;
+      if (!supplierId) {
+        alert('पहले ट्रैक्टर वाले को जोड़ें।');
+        return;
+      }
+      if (!this.trolleyMaterial) {
+        alert('कौन सा सामान आया, वो चुनिए।');
+        return;
+      }
+      const trips = Number(document.getElementById('trolleyTrips')?.value) || 0;
+      const date = document.getElementById('trolleyDate')?.value || getTodayString();
+      const note = document.getElementById('trolleyNote')?.value || '';
+
+      let tx;
+      try {
+        tx = this.store.addTrolleyDelivery({ workerId: supplierId, materialId: this.trolleyMaterial, trips, date, note });
+      } catch (err) {
+        alert(err.message);
+        return;
+      }
+
+      this.closeModals();
+      this.commit();
+
+      const worker = this.store.getWorker(supplierId);
+      const mat = getTrolleyMaterial(this.trolleyMaterial);
+      // Offer the update straight away — that is the moment it is worth sending.
+      if (confirm(
+        `✅ दर्ज हो गया\n\n${trips} ट्रॉली ${mat.hi} — ${inr(tx.amount)}\n\n` +
+        `${worker.name} को WhatsApp पर हिसाब भेजें?`
+      )) {
+        this.shareTrolleyOnWhatsApp(supplierId, date);
+      }
+    });
+
+    document.getElementById('btnSaveTrolleyRates')?.addEventListener('click', () => {
+      const rates = {};
+      document.querySelectorAll('[data-rate-material]').forEach(input => {
+        rates[input.getAttribute('data-rate-material')] = input.value;
+      });
+      this.store.setTrolleyRates(this.trolleyRatesWorkerId, rates);
+      document.getElementById('modalTrolleyRates')?.classList.remove('open');
+      this.renderTrolleyMaterials();
+      this.updateTrolleyTotal();
+      this.commit();
+      this.showToast('ट्रॉली के रेट सेव हो गए');
+    });
+  }
+
   // Call this after anything that CHANGES data (not after merely re-rendering).
   commit(reason = 'edit') {
     this.renderAll();
@@ -629,6 +885,24 @@ class App {
         quickSummary.textContent = `${workerCount} of ${allWorkers.length} present • Mark or review →`;
       } else {
         quickSummary.textContent = `${allWorkers.length} में से ${workerCount} उपस्थित • हाजिरी भरें या बदलें →`;
+      }
+    }
+
+    // Trolley action: only meaningful once a tractor supplier exists.
+    const trolleyBtn = document.getElementById('btnOpenTrolley');
+    if (trolleyBtn) {
+      const suppliers = this.store.getSuppliers();
+      trolleyBtn.style.display = suppliers.length > 0 ? '' : 'none';
+      const summary = document.getElementById('trolleyTodaySummary');
+      if (summary) {
+        const todays = this.store.getTrolleyDeliveriesForDate(today);
+        if (todays.length === 0) {
+          summary.textContent = 'रेता, बजरी, बालू +';
+        } else {
+          const trips = todays.reduce((n, t) => n + (Number(t.trips) || 0), 0);
+          const amt = todays.reduce((n, t) => n + (Number(t.amount) || 0), 0);
+          summary.textContent = `आज ${trips} ट्रॉली · ${inr(amt)} →`;
+        }
       }
     }
 
