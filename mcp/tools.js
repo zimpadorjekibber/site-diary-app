@@ -494,6 +494,27 @@ const WRITE_TOOLS = [
       },
       required: ['worker']
     }
+  },
+  {
+    name: 'remove_worker',
+    description:
+      'Remove a worker from the site. Use only when the user clearly means to delete the '+
+      'person from the ledger, not merely to mark them absent or finished for the day. '+
+      'Call it FIRST WITHOUT confirm: nothing is deleted and it reports exactly what would '+
+      'be lost. Show that to the user, and only if they agree, call again with confirm set '+
+      'to the full name exactly as stored. Money already paid to them stays in the accounts '+
+      'under their name.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        worker: { type: 'string', description: 'Worker name or id.' },
+        confirm: {
+          type: 'string',
+          description: "The worker's full name, exactly. Omit on the first call to see what would be lost."
+        }
+      },
+      required: ['worker']
+    }
   }
 ];
 
@@ -684,6 +705,47 @@ const writeHandlers = {
         worker: updated.name,
         changed: Object.keys(updates),
         contract: updated.contractType === 'theka' ? describeTheka(updated, 'en') : `₹${updated.dailyRate}/day`,
+        note: 'Open the app on the phone to pull this in.'
+      };
+    });
+  },
+  /* Deleting is the one write here that cannot be undone from a chat, so it
+     takes two turns: the first says what would go, the second does it. The
+     confirmation is the full name rather than a bare yes, so a sentence that
+     named the wrong person cannot be waved through by a reflexive 'haan'. */
+  async remove_worker(args) {
+    const store = await getStore();
+    const worker = findWorker(store, args.worker);
+
+    const days = Object.values(store.activeProject().haziri || {})
+      .filter(day => day && day[worker.id]).length;
+    const txs = (store.activeProject().transactions || [])
+      .filter(t => t.workerId === worker.id);
+    const paid = txs.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+
+    if (String(args.confirm || '').trim() !== worker.name) {
+      return {
+        willDelete: worker.name,
+        trade: store.getTrade(worker.tradeId)?.name || worker.tradeId,
+        attendanceDaysLost: days,
+        paymentsKept: txs.length,
+        amountKept: rupees(paid),
+        deleted: false,
+        note:
+          `Nothing has been deleted. ${days} day(s) of attendance for ${worker.name} would be ` +
+          `erased. ${txs.length} payment(s) totalling ${rupees(paid)} would stay in the accounts ` +
+          `under their name. Ask the user to confirm, then call again with confirm: "${worker.name}".`
+      };
+    }
+
+    return mutateLedger({ ...siteRef, allowShrink: true }, (s2) => {
+      const target = findWorker(s2, worker.id);
+      s2.deleteWorker(target.id);
+      return {
+        deleted: target.name,
+        attendanceDaysErased: days,
+        paymentsKept: txs.length,
+        amountKept: rupees(paid),
         note: 'Open the app on the phone to pull this in.'
       };
     });

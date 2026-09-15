@@ -85,7 +85,10 @@ function stripUndefined(obj) {
  *  outgoing payload has lost the workers or the jobs the incoming document
  *  had, something is wrong with this code rather than with the request —
  *  and the right move is to write nothing at all. */
-export function refuseIfDestructive(before, after) {
+export function refuseIfDestructive(before, after, intentional = false) {
+  // A deletion the caller asked for and confirmed is allowed to shrink the
+  // ledger. Everything else still cannot.
+  if (intentional) return after;
   const countWorkers = d => (d?.projects || []).reduce((n, p) => n + (p.workers || []).length, 0)
     + (Array.isArray(d?.workers) ? d.workers.length : 0);
 
@@ -116,7 +119,7 @@ export function refuseIfDestructive(before, after) {
  * @param {(store: Store) => any} apply  Mutates the store; its return value is
  *   passed back to the caller. Throwing aborts the write with nothing changed.
  */
-export async function mutateLedger({ siteId, projectId, apiKey }, apply) {
+export async function mutateLedger({ siteId, projectId, apiKey, allowShrink = false }, apply) {
   if (!siteId) {
     throw new Error(
       'No site id configured. Set SITE_DIARY_SITE_ID to the id shown in the app ' +
@@ -139,7 +142,7 @@ export async function mutateLedger({ siteId, projectId, apiKey }, apply) {
     const store = new Store({ data: before, persist: false });
     const result = apply(store);
     // Checked inside the transaction, so a refusal writes nothing at all.
-    tx.set(ref, refuseIfDestructive(before, toPayload(store.data)));
+    tx.set(ref, refuseIfDestructive(before, toPayload(store.data), allowShrink));
     return result;
   });
 }
