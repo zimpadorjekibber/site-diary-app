@@ -150,8 +150,17 @@ export default async function handler(req) {
   if (!process.env.SITE_DIARY_SITE_ID) {
     return json({ error: 'Server not configured: set SITE_DIARY_SITE_ID.' }, 503);
   }
+  /* Wrong or missing token answers 404, never 401.
+
+     A 401 with WWW-Authenticate tells an MCP client to go and find an
+     authorization server and start OAuth. There is no OAuth here — the secret
+     is the URL — so that challenge sends Claude looking for something that
+     does not exist, and the connector fails to attach at all.
+
+     404 also happens to be the better answer: someone probing for this
+     endpoint cannot tell from the reply that it is here. */
   if (!sameSecret(suppliedToken(req), expected)) {
-    return json({ error: 'Unauthorized' }, 401, { 'WWW-Authenticate': 'Bearer' });
+    return json({ error: 'Not found' }, 404);
   }
 
   // Nothing here pushes to the client, so there is no stream to open.
