@@ -2449,14 +2449,32 @@ body {
   background: rgba(245, 158, 11, 0.15);
 }
 
+/* The save row stays put at the bottom of the card while the form scrolls
+   behind it. The add-worker form is over 1100px tall on a phone whose modal
+   gets about 730px — less once the keyboard is up — so the button that
+   finishes the job was simply out of reach, which reads as the form being
+   stuck rather than as something to scroll to. */
 .modal-actions {
+  position: sticky;
+  bottom: -24px;               /* cancels the card's own bottom padding */
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 12px;
-  margin-top: 24px;
-  padding-top: 16px;
+  margin: 24px -24px -24px;    /* bleed out to the card edges */
+  padding: 14px 24px;
+  background: var(--bg-card);
   border-top: 1px solid var(--border-card);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+@media (max-width: 420px) {
+  /* Every line saved here is a line the user does not have to scroll past
+     to reach the fields that matter. */
+  .worker-photo-upload-wrap + p,
+  .worker-photo-upload-wrap ~ .photo-hint { display: none; }
+  .modal-actions { padding: 12px 16px; }
 }
 
 .btn-secondary {
