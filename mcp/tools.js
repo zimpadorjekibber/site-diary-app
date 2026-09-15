@@ -70,7 +70,10 @@ function resolveWorker(store, nameOrId) {
 
 function describeWorker(store, w) {
   const trade = store.getTrade(w.tradeId);
-  const role = w.role === 'mistri' ? 'Mistri' : 'Helper';
+  /* The stored role is only ever mistri or helper; holding the contract is a
+     separate flag. But a man who reads "Mistri" next to a seven-lakh contract
+     looks like a day labourer with a typo, so say what he actually is. */
+  const role = w.isThekedar ? 'Thekedar' : (w.role === 'mistri' ? 'Mistri' : 'Helper');
   const base = {
     id: w.id,
     name: w.name,
@@ -410,7 +413,7 @@ const WRITE_TOOLS = [
         contractType: { type: 'string', enum: ['dihadi', 'theka'], description: 'Daily wage or contract. Default dihadi.' },
         dailyRate: { type: 'number', description: 'Rupees per day. Required for dihadi.' },
         isThekedar: { type: 'boolean', description: 'True only for the person who holds the contract.' },
-        thekaAmount: { type: 'number', description: 'Lump-sum contract value, for a thekedar.' },
+        thekaAmount: { type: 'number', description: 'Lump-sum contract value. May be left out and filled in later.' },
         thekaRate: { type: 'number', description: 'Rate per unit, e.g. 25 for ₹25 per square ft.' },
         thekaUnit: { type: 'string', description: 'Unit for the rate, e.g. "square ft".' },
         thekaQuantity: { type: 'number', description: 'Measured quantity. Omit if not measured yet.' },
@@ -477,14 +480,20 @@ const WRITE_TOOLS = [
   {
     name: 'update_worker',
     description:
-      "Correct a worker's details — daily rate, phone, trade, role, or the measured quantity on a " +
-      'rate-based contract (which is how a contract total gets finalised once the work is measured). ' +
-      'Only the fields given are changed.',
+      "Correct a worker's details: their name, daily rate, phone, trade, role, whether they hold "+
+      'the contract, and the contract terms. Also moves someone between daily wages and '+
+      'contract work — send contractType, or simply give a dailyRate to someone on contract, '+
+      'which clears the contract and puts them on daily wages. Only the fields given change.',
     inputSchema: {
       type: 'object',
       properties: {
         worker: { type: 'string', description: 'Worker name or id.' },
-        dailyRate: { type: 'number', description: 'New daily wage.' },
+        name: { type: 'string', description: 'Correct their name — use this to fix a typo instead of adding a second entry.' },
+        dailyRate: { type: 'number', description: 'New daily wage. Giving this to someone on contract moves them to daily wages.' },
+        contractType: { type: 'string', enum: ['dihadi', 'theka'], description: 'Move between daily wages and contract work.' },
+        isThekedar: { type: 'boolean', description: 'Whether this person holds the contract.' },
+        thekaRate: { type: 'number', description: 'Rate per unit for a measured contract, e.g. 25.' },
+        thekaUnit: { type: 'string', description: 'Unit for that rate, e.g. "square ft".' },
         phone: { type: 'string', description: 'New mobile number.' },
         trade: { type: 'string', description: 'Move to a different trade.' },
         role: { type: 'string', enum: ['mistri', 'helper'], description: 'Change role.' },
@@ -530,17 +539,21 @@ const writeHandlers = {
       }
 
       const trade = findTrade(store, args.trade);
-      const isTheka = args.contractType === 'theka';
-      const isThekedar = isTheka && args.isThekedar === true;
+      // Saying someone holds the contract says the work is on contract. Making
+      // the caller spell out both meant a thekedar sent with only the flag fell
+      // through to the daily-wage branch and was refused for having no rate.
+      const isThekedar = args.isThekedar === true;
+      const isTheka = isThekedar || args.contractType === 'theka';
 
       // A daily-wage worker without a rate earns nothing, which silently
       // understates what the site owes — refuse rather than write that.
       if (!isTheka && !(Number(args.dailyRate) > 0)) {
         throw new Error('A dihadi worker needs a dailyRate, otherwise their wages compute to zero.');
       }
-      if (isThekedar && !(Number(args.thekaAmount) > 0) && !(Number(args.thekaRate) > 0)) {
-        throw new Error('A thekedar needs either thekaAmount (lump sum) or thekaRate with thekaUnit.');
-      }
+      // A contract often gets agreed before its price does, and the work is
+      // measured later. Refusing to record the man until the number exists put
+      // the ledger behind the site, so let him in and say what is still missing.
+      const amountSettled = Number(args.thekaAmount) > 0 || Number(args.thekaRate) > 0;
 
       const worker = store.addWorker({
         name,
@@ -565,7 +578,10 @@ const writeHandlers = {
         contract: isTheka
           ? (isThekedar ? describeTheka(worker, 'en') : 'works under the contractor — carries no amount of their own')
           : `₹${worker.dailyRate}/day`,
-        note: 'Open the app on the phone to pull this in.'
+        note: isThekedar && !amountSettled
+          ? 'Added. The contract amount is not set yet — send it with update_worker '
+            + '(thekaAmount for a lump sum, or thekaRate with thekaUnit) once it is agreed.'
+          : 'Open the app on the phone to pull this in.'
       };
     });
   },
@@ -683,17 +699,74 @@ const writeHandlers = {
         if (!(Number(args.dailyRate) >= 0)) throw new Error('dailyRate must be a number.');
         updates.dailyRate = Number(args.dailyRate);
       }
+      if (args.name !== undefined) {
+        const name = String(args.name).trim();
+        if (!name) throw new Error('The name cannot be empty.');
+        const clash = store.getWorkers()
+          .find(w => w.id !== worker.id && w.name.toLowerCase() === name.toLowerCase());
+        if (clash) throw new Error(`"${name}" is already someone else on this site.`);
+        updates.name = name;
+      }
       if (args.phone !== undefined) updates.phone = String(args.phone).trim();
       if (args.role !== undefined) updates.role = args.role === 'helper' ? 'helper' : 'mistri';
       if (args.trade !== undefined) updates.tradeId = findTrade(store, args.trade).id;
       if (args.thekaDescription !== undefined) updates.thekaDescription = String(args.thekaDescription);
 
-      if (args.thekaQuantity !== undefined || args.thekaAmount !== undefined) {
-        if (!worker.isThekedar) {
-          throw new Error(`${worker.name} does not hold a contract — only the thekedar carries an amount.`);
+      /* Moving between contract kinds.
+
+         People change how they are engaged mid-job, and there was no way to say
+         so: setting a daily rate on a contract worker left him on contract with
+         a rate nothing ever read. Either name the kind outright, or give a daily
+         rate to someone on contract, which can only mean he is on daily wages
+         now. Leaving contract means the contract itself is cleared — keeping a
+         stale lakh on a day labourer would quietly wreck every total. */
+      const wantsDihadi = args.contractType === 'dihadi'
+        || (args.contractType === undefined && worker.contractType === 'theka' && Number(args.dailyRate) > 0);
+      const wantsTheka = args.contractType === 'theka' || args.isThekedar === true;
+
+      if (wantsDihadi && worker.contractType === 'theka') {
+        updates.contractType = 'dihadi';
+        updates.isThekedar = false;
+        updates.thekaMode = null;
+        updates.thekaAmount = 0;
+        updates.thekaRate = 0;
+        updates.thekaUnit = '';
+        updates.thekaQuantity = 0;
+        if (!(Number(args.dailyRate) > 0) && !(Number(worker.dailyRate) > 0)) {
+          throw new Error(
+            `${worker.name} would move to daily wages with no rate, so their wages would ` +
+            'compute to zero. Send dailyRate as well.'
+          );
+        }
+      } else if (wantsTheka && worker.contractType !== 'theka') {
+        updates.contractType = 'theka';
+        updates.dailyRate = 0;
+      }
+
+      if (args.isThekedar !== undefined) {
+        updates.isThekedar = args.isThekedar === true;
+        if (updates.isThekedar) updates.contractType = 'theka';
+      }
+
+      if (args.thekaQuantity !== undefined || args.thekaAmount !== undefined
+          || args.thekaRate !== undefined || args.thekaUnit !== undefined) {
+        const willHoldContract = updates.isThekedar !== undefined ? updates.isThekedar : worker.isThekedar;
+        if (!willHoldContract) {
+          throw new Error(
+            `${worker.name} does not hold a contract — only the thekedar carries an amount. ` +
+            'Send isThekedar: true in the same call if they should.'
+          );
         }
         if (args.thekaQuantity !== undefined) updates.thekaQuantity = Number(args.thekaQuantity) || 0;
-        if (args.thekaAmount !== undefined) updates.thekaAmount = Number(args.thekaAmount) || 0;
+        if (args.thekaAmount !== undefined) {
+          updates.thekaAmount = Number(args.thekaAmount) || 0;
+          updates.thekaMode = 'lumpsum';
+        }
+        if (args.thekaRate !== undefined) {
+          updates.thekaRate = Number(args.thekaRate) || 0;
+          updates.thekaMode = 'rate';
+        }
+        if (args.thekaUnit !== undefined) updates.thekaUnit = String(args.thekaUnit).trim();
       }
 
       if (Object.keys(updates).length === 0) {
