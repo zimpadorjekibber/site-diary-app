@@ -439,6 +439,17 @@ class App {
     const s = this.store.getSettings();
     if (!s.firebaseAutoSync || !isFirebaseReady()) return;
 
+    /* An empty ledger is never worth uploading, and can destroy what is up
+       there. A fresh install, or one whose data has just been cleared, has
+       nothing to back up — but it would happily replace a full cloud copy
+       with its own emptiness. The download side already refuses the mirror
+       of this; without the same rule here, the very first sync of a new
+       phone could wipe the only remaining copy. */
+    if (this.countWorkers(this.store.data) === 0) {
+      this.updateSyncIndicator('synced');
+      return;
+    }
+
     this.updateSyncIndicator('pending');
     clearTimeout(this._syncTimer);
     this._syncTimer = setTimeout(() => this.runSync(reason), 2500);
