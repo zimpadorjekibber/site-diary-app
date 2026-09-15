@@ -282,8 +282,21 @@ class App {
     this.setLanguage(nextLang);
   }
 
+  /* Cloud sync is disabled while running from a dev server. Testing on localhost
+     was pushing the demo ledger straight into the owner's live Firestore, which
+     littered it with junk site documents that had to be deleted by hand. A
+     developer who genuinely wants to test sync can set VITE_ALLOW_DEV_SYNC=1. */
+  isCloudSyncBlocked() {
+    return !!import.meta.env?.DEV && import.meta.env?.VITE_ALLOW_DEV_SYNC !== '1';
+  }
+
   async initFirebaseIntegration() {
     const s = this.store.getSettings();
+    if (this.isCloudSyncBlocked()) {
+      console.info('[site-diary] Dev server: cloud sync disabled so test data cannot reach the live database.');
+      this.updateSyncIndicator();
+      return;
+    }
     if (!s.firebaseConfig) return;
     try {
       const ok = await initFirebase(s.firebaseConfig);
@@ -357,6 +370,7 @@ class App {
      wrote the whole database to Firestore. It now runs only when data actually
      changed, and is debounced so a burst of edits collapses into one write. */
   scheduleSync(reason = 'edit') {
+    if (this.isCloudSyncBlocked()) return;
     if (this.suppressNextSync) {
       this.suppressNextSync = false;
       return;
@@ -370,6 +384,7 @@ class App {
   }
 
   async runSync(reason = 'edit') {
+    if (this.isCloudSyncBlocked()) return;
     const s = this.store.getSettings();
     if (!s.firebaseAutoSync || !isFirebaseReady()) return;
 
@@ -391,6 +406,13 @@ class App {
   updateSyncIndicator(state = null) {
     const el = document.getElementById('syncStatusChip');
     if (!el) return;
+
+    if (this.isCloudSyncBlocked()) {
+      el.className = 'sync-chip sync-off';
+      el.innerHTML = `<span class="sync-dot"></span><span>DEV</span>`;
+      el.title = 'Dev server: cloud sync is off so test data cannot reach the live database.';
+      return;
+    }
 
     const s = this.store.getSettings();
     if (!s.firebaseAutoSync || !isFirebaseReady()) {
