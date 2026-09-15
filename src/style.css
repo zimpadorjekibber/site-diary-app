@@ -1680,6 +1680,163 @@ body {
 }
 
 /* ===================================================
+   LENDING REGISTER (उधार)
+=================================================== */
+.lending-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.lend-stat {
+  padding: 13px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-card);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+}
+.lend-stat-out { border-color: rgba(21, 150, 109, 0.3); background: var(--emerald-bg); }
+.lend-stat-in  { border-color: rgba(217, 58, 78, 0.28); background: var(--rose-bg); }
+
+.lend-stat-label { display: block; font-size: 0.74rem; font-weight: 600; color: var(--text-muted); }
+.lend-stat strong {
+  display: block;
+  font-size: 1.32rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+.lend-stat-out strong { color: var(--emerald-success); }
+.lend-stat-in  strong { color: var(--rose-danger); }
+.lend-stat small { font-size: 0.72rem; color: var(--text-muted); }
+
+.lending-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+
+.btn-lend-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border-card);
+  background: var(--bg-card);
+  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--text-main);
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+}
+.btn-lend-given { border-color: rgba(21, 150, 109, 0.4); color: var(--emerald-success); }
+.btn-lend-taken { border-color: rgba(217, 58, 78, 0.35); color: var(--rose-danger); }
+.btn-lend-add:active { transform: scale(0.97); }
+
+.lend-card {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  margin-bottom: 9px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-card);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-sm);
+  border-left: 4px solid var(--border-strong);
+}
+.lend-card.is-given { border-left-color: var(--emerald-solid); }
+.lend-card.is-taken { border-left-color: var(--rose-danger); }
+/* Settled entries stay in the register but stop competing for attention. */
+.lend-card.is-returned { opacity: 0.62; border-left-color: var(--text-dim); }
+
+.lend-photo {
+  width: 62px;
+  height: 62px;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--bg-sunken);
+  cursor: pointer;
+}
+.lend-photo-none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  cursor: default;
+}
+
+.lend-body { flex: 1; min-width: 0; }
+.lend-top { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.lend-dir { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); }
+.lend-done {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--emerald-success);
+  background: var(--emerald-bg);
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+}
+.lend-what {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.015em;
+}
+.lend-person { font-size: 0.84rem; color: var(--text-muted); }
+.lend-person strong { color: var(--text-main); }
+.lend-meta { font-size: 0.72rem; color: var(--text-dim); margin-top: 2px; }
+.lend-note { font-size: 0.78rem; color: var(--text-muted); margin-top: 3px; line-height: 1.35; }
+
+.lend-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.lend-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 11px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-card);
+  background: var(--bg-subtle);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-decoration: none;
+  cursor: pointer;
+}
+.lend-btn-done { border-color: rgba(21, 150, 109, 0.4); color: var(--emerald-success); }
+.lend-btn-del  { color: var(--rose-danger); }
+
+.lending-photo-box {
+  width: 100%;
+  height: 150px;
+  border-radius: var(--radius-md);
+  border: 2px dashed var(--border-strong);
+  background: var(--bg-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.2rem;
+  overflow: hidden;
+}
+.lending-photo-box img { width: 100%; height: 100%; object-fit: cover; }
+
+.lending-empty {
+  padding: 34px 20px;
+  text-align: center;
+  color: var(--text-muted);
+  border: 2px dashed var(--border-card);
+  border-radius: var(--radius-md);
+}
+.lending-empty-hint { font-size: 0.8rem; color: var(--text-dim); margin-top: 6px; }
+
+/* Six tabs now; trim so the labels still fit a 360px phone. */
+@media (max-width: 420px) {
+  .nav-tab-btn { font-size: 0.6rem; padding: 7px 1px; }
+  .nav-tab-icon { font-size: 1.1rem; }
+}
+
+/* ===================================================
    DANGER ZONE
 =================================================== */
 .danger-zone {

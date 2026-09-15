@@ -91,6 +91,10 @@ class App {
     this.modalTargetType = 'individual';
     this.modalWorkerRole = 'mistri';
     this.modalContractType = 'dihadi';
+    this.lendingFilter = 'pending';
+    this.lendingDirection = 'given';
+    this.lendingKind = 'item';
+    this.lendingPhotoDataUrl = null;
     this.trolleyMaterial = null;
     this.trolleyRatesWorkerId = null;
     this.modalIsThekedar = true;   // a theka worker holds the contract unless told otherwise
@@ -212,6 +216,7 @@ class App {
     this.initFirebaseIntegration();
     this.bindTrolleyEvents();
     this.bindProjectEvents();
+    this.bindLendingEvents();
     this.renderProjectHeader();
   }
 
@@ -516,6 +521,7 @@ class App {
     this.renderMonthlyHaziri();
     this.renderGroupsLedger();
     this.renderDiarySheet();
+    this.renderLending();
     this.checkEveningBanner();
     this.renderProjectHeader();
     // No scheduleSync here: renderAll runs on every tab switch and re-render, and
@@ -958,6 +964,249 @@ class App {
       if (pick) this.switchProject(pick.getAttribute('data-pick-project'));
       const edit = e.target.closest('[data-edit-project]');
       if (edit) this.editProject(edit.getAttribute('data-edit-project'));
+    });
+  }
+
+  /* ===================================================
+     LENDING REGISTER (उधार)
+
+     Both directions in one list: what you lent out, and what you borrowed. The
+     question a contractor actually asks is "who owes whom what", so splitting
+     them into two screens would only mean looking in two places.
+  =================================================== */
+
+  renderLending() {
+    const box = document.getElementById('lendingList');
+    const summaryBox = document.getElementById('lendingSummary');
+    if (!box) return;
+
+    const s = this.store.getLendingSummary();
+    if (summaryBox) {
+      summaryBox.innerHTML = `
+        <div class="lend-stat lend-stat-out">
+          <span class="lend-stat-label">लोगों से लेना है</span>
+          <strong>${inr(s.moneyOut)}</strong>
+          <small>${s.itemsOut} सामान बाहर</small>
+        </div>
+        <div class="lend-stat lend-stat-in">
+          <span class="lend-stat-label">मुझे देना है</span>
+          <strong>${inr(s.moneyIn)}</strong>
+          <small>${s.itemsIn} सामान लिया हुआ</small>
+        </div>
+      `;
+    }
+
+    const filter = this.lendingFilter || 'pending';
+    let list;
+    if (filter === 'pending') list = this.store.getLending({ pending: true });
+    else if (filter === 'returned') list = this.store.getLending({ pending: false });
+    else if (filter === 'given' || filter === 'taken') list = this.store.getLending({ direction: filter });
+    else list = this.store.getLending();
+
+    if (list.length === 0) {
+      box.innerHTML = `
+        <div class="lending-empty">
+          <div style="font-size: 2.4rem; margin-bottom: 8px;">🤝</div>
+          <p>${filter === 'pending'
+            ? 'कुछ भी बाकी नहीं — सब निपट गया।'
+            : 'यहाँ अभी कुछ दर्ज नहीं है।'}</p>
+          <p class="lending-empty-hint">ऊपर से "मैंने दिया" या "मैंने लिया" दबाकर शुरू कीजिए।</p>
+        </div>
+      `;
+      return;
+    }
+
+    box.innerHTML = list.map(l => {
+      const given = l.direction === 'given';
+      const what = l.kind === 'money'
+        ? inr(l.amount)
+        : `${esc(l.itemName)}${l.quantity ? ' · ' + esc(l.quantity) : ''}`;
+      return `
+        <div class="lend-card ${l.returned ? 'is-returned' : ''} ${given ? 'is-given' : 'is-taken'}">
+          ${l.photoUrl
+            ? `<img class="lend-photo" src="${esc(l.photoUrl)}" alt="${esc(l.itemName)}" data-lend-photo="${esc(l.id)}" />`
+            : `<div class="lend-photo lend-photo-none">${l.kind === 'money' ? '💵' : '📦'}</div>`}
+          <div class="lend-body">
+            <div class="lend-top">
+              <span class="lend-dir">${given ? '📤 दिया' : '📥 लिया'}</span>
+              ${l.returned ? '<span class="lend-done">✓ निपट गया</span>' : ''}
+            </div>
+            <div class="lend-what">${what}</div>
+            <div class="lend-person">${given ? 'किसको:' : 'किससे:'} <strong>${esc(l.personName)}</strong></div>
+            <div class="lend-meta">📅 ${esc(l.date)}${l.returnedDate ? ` · वापस ${esc(l.returnedDate)}` : ''}</div>
+            ${l.note ? `<div class="lend-note">${esc(l.note)}</div>` : ''}
+            ${l.returnNote ? `<div class="lend-note">वापसी: ${esc(l.returnNote)}</div>` : ''}
+            <div class="lend-actions">
+              ${l.returned
+                ? `<button type="button" class="lend-btn" data-lend-reopen="${esc(l.id)}">↩︎ वापस खोलें</button>`
+                : `<button type="button" class="lend-btn lend-btn-done" data-lend-return="${esc(l.id)}">✓ वापस आ गया</button>`}
+              ${l.phone ? `<a class="lend-btn" href="${esc(getWhatsAppUrl(l.phone, this.buildLendingReminder(l)))}" target="_blank">📲 याद दिलाएँ</a>` : ''}
+              <button type="button" class="lend-btn lend-btn-del" data-lend-delete="${esc(l.id)}">🗑️</button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  buildLendingReminder(l) {
+    const what = l.kind === 'money' ? `₹${(l.amount || 0).toLocaleString('en-IN')}` :
+      `${l.itemName}${l.quantity ? ' (' + l.quantity + ')' : ''}`;
+    if (l.direction === 'given') {
+      return `नमस्ते ${l.personName} जी,\n\n${l.date} को आपने ${what} लिया था।\n\nअगर हो सके तो वापस कर दीजिए। धन्यवाद।`;
+    }
+    return `नमस्ते ${l.personName} जी,\n\n${l.date} को मैंने आपसे ${what} लिया था — याद है, जल्द वापस कर दूँगा।`;
+  }
+
+  openLendingModal(direction) {
+    this.lendingDirection = direction === 'taken' ? 'taken' : 'given';
+    this.lendingKind = 'item';
+    this.lendingPhotoDataUrl = null;
+
+    const title = document.getElementById('lendingModalTitle');
+    if (title) title.textContent = this.lendingDirection === 'given' ? '📤 मैंने दिया' : '📥 मैंने लिया';
+    const personLabel = document.getElementById('lendingPersonLabel');
+    if (personLabel) {
+      personLabel.textContent = this.lendingDirection === 'given' ? 'किसको दिया? (नाम)' : 'किससे लिया? (नाम)';
+    }
+
+    ['lendingPerson', 'lendingPhone', 'lendingItem', 'lendingQty', 'lendingAmount', 'lendingNote']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    const dateEl = document.getElementById('lendingDate');
+    if (dateEl) dateEl.value = getTodayString();
+
+    this.clearLendingPhoto();
+    this.syncLendingKindFields();
+    document.querySelectorAll('#lendingKindSwitcher .segment-btn').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-lend-kind') === 'item');
+    });
+    document.getElementById('modalLending')?.classList.add('open');
+  }
+
+  syncLendingKindFields() {
+    const isMoney = this.lendingKind === 'money';
+    const itemFields = document.getElementById('lendingItemFields');
+    const moneyFields = document.getElementById('lendingMoneyFields');
+    if (itemFields) itemFields.style.display = isMoney ? 'none' : 'block';
+    if (moneyFields) moneyFields.style.display = isMoney ? 'block' : 'none';
+  }
+
+  clearLendingPhoto() {
+    this.lendingPhotoDataUrl = null;
+    const img = document.getElementById('lendingPhotoImg');
+    const ph = document.getElementById('lendingPhotoPlaceholder');
+    const rm = document.getElementById('btnLendingPhotoRemove');
+    const input = document.getElementById('lendingPhotoInput');
+    if (img) { img.src = ''; img.style.display = 'none'; }
+    if (ph) ph.style.display = 'block';
+    if (rm) rm.style.display = 'none';
+    if (input) input.value = '';
+  }
+
+  bindLendingEvents() {
+    document.addEventListener('click', (e) => {
+      const add = e.target.closest('[data-new-lending]');
+      if (add) this.openLendingModal(add.getAttribute('data-new-lending'));
+
+      const kind = e.target.closest('[data-lend-kind]');
+      if (kind) {
+        document.querySelectorAll('#lendingKindSwitcher .segment-btn').forEach(b => b.classList.remove('active'));
+        kind.classList.add('active');
+        this.lendingKind = kind.getAttribute('data-lend-kind');
+        this.syncLendingKindFields();
+      }
+
+      const filter = e.target.closest('[data-lend-filter]');
+      if (filter) {
+        document.querySelectorAll('#lendingFilters .filter-chip').forEach(b => b.classList.remove('active'));
+        filter.classList.add('active');
+        this.lendingFilter = filter.getAttribute('data-lend-filter');
+        this.renderLending();
+      }
+
+      const ret = e.target.closest('[data-lend-return]');
+      if (ret) {
+        const note = prompt('वापसी के बारे में कुछ लिखना है? (ज़रूरी नहीं)', '');
+        if (note === null) return;
+        this.store.setLendingReturned(ret.getAttribute('data-lend-return'), true, note);
+        this.renderLending();
+        this.scheduleSync('lending');
+        this.showToast('निपट गया — रिकॉर्ड में रहेगा');
+      }
+
+      const reopen = e.target.closest('[data-lend-reopen]');
+      if (reopen) {
+        this.store.setLendingReturned(reopen.getAttribute('data-lend-reopen'), false);
+        this.renderLending();
+        this.scheduleSync('lending');
+      }
+
+      const del = e.target.closest('[data-lend-delete]');
+      if (del) {
+        const entry = this.store.getLendingEntry(del.getAttribute('data-lend-delete'));
+        if (entry && confirm(`"${entry.personName}" वाली यह लिखत हटाएँ?\n\nयह वापस नहीं आएगी।`)) {
+          this.store.deleteLending(entry.id);
+          this.renderLending();
+          this.scheduleSync('lending');
+        }
+      }
+
+      // Tapping the photo opens it full size — the whole reason it was taken.
+      const photo = e.target.closest('[data-lend-photo]');
+      if (photo) {
+        const entry = this.store.getLendingEntry(photo.getAttribute('data-lend-photo'));
+        if (entry?.photoUrl) window.open(entry.photoUrl, '_blank');
+      }
+    });
+
+    document.getElementById('btnLendingPhoto')?.addEventListener('click', () => {
+      document.getElementById('lendingPhotoInput')?.click();
+    });
+    document.getElementById('btnLendingPhotoRemove')?.addEventListener('click', () => this.clearLendingPhoto());
+    document.getElementById('lendingPhotoInput')?.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        // Compressed like worker photos: a full-size camera image would eat the
+        // 5MB storage budget in a handful of entries.
+        this.lendingPhotoDataUrl = await this.resizeImage(file, 800, 800, 0.72);
+        const img = document.getElementById('lendingPhotoImg');
+        const ph = document.getElementById('lendingPhotoPlaceholder');
+        const rm = document.getElementById('btnLendingPhotoRemove');
+        if (img) { img.src = this.lendingPhotoDataUrl; img.style.display = 'block'; }
+        if (ph) ph.style.display = 'none';
+        if (rm) rm.style.display = 'inline-flex';
+      } catch {
+        alert('फ़ोटो नहीं ली जा सकी।');
+      }
+    });
+
+    document.getElementById('btnSaveLending')?.addEventListener('click', () => {
+      try {
+        this.store.addLending({
+          direction: this.lendingDirection,
+          kind: this.lendingKind,
+          personName: document.getElementById('lendingPerson')?.value,
+          phone: document.getElementById('lendingPhone')?.value,
+          itemName: document.getElementById('lendingItem')?.value,
+          quantity: document.getElementById('lendingQty')?.value,
+          amount: document.getElementById('lendingAmount')?.value,
+          photoUrl: this.lendingPhotoDataUrl,
+          date: document.getElementById('lendingDate')?.value,
+          note: document.getElementById('lendingNote')?.value
+        });
+      } catch (err) {
+        alert(err.message);
+        return;
+      }
+      this.closeModals();
+      this.lendingFilter = 'pending';
+      document.querySelectorAll('#lendingFilters .filter-chip').forEach(b => {
+        b.classList.toggle('active', b.getAttribute('data-lend-filter') === 'pending');
+      });
+      this.renderLending();
+      this.scheduleSync('lending');
+      this.showToast('उधार में दर्ज हो गया');
     });
   }
 

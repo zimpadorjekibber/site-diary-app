@@ -181,6 +181,10 @@
         <span class="nav-tab-icon">📖</span>
         <span class="nav-tab-label" data-i18n="tabDiary">शाम डायरी</span>
       </button>
+      <button class="nav-tab-btn" data-tab="tab-lending">
+        <span class="nav-tab-icon">🤝</span>
+        <span class="nav-tab-label">उधार</span>
+      </button>
     </nav>
 
     <!-- TAB 1: TODAY'S TIMELINE -->
@@ -584,6 +588,116 @@
        loads delivered, not attendance. Rate per trolley is set up once per
        material; day to day only the count changes. -->
   <!-- PROJECTS: each job keeps its own workers, attendance and expenses. -->
+    <!-- TAB 6: LENDING REGISTER (उधार) — shared across every job, because lending
+         in a village is personal rather than tied to one site. -->
+    <section id="tab-lending" class="tab-view">
+      <div class="lending-summary" id="lendingSummary"></div>
+
+      <div class="lending-actions">
+        <button type="button" class="btn-lend-add btn-lend-given" data-new-lending="given">
+          <span>📤</span><span>मैंने दिया</span>
+        </button>
+        <button type="button" class="btn-lend-add btn-lend-taken" data-new-lending="taken">
+          <span>📥</span><span>मैंने लिया</span>
+        </button>
+      </div>
+
+      <div class="filter-bar" id="lendingFilters">
+        <button class="filter-chip active" data-lend-filter="pending">बाकी</button>
+        <button class="filter-chip" data-lend-filter="all">सभी</button>
+        <button class="filter-chip" data-lend-filter="given">📤 दिया</button>
+        <button class="filter-chip" data-lend-filter="taken">📥 लिया</button>
+        <button class="filter-chip" data-lend-filter="returned">✓ निपट गया</button>
+      </div>
+
+      <div id="lendingList"></div>
+    </section>
+
+  <!-- ADD / EDIT A LENDING ENTRY -->
+  <div id="modalLending" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title" id="lendingModalTitle">📤 मैंने दिया</h3>
+        <button class="btn-close-modal" data-close-modal>&times;</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">क्या दिया/लिया?</label>
+        <div class="segmented-control" id="lendingKindSwitcher">
+          <button type="button" class="segment-btn active" data-lend-kind="item">📦 सामान</button>
+          <button type="button" class="segment-btn" data-lend-kind="money">💵 पैसा</button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="lendingPerson" id="lendingPersonLabel">किसको दिया? (नाम)</label>
+        <input type="text" id="lendingPerson" class="form-input" placeholder="जैसे: रामू काका" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="lendingPhone">मोबाइल नंबर (ज़रूरी नहीं):</label>
+        <input type="tel" id="lendingPhone" class="form-input" placeholder="याद दिलाने के लिए काम आएगा" />
+      </div>
+
+      <div id="lendingItemFields">
+        <div class="form-group">
+          <label class="form-label" for="lendingItem">कौन सा सामान?</label>
+          <input type="text" id="lendingItem" class="form-input" placeholder="जैसे: पानी का ड्रम, पिलर फर्मा, बल्ली, कुल्हाड़ी" list="lendingItemSuggestions" />
+          <datalist id="lendingItemSuggestions">
+            <option value="पानी का ड्रम"></option>
+            <option value="पिलर फर्मा"></option>
+            <option value="बल्ली"></option>
+            <option value="कुल्हाड़ी"></option>
+            <option value="फावड़ा"></option>
+            <option value="तसला"></option>
+            <option value="सीढ़ी"></option>
+            <option value="मिक्सर मशीन"></option>
+            <option value="शटरिंग प्लेट"></option>
+          </datalist>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="lendingQty">कितने? (ज़रूरी नहीं)</label>
+          <input type="text" id="lendingQty" class="form-input" placeholder="जैसे: 2 नग, 10 फर्मा" />
+        </div>
+
+        <!-- A photo is the point for items: months later nobody remembers which
+             drum or whose farma it was. -->
+        <div class="form-group">
+          <label class="form-label">सामान की फ़ोटो (बहुत काम की चीज़):</label>
+          <div class="lending-photo-box" id="lendingPhotoBox">
+            <img id="lendingPhotoImg" alt="" style="display: none;" />
+            <span id="lendingPhotoPlaceholder">📷</span>
+          </div>
+          <input type="file" id="lendingPhotoInput" accept="image/*" capture="environment" style="display: none;" />
+          <div style="display: flex; gap: 8px; margin-top: 8px;">
+            <button type="button" class="btn-secondary" id="btnLendingPhoto" style="flex: 1; font-size: 0.82rem;">📷 फ़ोटो लें / चुनें</button>
+            <button type="button" class="btn-secondary" id="btnLendingPhotoRemove" style="display: none; font-size: 0.82rem;">हटाएँ</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group" id="lendingMoneyFields" style="display: none;">
+        <label class="form-label" for="lendingAmount">कितने रुपये?</label>
+        <input type="number" id="lendingAmount" class="form-input" placeholder="जैसे: 5000" min="0" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="lendingDate">तारीख:</label>
+        <input type="date" id="lendingDate" class="form-input" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="lendingNote">विवरण / नोट:</label>
+        <input type="text" id="lendingNote" class="form-input" placeholder="जैसे: शादी के लिए ले गए, 10 दिन में वापस करेंगे" />
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" data-close-modal>रद्द करें</button>
+        <button type="button" class="btn-primary" id="btnSaveLending">💾 दर्ज करें</button>
+      </div>
+    </div>
+  </div>
+
   <div id="modalProjects" class="modal-overlay">
     <div class="modal-card">
       <div class="modal-header">

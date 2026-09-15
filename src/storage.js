@@ -558,6 +558,121 @@ export class Store {
     };
   }
 
+  /* ===================================================
+     LENDING REGISTER (उधार)
+
+     Village lending runs both ways: you lend a balli or a drum to a neighbour,
+     and you borrow a farma or take money from someone else. Both directions live
+     in one list with a `direction` field, because the question a contractor asks
+     is "who owes whom what" — not "show me only what I gave".
+
+     Deliberately outside projects: lending is personal, not tied to one job.
+  =================================================== */
+
+  getLending({ direction = null, kind = null, pending = null, person = null } = {}) {
+    let list = this.data.lending || [];
+    if (direction) list = list.filter(l => l.direction === direction);
+    if (kind) list = list.filter(l => l.kind === kind);
+    if (pending === true) list = list.filter(l => !l.returned);
+    if (pending === false) list = list.filter(l => l.returned);
+    if (person) {
+      const needle = String(person).toLowerCase();
+      list = list.filter(l => (l.personName || '').toLowerCase().includes(needle));
+    }
+    // Outstanding first, then newest — what is still out is what you need to see.
+    return [...list].sort((a, b) => {
+      if (!!a.returned !== !!b.returned) return a.returned ? 1 : -1;
+      return String(b.date).localeCompare(String(a.date));
+    });
+  }
+
+  getLendingEntry(id) {
+    return (this.data.lending || []).find(l => l.id === id) || null;
+  }
+
+  /**
+   * @param {'given'|'taken'} direction  given = I lent it out, taken = I borrowed it.
+   * @param {'item'|'money'} kind
+   */
+  addLending({ direction, kind, personName, phone, itemName, quantity, amount, photoUrl, date, note }) {
+    const person = String(personName || '').trim();
+    if (!person) throw new Error('किसका नाम? वो भरें');
+
+    const isMoney = kind === 'money';
+    if (isMoney && !(Number(amount) > 0)) throw new Error('कितने रुपये? वो भरें');
+    if (!isMoney && !String(itemName || '').trim()) throw new Error('कौन सा सामान? वो भरें');
+
+    const entry = {
+      id: makeId('lend'),
+      direction: direction === 'taken' ? 'taken' : 'given',
+      kind: isMoney ? 'money' : 'item',
+      personName: person,
+      phone: String(phone || '').trim(),
+      itemName: isMoney ? '' : String(itemName).trim(),
+      quantity: isMoney ? '' : String(quantity || '').trim(),
+      amount: isMoney ? Number(amount) : 0,
+      // A photo is the whole point for items: months later nobody remembers which
+      // drum or which farma it was.
+      photoUrl: photoUrl || null,
+      date: date || getTodayString(),
+      note: String(note || '').trim(),
+      returned: false,
+      returnedDate: null,
+      returnNote: '',
+      createdAt: Date.now()
+    };
+    this.data.lending.unshift(entry);
+    this.save();
+    return entry;
+  }
+
+  updateLending(id, updates) {
+    const entry = this.getLendingEntry(id);
+    if (!entry) return null;
+    ['personName', 'phone', 'itemName', 'quantity', 'note', 'date', 'photoUrl'].forEach(f => {
+      if (updates[f] !== undefined) entry[f] = updates[f];
+    });
+    if (updates.amount !== undefined) entry.amount = Number(updates.amount) || 0;
+    this.save();
+    return entry;
+  }
+
+  /** Marking it returned keeps the record — it moves to settled, it does not vanish. */
+  setLendingReturned(id, returned = true, returnNote = '') {
+    const entry = this.getLendingEntry(id);
+    if (!entry) return null;
+    entry.returned = !!returned;
+    entry.returnedDate = returned ? getTodayString() : null;
+    entry.returnNote = returned ? String(returnNote || '').trim() : '';
+    this.save();
+    return entry;
+  }
+
+  deleteLending(id) {
+    this.data.lending = (this.data.lending || []).filter(l => l.id !== id);
+    this.save();
+  }
+
+  /** Headline numbers for the register: what is still out, in each direction. */
+  getLendingSummary() {
+    const list = this.data.lending || [];
+    const open = list.filter(l => !l.returned);
+    const sum = (arr) => arr.reduce((n, l) => n + (Number(l.amount) || 0), 0);
+
+    const givenMoney = open.filter(l => l.direction === 'given' && l.kind === 'money');
+    const takenMoney = open.filter(l => l.direction === 'taken' && l.kind === 'money');
+
+    return {
+      total: list.length,
+      pending: open.length,
+      settled: list.length - open.length,
+      moneyOut: sum(givenMoney),      // people owe me
+      moneyIn: sum(takenMoney),       // I owe people
+      itemsOut: open.filter(l => l.direction === 'given' && l.kind === 'item').length,
+      itemsIn: open.filter(l => l.direction === 'taken' && l.kind === 'item').length
+    };
+  }
+
   getOtHoursPerDay() {
     const n = Number(this.data?.settings?.otHoursPerDay);
     return n > 0 ? n : 8;
