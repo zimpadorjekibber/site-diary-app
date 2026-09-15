@@ -77,6 +77,16 @@ html {
   color-scheme: light;
 }
 
+/* Nothing may drag the page sideways. A single oversized element — a wide table,
+   a native date input, a long unbroken word — used to make every screen slide
+   left and right under the thumb. Wide content scrolls inside its own container
+   instead (see .muster-table-wrapper, .filter-bar, .attendance-group-tabs-scroll). */
+html, body {
+  max-width: 100%;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+}
+
 body {
   font-family: var(--font-main);
   background-color: var(--bg-main);
@@ -1941,12 +1951,71 @@ body {
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
   background: var(--bg-card);
-  padding: 12px 18px;
+  padding: 12px 14px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border-card);
   margin-bottom: 12px;
+}
+
+.month-switcher {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.btn-month-step {
+  flex-shrink: 0;
+  width: 38px;
+  padding: 0;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+}
+
+.month-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--amber-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The native month input reports a wide intrinsic size; without a cap it alone
+   pushed this row past the viewport. */
+.month-picker {
+  flex: 0 1 132px;
+  min-width: 0;
+  max-width: 132px;
+  padding: 6px 8px;
+  font-size: 0.8rem;
+}
+
+.month-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.month-actions .btn-secondary {
+  font-size: 0.8rem;
+  padding: 8px 14px;
+  white-space: nowrap;
+}
+
+@media (max-width: 520px) {
+  .month-picker { display: none; }  /* the ◀ ▶ steppers cover it on a phone */
+  .month-actions { flex: 1 1 100%; }
+  .month-actions .btn-secondary { flex: 1; }
 }
 
 .muster-legend-bar {

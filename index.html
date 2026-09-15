@@ -256,23 +256,20 @@
       </div>
 
       <!-- Month Navigation Bar -->
+      <!-- The month picker and export buttons used to sit in two fixed-width flex
+           rows that together measured 460px, which dragged the whole page wider
+           than the phone and made every screen slide sideways. They now wrap. -->
       <div class="monthly-nav-bar">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <button id="btnPrevMonth" class="btn-secondary" style="padding: 6px 12px; font-size: 0.84rem;">◀ पिछला महीना</button>
-          <h3 id="monthlyMonthTitle" style="font-size: 1.2rem; font-weight: 700; color: var(--amber-light); min-width: 150px; text-align: center;">
-            सितम्बर 2026
-          </h3>
-          <button id="btnNextMonth" class="btn-secondary" style="padding: 6px 12px; font-size: 0.84rem;">अगला महीना ▶</button>
-          <input type="month" id="monthlyPicker" class="form-input" style="width: auto; padding: 4px 8px; font-size: 0.82rem;" />
+        <div class="month-switcher">
+          <button id="btnPrevMonth" class="btn-secondary btn-month-step" aria-label="पिछला महीना">◀</button>
+          <h3 id="monthlyMonthTitle" class="month-title">सितम्बर 2026</h3>
+          <button id="btnNextMonth" class="btn-secondary btn-month-step" aria-label="अगला महीना">▶</button>
+          <input type="month" id="monthlyPicker" class="form-input month-picker" />
         </div>
 
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <button id="btnExportMonthlyCsv" class="btn-secondary" style="font-size: 0.82rem; padding: 7px 14px;">
-            📥 एक्सेल / CSV डाउनलोड
-          </button>
-          <button id="btnPrintMonthlySheet" class="btn-secondary" style="font-size: 0.82rem; padding: 7px 14px;">
-            🖨️ प्रिंट शीट
-          </button>
+        <div class="month-actions">
+          <button id="btnExportMonthlyCsv" class="btn-secondary">📥 CSV</button>
+          <button id="btnPrintMonthlySheet" class="btn-secondary">🖨️ प्रिंट</button>
         </div>
       </div>
 
