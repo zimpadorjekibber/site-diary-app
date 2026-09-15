@@ -1,0 +1,9 @@
+# Only the MCP endpoint is hosted here; the app itself lives on Netlify.
+android/
+dist/
+scripts/
+src/
+index.html
+*.apk
+*.jks
+*.keystore
