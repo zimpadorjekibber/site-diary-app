@@ -128,6 +128,74 @@ export function getTrolleyMaterial(id) {
   return TROLLEY_MATERIALS.find(m => m.id === id) || { id, hi: id, en: id };
 }
 
+/* ===================================================
+   JOB TEMPLATES
+
+   A hotel has no masons and a construction site has no chefs. Rather than making
+   every new job start with bricklayers and then be edited down, the job says what
+   kind of work it is and starts with categories that fit.
+
+   Only a starting point — trades can be added or removed afterwards, and an
+   existing job is never touched.
+=================================================== */
+export const JOB_TEMPLATES = [
+  {
+    id: 'construction',
+    hi: 'निर्माण / मकान',
+    en: 'Construction',
+    icon: '🏠',
+    trades: null   // null = the standard construction set (DEFAULT_TRADES)
+  },
+  {
+    id: 'hotel',
+    hi: 'होटल / ढाबा',
+    en: 'Hotel / Restaurant',
+    icon: '🏨',
+    trades: [
+      { id: 'chef',        name: 'Chef / रसोइया',          icon: '👨‍🍳', color: '#e11d48' },
+      { id: 'kitchen',     name: 'Kitchen Helper / हेल्पर', icon: '🥣', color: '#f59e0b' },
+      { id: 'frontoffice', name: 'Front Office / रिसेप्शन', icon: '🛎️', color: '#5b4bcf' },
+      { id: 'manager',     name: 'Manager / मैनेजर',        icon: '👔', color: '#0c7ebd' },
+      { id: 'waiter',      name: 'Waiter / वेटर',           icon: '🍽️', color: '#10b981' },
+      { id: 'housekeep',   name: 'Housekeeping / सफ़ाई',     icon: '🧹', color: '#8b5cf6' },
+      { id: 'driver',      name: 'Driver / ड्राइवर',         icon: '🚗', color: '#64748b' },
+      { id: 'security',    name: 'Security / चौकीदार',      icon: '🛡️', color: '#78350f' }
+    ]
+  },
+  {
+    id: 'farm',
+    hi: 'खेती / बाग़वानी',
+    en: 'Farm / Orchard',
+    icon: '🌾',
+    trades: [
+      { id: 'labour',  name: 'Labour / मजदूर',          icon: '🧑‍🌾', color: '#10b981' },
+      { id: 'driver',  name: 'Tractor Driver / ड्राइवर', icon: '🚜', color: '#0c7ebd' },
+      { id: 'pruning', name: 'Pruning / छँटाई',          icon: '✂️', color: '#f59e0b' },
+      { id: 'packing', name: 'Packing / पैकिंग',         icon: '📦', color: '#8b5cf6' }
+    ]
+  },
+  {
+    id: 'blank',
+    hi: 'ख़ाली — मैं ख़ुद बनाऊँगा',
+    en: 'Blank',
+    icon: '📋',
+    trades: []
+  }
+];
+
+/** Trades a new job starts with, given its template. */
+function buildTemplateTrades(templateId) {
+  const template = JOB_TEMPLATES.find(t => t.id === templateId) || JOB_TEMPLATES[0];
+  if (template.trades === null) return DEFAULT_TRADES.map(t => ({ ...t }));
+
+  const trades = template.trades.map(t => ({ ...t }));
+  // The tractor supplier travels with every template: material gets delivered to
+  // a hotel build or a farm just as much as to a house.
+  const tractor = DEFAULT_TRADES.find(t => t.isSupplier);
+  if (tractor && !trades.some(t => t.id === tractor.id)) trades.push({ ...tractor });
+  return trades;
+}
+
 export function getCustomTxTypes() {
   try {
     const raw = JSON.parse(localStorage.getItem('custom_tx_types') || '[]');
@@ -422,7 +490,7 @@ export class Store {
     return true;
   }
 
-  addProject(name, { icon = '🏗️', note = '' } = {}) {
+  addProject(name, { icon = '🏗️', note = '', template = 'construction' } = {}) {
     const clean = String(name || '').trim();
     if (!clean) throw new Error('काम का नाम डालें');
     const project = {
@@ -431,8 +499,8 @@ export class Store {
       icon,
       note: String(note || '').trim(),
       createdAt: Date.now(),
-      // A fresh job starts with the standard trades but nobody in them.
-      trades: DEFAULT_TRADES.map(t => ({ ...t })),
+      // A fresh job starts with categories that suit the kind of work, empty.
+      trades: buildTemplateTrades(template),
       workers: [],
       transactions: [],
       haziri: {},

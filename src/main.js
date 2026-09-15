@@ -1,7 +1,7 @@
 // src/main.js
 // Main Application Controller for Shram & Site Diary
 
-import { store, getTodayString, getDeviceId, getAllTxTypes, getTxTypeMeta, getTxTypeLabel, getThekaTotal, describeTheka, isThekaUnmeasured, TROLLEY_MATERIALS, getTrolleyMaterial } from './storage.js';
+import { store, getTodayString, getDeviceId, getAllTxTypes, getTxTypeMeta, getTxTypeLabel, getThekaTotal, describeTheka, isThekaUnmeasured, TROLLEY_MATERIALS, getTrolleyMaterial, JOB_TEMPLATES } from './storage.js';
 import { VoiceManager } from './speech.js';
 import { ReminderManager } from './reminder.js';
 import confetti from 'canvas-confetti';
@@ -897,16 +897,24 @@ class App {
   }
 
   promptNewProject() {
-    const name = prompt('नए काम का नाम?' + '\n\n' + 'जैसे: नहर का काम, बाउंड्री वॉल, रोड टारिंग');
+    // Ask what kind of work first: a hotel has no masons and a building site has
+    // no chefs, so the job starts with categories that actually fit.
+    const choices = JOB_TEMPLATES.map((t, n) => (n + 1) + '. ' + t.icon + ' ' + t.hi).join('\n');
+    const pick = prompt('यह किस तरह का काम है?' + '\n' + '\n' + choices + '\n' + '\n' + 'नंबर लिखिए:', '1');
+    if (pick === null) return;
+    const template = JOB_TEMPLATES[(Number(pick) || 1) - 1] || JOB_TEMPLATES[0];
+
+    const name = prompt('काम का नाम?' + '\n' + '\n' + 'जैसे: नहर का काम, बाउंड्री वॉल, होटल का स्टाफ');
     if (!name || !name.trim()) return;
-    const project = this.store.addProject(name.trim());
+
+    const project = this.store.addProject(name.trim(), { icon: template.icon, template: template.id });
     this.closeModals();
     this.activeHaziriTradeId = null;
     this.selectedHaziriDate = getTodayString();
     this.populateSelects();
     this.renderProjectHeader();
     this.commit();
-    this.showToast('"' + project.name + '" बन गया — अब इसमें कारीगर जोड़िए', 4000);
+    this.showToast('"' + project.name + '"' + ' बन गया — अब इसमें कारीगर जोड़िए', 4000);
   }
 
   editProject(id) {
