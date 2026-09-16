@@ -15,7 +15,7 @@
 
 import { SiteDiaryClient } from './firestore.js';
 import { mutateLedger, findWorker, findTrade, validDate, todayString as writerToday } from './writer.js';
-import { Store, getThekaTotal, describeTheka, getTxTypeLabel } from '../src/storage.js';
+import { Store, getThekaTotal, describeTheka, getTxTypeLabel, ABSENCE_REASONS, absenceReasonLabel } from '../src/storage.js';
 
 const READ_ONLY = process.env.SITE_DIARY_READONLY === '1';
 
@@ -146,7 +146,8 @@ const TOOLS = [
   {
     name: 'attendance',
     description:
-      'Attendance for one date — who was present, half day, absent, and any overtime hours.',
+      'Attendance for one date — who was present, half day, absent, any overtime hours, ' +
+      'and the reason for an absence where one was recorded.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -159,7 +160,8 @@ const TOOLS = [
     name: 'muster_roll',
     description:
       'The monthly attendance register: per worker, days present, absent, overtime hours, ' +
-      'earned this month, paid this month, and the balance.',
+      'earned this month, paid this month, the balance, and the dates of any absence that ' +
+      'was given a reason.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -296,7 +298,11 @@ const handlers = {
         trade: store.getTrade(w.tradeId).name,
         role: w.role === 'mistri' ? 'Mistri' : 'Helper',
         status,
-        overtimeHours: r?.otHours || 0
+        overtimeHours: r?.otHours || 0,
+        // Absent with no reason given — the usual case — reports no field at all
+        // rather than an empty one, and so does every record marked before
+        // reasons existed.
+        reason: r?.reason ? absenceReasonLabel(r.reason, 'en') : undefined
       };
     });
 
@@ -311,6 +317,13 @@ const handlers = {
   },
 
   async muster_roll({ year, month }) {
+    const explainedAbsences = (dailyStatuses) => {
+      const given = Object.entries(dailyStatuses)
+        .filter(([, rec]) => rec && rec.status === 0 && rec.reason)
+        .map(([date, rec]) => ({ date, reason: absenceReasonLabel(rec.reason, 'en') }));
+      return given.length ? given : undefined;
+    };
+
     const store = await getStore();
     const now = new Date();
     const y = year || now.getFullYear();
@@ -333,7 +346,12 @@ const handlers = {
         earnedThisMonth: r.totalEarnedMonth,
         paidThisMonth: r.totalPaidMonth,
         balance: r.netBalance,
-        contract: r.thekaLabel || null
+        contract: r.thekaLabel || null,
+        // Only the absences somebody bothered to explain; the plain ones are
+        // already counted in daysAbsent. A worker with none reports no field
+        // at all rather than an empty list — which is also what every row of
+        // a register marked before reasons existed looks like.
+        absenceReasons: explainedAbsences(r.dailyStatuses)
       }))
     };
   },
@@ -440,14 +458,22 @@ const WRITE_TOOLS = [
     name: 'mark_attendance',
     description:
       "Record one worker's attendance for a date: present, half day, or absent, with optional " +
-      'overtime hours. Overwrites whatever was recorded for that worker on that date.',
+      'overtime hours, and for an absence an optional reason. Overwrites whatever was recorded ' +
+      'for that worker on that date.',
     inputSchema: {
       type: 'object',
       properties: {
         worker: { type: 'string', description: 'Worker name or id.' },
         status: { type: 'string', enum: ['present', 'half', 'absent'], description: 'Attendance for the day.' },
         date: { type: 'string', description: 'YYYY-MM-DD. Defaults to today.' },
-        overtimeHours: { type: 'number', description: 'Extra hours worked beyond the normal day.' }
+        overtimeHours: { type: 'number', description: 'Extra hours worked beyond the normal day.' },
+        reason: {
+          type: 'string',
+          description:
+            'Why the worker was away. Only for status "absent", and always optional. Prefer one of ' +
+            ABSENCE_REASONS.map(r => `"${r.id}" (${r.en})`).join(', ') +
+            '; anything else is kept as free text.'
+        }
       },
       required: ['worker', 'status']
     }
@@ -612,17 +638,22 @@ const writeHandlers = {
       const date = validDate(args.date);
       const status = args.status === 'present' ? 1 : args.status === 'half' ? 0.5 : 0;
       const ot = Number(args.overtimeHours) || 0;
+      const reason = String(args.reason || '').trim();
 
       if (status === 0 && ot > 0) {
         throw new Error('An absent worker cannot have overtime hours.');
       }
+      if (status !== 0 && reason) {
+        throw new Error('A reason belongs to an absence — a worker who turned up does not need one.');
+      }
 
-      store.setWorkerHaziri(date, worker.id, status, ot);
+      store.setWorkerHaziri(date, worker.id, status, ot, reason);
       return {
         worker: worker.name,
         date,
         status: args.status,
         overtimeHours: ot,
+        reason: reason ? absenceReasonLabel(reason, 'en') : undefined,
         note: 'Open the app on the phone to pull this in.'
       };
     });
@@ -649,6 +680,8 @@ const writeHandlers = {
           leftAlone.push(w.name);
           continue;
         }
+        // Marking present drops any absence reason, which setWorkerHaziri does
+        // for us — nothing to pass here.
         store.setWorkerHaziri(date, w.id, 1, already?.otHours || 0);
         marked.push(w.name);
       }

@@ -136,6 +136,33 @@ export function getMachineWork(id) {
   return MACHINE_WORKS.find(w => w.id === id) || { id, hi: id, en: id, icon: '🏗️' };
 }
 
+/* Why a worker did not turn up. It is asked for in one tap, so it is a
+   picklist rather than a text box; "other" falls back to typing. The id is
+   what gets stored, never the label, so the register reads in whichever
+   language the phone is set to — and a reason typed by hand is stored as-is
+   and passes through the lookup below unchanged. */
+export const ABSENCE_REASONS = [
+  { id: 'out_of_station', hi: 'बाहर गया',   en: 'Out of station' },
+  { id: 'sick',           hi: 'बीमार',      en: 'Sick' },
+  { id: 'family_work',    hi: 'घर का काम',  en: 'Family work' }
+];
+
+export function absenceReasonLabel(reason, lang = 'hi') {
+  if (!reason) return '';
+  const known = ABSENCE_REASONS.find(r => r.id === reason);
+  if (!known) return String(reason);
+  return lang === 'en' ? known.en : known.hi;
+}
+
+/* A reason is optional everywhere, so most records simply carry none. Length
+   is capped because it is typed on a phone and read back in a narrow register
+   column, and it is dropped for anyone who is not absent — a reason for being
+   away on a present worker's day would be nonsense on the muster roll. */
+function cleanAbsenceReason(status, reason) {
+  if (status !== 0) return '';
+  return String(reason == null ? '' : reason).trim().slice(0, 60);
+}
+
 /** Hours between two "HH:MM" times. Work that runs past midnight is real on a
     site — a slab pour, a night dig — so an end before the start means next day. */
 export function computeHours(startTime, endTime) {
@@ -1323,7 +1350,8 @@ export class Store {
         history.push({
           date,
           status: rec.status,
-          otHours: rec.otHours || 0
+          otHours: rec.otHours || 0,
+          reason: rec.reason || ''
         });
       }
     }
@@ -1335,7 +1363,7 @@ export class Store {
     return this.activeProject().haziri[date] || {};
   }
 
-  setWorkerHaziri(date, workerId, status, otHours = 0) {
+  setWorkerHaziri(date, workerId, status, otHours = 0, reason = '') {
     if (!this.activeProject().haziri[date]) {
       this.activeProject().haziri[date] = {};
     }
@@ -1344,10 +1372,16 @@ export class Store {
     // and silently, since NaN spreads through arithmetic without complaint.
     const n = Number(status);
     const clean = n === 1 ? 1 : n === 0.5 ? 0.5 : 0;
-    this.activeProject().haziri[date][workerId] = {
+    const record = {
       status: clean, // 1.0 (full), 0.5 (half), 0 (absent)
       otHours: Number(otHours) || 0
     };
+    // Only an absence carries a reason, and only when one was given. Records
+    // written before this field existed simply have no such key, and every
+    // reader treats that as an absence with no reason — nothing to migrate.
+    const why = cleanAbsenceReason(clean, reason);
+    if (why) record.reason = why;
+    this.activeProject().haziri[date][workerId] = record;
     if (!this.activeProject().haziriMeta) this.activeProject().haziriMeta = {};
     this.activeProject().haziriMeta[date] = { savedAt: Date.now(), deviceId: getDeviceId() };
     this.save();

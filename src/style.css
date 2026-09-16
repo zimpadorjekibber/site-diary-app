@@ -2821,6 +2821,22 @@ body {
   border: 1px solid rgba(239, 68, 68, 0.35);
 }
 
+/* A day column is one character wide, so an absence that carries a reason only
+   gets a dot; the reason itself is in the cell's tooltip. */
+.cell-hz-absent.has-reason {
+  position: relative;
+}
+.cell-hz-absent.has-reason::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--rose-danger);
+}
+
 .cell-hz-empty {
   color: var(--text-main);
   font-weight: 400;
@@ -3661,6 +3677,35 @@ body {
   background: var(--amber-tint);
   border-color: rgba(224, 140, 7, 0.45);
   color: var(--amber-strong);
+}
+
+/* Reason for an absence. It sits under the status line only on rows already
+   marked absent, and stays quiet until it holds something — it is optional,
+   and must not read as a field waiting to be filled. */
+.attendance-reason-row {
+  margin-top: 4px;
+  min-width: 0;
+}
+
+.attendance-reason-select {
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  border: 1px dashed var(--border-card);
+  background: var(--bg-subtle);
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-dim);
+  cursor: pointer;
+  /* Big enough to hit with a thumb without growing the row. */
+  min-height: 26px;
+}
+.attendance-reason-select.has-reason {
+  border-style: solid;
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--rose-danger);
 }
 
 /* --- Toggle --- */

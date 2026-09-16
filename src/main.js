@@ -1,7 +1,7 @@
 // src/main.js
 // Main Application Controller for Shram & Site Diary
 
-import { store, getTodayString, getDeviceId, getAllTxTypes, getTxTypeMeta, getTxTypeLabel, getThekaTotal, describeTheka, isThekaUnmeasured, TROLLEY_MATERIALS, getTrolleyMaterial, JOB_TEMPLATES, MACHINE_WORKS, getMachineWork, computeHours, formatHours } from './storage.js';
+import { store, getTodayString, getDeviceId, getAllTxTypes, getTxTypeMeta, getTxTypeLabel, getThekaTotal, describeTheka, isThekaUnmeasured, TROLLEY_MATERIALS, getTrolleyMaterial, JOB_TEMPLATES, MACHINE_WORKS, getMachineWork, computeHours, formatHours, ABSENCE_REASONS, absenceReasonLabel } from './storage.js';
 import { VoiceManager } from './speech.js';
 import { ReminderManager } from './reminder.js';
 import confetti from 'canvas-confetti';
@@ -2154,6 +2154,14 @@ class App {
             const statusClass = isFull ? 'st-full' : (isHalf ? 'st-half' : 'st-absent');
             const otText = rec.otHours > 0 ? ` • +${rec.otHours}h OT` : '';
 
+            /* Only a worker somebody actually marked absent is asked why. One
+               nobody has touched yet reads as absent too, and a reason box on
+               every untouched row would bury the screen on a fresh morning. */
+            const isMarkedAbsent = !!haziriRecord[worker.id] && rec.status === 0;
+            const reasonText = isMarkedAbsent && rec.reason
+              ? ` • ${esc(absenceReasonLabel(rec.reason, this.currentLang))}`
+              : '';
+
             return `
               <div class="attendance-row ${isPresent ? 'is-present' : 'is-absent'}${isHalf ? ' is-half' : ''}" data-worker-id="${esc(worker.id)}">
                 <!-- Number circle badge (01, 02, 03... Vibrant Green when present) -->
@@ -2176,7 +2184,7 @@ class App {
                   </div>
 
                   <div class="attendance-status-line">
-                    <span class="attendance-status-text ${statusClass}">${statusText}${otText}</span>
+                    <span class="attendance-status-text ${statusClass}">${statusText}${otText}${reasonText}</span>
                     
                     <!-- Micro-actions for rare Half-day / OT / Quick Edit without consuming vertical height -->
                     <div class="attendance-micro-actions">
@@ -2191,6 +2199,8 @@ class App {
                       </button>
                     </div>
                   </div>
+
+                  ${isMarkedAbsent ? this.renderAbsenceReasonPicker(worker, rec) : ''}
                 </div>
 
                 <!-- Sleek iOS Toggle Switch (Reference Screenshot Style) -->
@@ -2226,6 +2236,37 @@ class App {
             <span>${this.currentLang === 'en' ? 'Update' : 'अपडेट'}</span>
           </button>
         </div>
+      </div>
+    `;
+  }
+
+  /* Why a worker is away, asked for in one tap on the row that is already
+     marked absent. It is skippable on purpose: most absences on a site never
+     get an explanation, and a register that insists on one gets a shrug and a
+     wrong answer instead of a blank. */
+  renderAbsenceReasonPicker(worker, rec) {
+    const en = this.currentLang === 'en';
+    const current = rec.reason || '';
+    const isKnown = ABSENCE_REASONS.some(r => r.id === current);
+    const options = ABSENCE_REASONS.map(r =>
+      `<option value="${r.id}"${current === r.id ? ' selected' : ''}>${esc(en ? r.en : r.hi)}</option>`
+    ).join('');
+    // A reason typed by hand keeps its own place in the list, so opening the
+    // picker again does not quietly throw it away.
+    const typedOption = (current && !isKnown)
+      ? `<option value="__typed__" selected>${esc(current)}</option>`
+      : '';
+
+    return `
+      <div class="attendance-reason-row">
+        <select class="attendance-reason-select${current ? ' has-reason' : ''}"
+                data-hz-reason="${esc(worker.id)}"
+                title="${en ? 'Reason for absence (optional)' : 'गैरहाजिरी का कारण (वैकल्पिक)'}">
+          <option value="">${en ? 'Reason? (optional)' : 'कारण? (वैकल्पिक)'}</option>
+          ${options}
+          ${typedOption}
+          <option value="__other__">${en ? 'Other (type reason)' : 'अन्य (खुद लिखें)'}</option>
+        </select>
       </div>
     `;
   }
@@ -2286,6 +2327,7 @@ class App {
         const record = row.dailyStatuses[d.dateStr];
         let cellContent = '·';
         let cellClass = 'cell-hz-empty';
+        let reasonNote = '';
 
         if (record) {
           if (record.status === 1.0) {
@@ -2297,13 +2339,19 @@ class App {
           } else if (record.status === 0) {
             cellContent = 'A';
             cellClass = 'cell-hz-absent';
+            /* A register column is one character wide, so the reason rides in
+               the tooltip, with a dot on the cell to say there is one to read. */
+            if (record.reason) {
+              cellClass += ' has-reason';
+              reasonNote = ` — ${absenceReasonLabel(record.reason, this.currentLang)}`;
+            }
           }
         }
 
         const tdClass = d.isSunday ? 'td-sunday' : '';
         return `
           <td class="${tdClass}">
-            <span class="muster-cell ${cellClass}" data-matrix-worker="${w.id}" data-matrix-date="${d.dateStr}" title="${esc(w.name)} (${d.dateStr}): क्लिक करके हाजिरी बदलें">
+            <span class="muster-cell ${cellClass}" data-matrix-worker="${w.id}" data-matrix-date="${d.dateStr}" title="${esc(w.name)} (${d.dateStr})${esc(reasonNote)}: क्लिक करके हाजिरी बदलें">
               ${cellContent}
             </span>
           </td>
@@ -3709,7 +3757,7 @@ class App {
             else if (currentRecord.status === 0) nextVal = 1.0;
           }
 
-          this.store.setWorkerHaziri(dateStr, workerId, nextVal, 0);
+          this.store.setWorkerHaziri(dateStr, workerId, nextVal, 0, currentRecord?.reason);
           this.renderMonthlyHaziri();
           this.renderHaziri();
           this.renderStats();
@@ -3762,13 +3810,45 @@ class App {
           const date = this.selectedHaziriDate || getTodayString();
           const currentRecord = this.store.getHaziri(date)[workerId] || { status: 0, otHours: 0 };
 
-          this.store.setWorkerHaziri(date, workerId, val, currentRecord.otHours);
+          this.store.setWorkerHaziri(date, workerId, val, currentRecord.otHours, currentRecord.reason);
           this.renderHaziri();
           this.renderMonthlyHaziri();
           this.renderStats();
           this.renderDiarySheet();
           this.scheduleSync('haziri');
         }
+      });
+
+      /* Attendance: why a worker is absent. Optional throughout — the blank
+         first option clears it again, and cancelling the typed reason leaves
+         the record exactly as it was. */
+      document.addEventListener('change', (e) => {
+        const reasonSelect = e.target.closest('[data-hz-reason]');
+        if (!reasonSelect) return;
+
+        const workerId = reasonSelect.getAttribute('data-hz-reason');
+        const date = this.selectedHaziriDate || getTodayString();
+        const currentRecord = this.store.getHaziri(date)[workerId] || { status: 0, otHours: 0 };
+        let reason = reasonSelect.value;
+
+        // The already-typed reason, picked again: nothing to change.
+        if (reason === '__typed__') return;
+
+        if (reason === '__other__') {
+          const known = ABSENCE_REASONS.some(r => r.id === currentRecord.reason);
+          const typed = prompt(
+            this.currentLang === 'en' ? 'Reason for absence:' : 'गैरहाजिरी का कारण लिखें:',
+            (currentRecord.reason && !known) ? currentRecord.reason : ''
+          );
+          // Cancelled — redraw so the dropdown goes back to what is stored.
+          if (typed === null) { this.renderHaziri(); return; }
+          reason = typed;
+        }
+
+        this.store.setWorkerHaziri(date, workerId, currentRecord.status, currentRecord.otHours, reason);
+        this.renderHaziri();
+        this.renderMonthlyHaziri();
+        this.scheduleSync('haziri');
       });
 
       // Attendance: Rare Half-Day Micro-chip click
@@ -3780,7 +3860,7 @@ class App {
           const currentRecord = this.store.getHaziri(date)[workerId] || { status: 0, otHours: 0 };
           const newStatus = (currentRecord.status === 0.5) ? 1.0 : 0.5;
 
-          this.store.setWorkerHaziri(date, workerId, newStatus, currentRecord.otHours);
+          this.store.setWorkerHaziri(date, workerId, newStatus, currentRecord.otHours, currentRecord.reason);
           this.renderHaziri();
           this.renderMonthlyHaziri();
           this.renderStats();
@@ -3799,7 +3879,7 @@ class App {
           const otInput = prompt('ओवरटाइम घंटे (Overtime Hours) दर्ज करें:', currentRecord.otHours || '1');
           if (otInput !== null) {
             const ot = parseFloat(otInput) || 0;
-            this.store.setWorkerHaziri(date, workerId, currentRecord.status || 1.0, ot);
+            this.store.setWorkerHaziri(date, workerId, currentRecord.status || 1.0, ot, currentRecord.reason);
             this.renderHaziri();
             this.renderMonthlyHaziri();
             this.renderStats();
@@ -3838,7 +3918,7 @@ class App {
           const date = this.selectedHaziriDate || getTodayString();
           const currentRecord = this.store.getHaziri(date)[workerId] || { status: 0, otHours: 0 };
 
-          this.store.setWorkerHaziri(date, workerId, val, currentRecord.otHours);
+          this.store.setWorkerHaziri(date, workerId, val, currentRecord.otHours, currentRecord.reason);
           this.renderHaziri();
           this.renderMonthlyHaziri();
           this.renderStats();
@@ -5058,7 +5138,13 @@ class App {
         if (!rec) return '';
         if (rec.status === 1.0) return rec.otHours > 0 ? `1+${rec.otHours}h` : '1.0';
         if (rec.status === 0.5) return '0.5';
-        if (rec.status === 0) return 'A';
+        if (rec.status === 0) {
+          if (!rec.reason) return 'A';
+          // A typed reason can hold a comma or a quote, so the cell is quoted
+          // and its own quotes doubled — otherwise one reason shifts the row.
+          const why = absenceReasonLabel(rec.reason, this.currentLang).replace(/"/g, '""');
+          return `"A (${why})"`;
+        }
         return '';
       }).join(',');
 
