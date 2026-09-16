@@ -8,6 +8,7 @@ import confetti from 'canvas-confetti';
 import { initFirebase, isFirebaseReady, saveToFirebase, loadFromFirebase, enableRealtimeSync, parseFirebaseConfig } from './firebase-lazy.js';
 import { translations } from './i18n.js';
 import { LendingLock } from './lending-lock.js';
+import { initModalUX } from './modal-ux.js';
 
 /* Every list in this app is built with innerHTML from data a user typed — worker
    names, notes, trade names — and that data also arrives from cloud sync, i.e.
@@ -84,6 +85,7 @@ class App {
   constructor() {
     this.store = store;
     this.currentTab = 'tab-haziri'; // Daily Attendance is #1 contractor priority
+    this.tabScrollPositions = new Map();
     this.activeFilterType = 'all';
     this.activeFilterTrade = null;
     this.selectedHaziriDate = getTodayString();
@@ -181,6 +183,8 @@ class App {
       toast = document.createElement('div');
       toast.id = 'appGlobalToast';
       toast.className = 'app-global-toast';
+      toast.setAttribute('role', 'status');
+      toast.setAttribute('aria-live', 'polite');
       document.body.appendChild(toast);
     }
     toast.textContent = message;
@@ -229,6 +233,7 @@ class App {
   }
 
   init() {
+    initModalUX();
     this.bindEvents();
     this.populateSelects();
     this.applyLanguage(this.currentLang, false);
@@ -1538,6 +1543,9 @@ class App {
   }
 
   bindLendingEvents() {
+    document.getElementById('btnBackFromLending').addEventListener('click', () => {
+      this.goToTab(this.lendingReturnTab || 'tab-haziri');
+    });
     document.getElementById('btnUnlockLending').addEventListener('click', async () => {
       if (await this.lendingLock.request()) this.renderLending();
     });
@@ -2837,16 +2845,29 @@ class App {
   goToTab(tabId) {
     const targetView = document.getElementById(tabId);
     if (!targetView) return;
+    if (tabId === 'tab-lending' && this.currentTab !== 'tab-lending') {
+      this.lendingReturnTab = this.currentTab;
+    }
+    this.tabScrollPositions.set(this.currentTab, window.scrollY);
     if (tabId !== this.currentTab) this.lendingLock.lock();
 
-    document.querySelectorAll('.nav-tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.nav-tab-btn').forEach(b => {
+      b.classList.remove('active');
+      b.removeAttribute('aria-current');
+    });
     document.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
     targetView.classList.add('active');
     document.querySelector(`.nav-tab-btn[data-tab="${tabId}"]`)?.classList.add('active');
+    document.querySelector(`.nav-tab-btn[data-tab="${tabId}"]`)?.setAttribute('aria-current', 'page');
     this.currentTab = tabId;
-    window.scrollTo({ top: 0, behavior: 'smooth' });
 
     if (tabId === 'tab-monthly') this.renderMonthlyHaziri();
+    requestAnimationFrame(() => {
+      if (this.currentTab !== tabId) return;
+      const headerHeight = document.querySelector('.app-header')?.offsetHeight || 0;
+      const contentTop = targetView.getBoundingClientRect().top + window.scrollY - headerHeight - 16;
+      window.scrollTo({ top: this.tabScrollPositions.get(tabId) ?? Math.max(0, contentTop), behavior: 'instant' });
+    });
   }
 
   async downloadBackup() {
@@ -3251,7 +3272,8 @@ class App {
     if (timelineSearch) {
       timelineSearch.addEventListener('input', (e) => {
         this.timelineSearchQuery = e.target.value;
-        this.renderTimeline();
+        clearTimeout(this.timelineSearchTimer);
+        this.timelineSearchTimer = setTimeout(() => this.renderTimeline(), 160);
       });
     }
 

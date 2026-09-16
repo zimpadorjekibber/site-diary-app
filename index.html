@@ -168,8 +168,8 @@
     </div>
 
     <!-- NAVIGATION TABS (DESKTOP TOP / MOBILE FIXED BOTTOM DOCK) -->
-    <nav class="nav-tabs-wrapper app-bottom-dock">
-      <button class="nav-tab-btn active" data-tab="tab-haziri">
+    <nav class="nav-tabs-wrapper app-bottom-dock" aria-label="मुख्य स्क्रीन / Main navigation">
+      <button class="nav-tab-btn active" data-tab="tab-haziri" aria-current="page">
         <span class="nav-tab-icon">📋</span>
         <span class="nav-tab-label" data-i18n="tabHaziri">दैनिक हाजिरी</span>
       </button>
@@ -189,11 +189,12 @@
 
     <!-- TAB 1: TODAY'S TIMELINE -->
     <section id="tab-timeline" class="tab-view">
+      <h2 class="screen-heading" data-i18n="tabTimeline">लेन-देन</h2>
       <!-- Search & Date Filter Bar -->
       <div class="timeline-controls-bar">
         <div class="timeline-search-wrap">
           <span class="search-icon">🔍</span>
-          <input type="text" id="timelineSearchInput" class="form-input" placeholder="कारीगर, सामान या नोट से खोजें..." />
+          <input type="search" id="timelineSearchInput" class="form-input" aria-label="लेन-देन खोजें / Search transactions" placeholder="कारीगर, सामान या नोट से खोजें..." />
         </div>
         <div class="timeline-date-selector">
           <select id="timelineDatePreset" class="form-select" style="width: auto; min-width: 140px;">
@@ -228,6 +229,7 @@
 
     <!-- TAB 2: DAILY HAZIRI (ATTENDANCE) REGISTER -->
     <section id="tab-haziri" class="tab-view active">
+      <h2 class="screen-heading" data-i18n="tabHaziri">आज की हाजिरी</h2>
       <!-- Attendance Top Navigation Bar: Date Chip, Group Count Badge, Horizontal Trade Tabs -->
       <div class="attendance-top-bar">
         <div class="attendance-date-chip" id="haziriDateWrap" title="तारीख बदलें (Change Date)">
@@ -256,6 +258,7 @@
 
     <!-- TAB 3: MONTHLY MUSTER ROLL REGISTER (पूरे महीने का हाजिरी रजिस्टर) -->
     <section id="tab-monthly" class="tab-view">
+      <h2 class="screen-heading" data-i18n="tabMonthly">मस्टर रोल</h2>
       
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
         <div>
@@ -350,6 +353,7 @@
 
     <!-- TAB 3: WORKERS & GROUPS LEDGER -->
     <section id="tab-groups" class="tab-view">
+      <h2 class="screen-heading" data-i18n="tabGroups">कारीगर खाता</h2>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
         <div>
           <h2 style="font-size: 1.15rem; font-weight: 700;">कारीगर ग्रुप और राशन खाता</h2>
@@ -564,11 +568,11 @@
           <label class="form-label" id="txAmountLabel">रकम / खर्च (Amount in ₹):</label>
           <input type="number" id="txAmount" class="form-input" placeholder="0" min="0" required />
           <div class="quick-amount-chips">
-            <span class="amt-chip" data-add-amt="100">+100</span>
-            <span class="amt-chip" data-add-amt="200">+200</span>
-            <span class="amt-chip" data-add-amt="500">+500</span>
-            <span class="amt-chip" data-add-amt="1000">+1,000</span>
-            <span class="amt-chip" data-add-amt="2000">+2,000</span>
+            <button type="button" class="amt-chip" data-add-amt="100">+100</button>
+            <button type="button" class="amt-chip" data-add-amt="200">+200</button>
+            <button type="button" class="amt-chip" data-add-amt="500">+500</button>
+            <button type="button" class="amt-chip" data-add-amt="1000">+1,000</button>
+            <button type="button" class="amt-chip" data-add-amt="2000">+2,000</button>
           </div>
         </div>
 
@@ -596,6 +600,10 @@
     <!-- TAB 6: LENDING REGISTER (उधार) — shared across every job, because lending
          in a village is personal rather than tied to one site. -->
     <section id="tab-lending" class="tab-view">
+      <div class="lending-page-header">
+        <button type="button" class="btn-secondary" id="btnBackFromLending" aria-label="पिछली स्क्रीन पर वापस जाएँ / Go back">← वापस</button>
+        <h2 class="screen-heading">उधार रजिस्टर</h2>
+      </div>
       <div id="lendingLocked" class="lending-empty">
         <h3>🔒 उधार का हिसाब निजी है</h3>
         <p>हिसाब देखने के लिए अपना पासवर्ड भरें। पहली बार यहीं पासवर्ड बनाएँ।</p>
@@ -1594,6 +1602,10 @@
             <button type="button" class="segment-btn" data-type="cash">💵 नकद / पेशगी</button>
             <button type="button" class="segment-btn" data-type="ration">🍚 राशन</button>
             <button type="button" class="segment-btn" data-type="recharge">📱 रिचार्ज</button>
+            <button type="button" class="segment-btn" data-type="cylinder">🔥 सिलेंडर</button>
+            <button type="button" class="segment-btn" data-type="diesel">⛽ डीजल</button>
+            <button type="button" class="segment-btn" data-type="material">🧱 सामान</button>
+            <button type="button" class="segment-btn" data-type="other">📝 अन्य</button>
           </div>
         </div>
 
