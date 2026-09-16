@@ -1653,8 +1653,16 @@ export class Store {
   importData(jsonString) {
     try {
       const parsed = JSON.parse(jsonString);
-      if (parsed.workers && parsed.trades && parsed.transactions) {
-        this.data = parsed;
+      /* Both shapes count: the current one, which keeps each job inside
+         `projects`, and the pre-projects flat one that older backups still
+         hold. This used to demand top-level workers/trades/transactions, so it
+         rejected the very file downloadBackup() now writes — a backup nobody
+         could restore, discovered the one time it was needed. normalise()
+         migrates either shape, exactly as a ledger arriving from the cloud. */
+      const isCurrent = Array.isArray(parsed?.projects);
+      const isLegacy = Array.isArray(parsed?.workers) && Array.isArray(parsed?.trades);
+      if (isCurrent || isLegacy) {
+        this.data = this.normalise(parsed);
         this.save();
         return true;
       }

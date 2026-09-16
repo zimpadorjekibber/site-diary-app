@@ -4698,25 +4698,19 @@ class App {
         btnPullFb.textContent = '⏳ लोड हो रहा है...';
         try {
           const remoteData = await loadFromFirebase(siteId);
-          if (remoteData && remoteData.workers && remoteData.trades) {
-            this.store.data = {
-              trades: remoteData.trades,
-              workers: remoteData.workers,
-              transactions: remoteData.transactions || [],
-              haziri: remoteData.haziri || {},
-              haziriMeta: remoteData.haziriMeta || {},
-              diaryNotedDates: remoteData.diaryNotedDates || {},
-              // Dropping this flag used to let the demo seed re-inject 8 fake
-              // workers' attendance into a real site after every restore.
-              isCleanStarted: remoteData.isCleanStarted === true || this.store.data.isCleanStarted === true,
-              settings: { ...this.store.getSettings(), ...(remoteData.settings || {}) }
-            };
-            this.store.save();
-            alert('✅ Google Firebase से डेटा सफलतापूर्वक आ गया!');
-            location.reload();
-          } else {
+          /* Hand-copying the old top-level fields meant this button could only
+             read a pre-projects ledger: against today's cloud copy it found no
+             remoteData.workers and refused the restore outright. It now takes
+             the same road as a ledger arriving by realtime sync — looksLikeLedger
+             accepts both shapes, applyRemoteData normalises, keeps this phone's
+             own settings, and refuses to let an empty cloud copy wipe a full
+             phone. */
+          if (!this.looksLikeLedger(remoteData)) {
             throw new Error('अमान्य डेटा संरचना');
           }
+          this.applyRemoteData(remoteData);
+          alert('✅ Google Firebase से डेटा सफलतापूर्वक आ गया!');
+          location.reload();
         } catch (err) {
           alert('Firebase से डेटा लाना विफल: ' + err.message);
         } finally {
