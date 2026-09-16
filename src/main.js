@@ -7,6 +7,7 @@ import { ReminderManager } from './reminder.js';
 import confetti from 'canvas-confetti';
 import { initFirebase, isFirebaseReady, saveToFirebase, loadFromFirebase, enableRealtimeSync, parseFirebaseConfig } from './firebase-lazy.js';
 import { translations } from './i18n.js';
+import { LendingLock } from './lending-lock.js';
 
 /* Every list in this app is built with innerHTML from data a user typed — worker
    names, notes, trade names — and that data also arrives from cloud sync, i.e.
@@ -104,6 +105,16 @@ class App {
     this.lendingDirection = 'given';
     this.lendingKind = 'item';
     this.lendingPhotoDataUrl = null;
+    this.lendingLock = new LendingLock(() => {
+      document.getElementById('modalLending')?.classList.remove('open');
+      document.getElementById('lendingPhotoViewer')?.remove();
+      ['lendingPerson', 'lendingPhone', 'lendingItem', 'lendingQty', 'lendingAmount', 'lendingNote']
+        .forEach(id => { const input = document.getElementById(id); if (input) input.value = ''; });
+      const chips = document.getElementById('lendingItemChips');
+      if (chips) chips.innerHTML = '';
+      this.clearLendingPhoto();
+      this.renderLending();
+    });
     this.trolleyMaterial = null;
     this.trolleyRatesWorkerId = null;
     this.jcbWork = null;
@@ -1369,6 +1380,14 @@ class App {
     const box = document.getElementById('lendingList');
     const summaryBox = document.getElementById('lendingSummary');
     if (!box) return;
+    const unlocked = this.lendingLock.unlocked;
+    document.getElementById('lendingLocked').hidden = unlocked;
+    document.getElementById('lendingPrivateContent').hidden = !unlocked;
+    if (!unlocked) {
+      box.innerHTML = '';
+      if (summaryBox) summaryBox.innerHTML = '';
+      return;
+    }
 
     const s = this.store.getLendingSummary();
     if (summaryBox) {
@@ -1449,6 +1468,7 @@ class App {
   }
 
   openLendingModal(direction) {
+    if (!this.lendingLock.unlocked) return;
     this.lendingDirection = direction === 'taken' ? 'taken' : 'given';
     this.lendingKind = 'item';
     this.lendingPhotoDataUrl = null;
@@ -1518,6 +1538,23 @@ class App {
   }
 
   bindLendingEvents() {
+    document.getElementById('btnUnlockLending').addEventListener('click', async () => {
+      if (await this.lendingLock.request()) this.renderLending();
+    });
+    document.getElementById('btnLockLending').addEventListener('click', () => this.lendingLock.lock());
+    document.getElementById('btnChangeLendingPassword').addEventListener('click', async () => {
+      if (await this.lendingLock.request({ change: true })) this.showToast('पासवर्ड बदल दिया गया');
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.lendingLock.lock();
+    });
+    window.addEventListener('pagehide', () => this.lendingLock.lock());
+    window.addEventListener('storage', event => {
+      if (event.key === null || event.key === 'site_diary_lending_lock_v1') this.lendingLock.lock();
+    });
+    ['pointerdown', 'keydown', 'scroll'].forEach(name => {
+      document.addEventListener(name, () => this.lendingLock.touch(), { passive: true, capture: true });
+    });
     // Typing by hand drops the picked highlight, so chip and box never disagree.
     document.getElementById('lendingItem')?.addEventListener('input', () => {
       document.querySelectorAll('#lendingItemChips .suggest-chip')
@@ -1526,6 +1563,7 @@ class App {
 
     document.addEventListener('click', (e) => {
       const add = e.target.closest('[data-new-lending]');
+      if (!this.lendingLock.unlocked) return;
       if (add) this.openLendingModal(add.getAttribute('data-new-lending'));
 
       const pickItem = e.target.closest('[data-lend-item]');
@@ -1583,21 +1621,42 @@ class App {
       const photo = e.target.closest('[data-lend-photo]');
       if (photo) {
         const entry = this.store.getLendingEntry(photo.getAttribute('data-lend-photo'));
-        if (entry?.photoUrl) window.open(entry.photoUrl, '_blank');
+        if (entry?.photoUrl) {
+          const viewer = document.createElement('dialog');
+          viewer.id = 'lendingPhotoViewer';
+          viewer.className = 'lending-password-dialog';
+          const image = document.createElement('img');
+          image.src = entry.photoUrl;
+          image.alt = 'उधार की फ़ोटो';
+          image.style.width = '100%';
+          const close = document.createElement('button');
+          close.className = 'btn-secondary';
+          close.textContent = 'बंद करें';
+          close.onclick = () => viewer.close();
+          viewer.append(image, close);
+          viewer.addEventListener('close', () => viewer.remove(), { once: true });
+          document.body.append(viewer);
+          viewer.showModal();
+        }
       }
     });
 
     document.getElementById('btnLendingPhoto')?.addEventListener('click', () => {
+      if (!this.lendingLock.unlocked) return;
       document.getElementById('lendingPhotoInput')?.click();
     });
     document.getElementById('btnLendingPhotoRemove')?.addEventListener('click', () => this.clearLendingPhoto());
     document.getElementById('lendingPhotoInput')?.addEventListener('change', async (e) => {
+      if (!this.lendingLock.unlocked) return;
+      const generation = this.lendingLock.generation;
       const file = e.target.files[0];
       if (!file) return;
       try {
         // Compressed like worker photos: a full-size camera image would eat the
         // 5MB storage budget in a handful of entries.
-        this.lendingPhotoDataUrl = await this.resizeImage(file, 800, 800, 0.72);
+        const photoData = await this.resizeImage(file, 800, 800, 0.72);
+        if (!this.lendingLock.unlocked || generation !== this.lendingLock.generation) return;
+        this.lendingPhotoDataUrl = photoData;
         const img = document.getElementById('lendingPhotoImg');
         const ph = document.getElementById('lendingPhotoPlaceholder');
         const rm = document.getElementById('btnLendingPhotoRemove');
@@ -1610,6 +1669,7 @@ class App {
     });
 
     document.getElementById('btnSaveLending')?.addEventListener('click', () => {
+      if (!this.lendingLock.unlocked) return;
       try {
         this.store.addLending({
           direction: this.lendingDirection,
@@ -1895,7 +1955,7 @@ class App {
           </div>
           <div class="tx-right">
             <div class="tx-amount ${amountClass}">₹${(tx.amount || 0).toLocaleString('en-IN')}</div>
-            ${tx.quantity && tx.type === 'ration' ? `<span class="tx-item-qty">${esc(tx.quantity)}</span>` : ''}
+            ${tx.quantity && ['ration', 'cylinder'].includes(tx.type) ? `<span class="tx-item-qty">${esc(tx.quantity)}</span>` : ''}
             <div class="tx-actions-row">
               <button class="btn-icon-action btn-edit-tx" data-edit-tx="${tx.id}" title="सुधारें">
                 ✏️
@@ -2656,13 +2716,24 @@ class App {
     }).join('');
   }
 
+  updateCylinderFields(edit = false) {
+    const isCylinder = (edit ? this.editTxType : this.modalTxType) === 'cylinder';
+    document.getElementById(edit ? 'editCylinderFields' : 'cylinderFields').style.display = isCylinder ? 'block' : 'none';
+    const input = document.getElementById(edit ? 'editTxCylinderCount' : 'txCylinderCount');
+    input.disabled = !isCylinder;
+    // Older entries may not have a count; editing them must not invent one.
+    input.required = isCylinder && !edit;
+  }
+
   openAddTransactionModal(preset = {}) {
     const modal = document.getElementById('modalAddTransaction');
     if (!modal) return;
 
     // Reset or preset
     this.modalTxType = preset.type || 'cash';
-    this.modalTargetType = preset.targetType || (preset.type === 'ration' ? 'group' : 'individual');
+    this.modalTargetType = preset.targetType || (['ration', 'cylinder'].includes(preset.type) ? 'group' : 'individual');
+    this.updateCylinderFields();
+    document.getElementById('txCylinderCount').value = parseInt(preset.quantity, 10) || '';
 
     // Update switcher UI
     document.querySelectorAll('#txTypeSwitcher .segment-btn').forEach(btn => {
@@ -2766,6 +2837,7 @@ class App {
   goToTab(tabId) {
     const targetView = document.getElementById(tabId);
     if (!targetView) return;
+    if (tabId !== this.currentTab) this.lendingLock.lock();
 
     document.querySelectorAll('.nav-tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
@@ -2775,6 +2847,20 @@ class App {
     window.scrollTo({ top: 0, behavior: 'smooth' });
 
     if (tabId === 'tab-monthly') this.renderMonthlyHaziri();
+  }
+
+  async downloadBackup() {
+    if (!await this.lendingLock.request()) return false;
+    try {
+      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(this.store.exportData());
+      const link = document.createElement('a');
+      link.href = dataStr;
+      link.download = `site_diary_backup_${getTodayString()}.json`;
+      link.click();
+      return true;
+    } finally {
+      this.lendingLock.lock();
+    }
   }
 
   // --- EVENT BINDINGS ---
@@ -2927,13 +3013,14 @@ class App {
         document.querySelectorAll('#txTypeSwitcher .segment-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.modalTxType = btn.getAttribute('data-type');
+        this.updateCylinderFields();
 
         const rationFields = document.getElementById('rationFields');
         const targetTypeGroup = document.getElementById('targetTypeGroup');
         const workerSelectGroup = document.getElementById('workerSelectGroup');
 
-        if (this.modalTxType === 'ration') {
-          rationFields.style.display = 'block';
+        if (['ration', 'cylinder'].includes(this.modalTxType)) {
+          rationFields.style.display = this.modalTxType === 'ration' ? 'block' : 'none';
           // Auto switch to group for ration unless user overrides
           this.modalTargetType = 'group';
           document.querySelectorAll('#txTargetTypeSwitcher .segment-btn').forEach(b => {
@@ -3007,6 +3094,11 @@ class App {
           const presetVal = document.getElementById('txRationItemPreset').value;
           rationItem = presetVal === 'Other' ? document.getElementById('txCustomRationItem').value : presetVal;
           quantity = document.getElementById('txQuantity').value;
+        }
+        if (this.modalTxType === 'cylinder') {
+          const count = Number(document.getElementById('txCylinderCount').value);
+          if (!Number.isSafeInteger(count) || count < 1) return;
+          quantity = `${count} सिलेंडर`;
         }
 
         this.store.addTransaction({
@@ -3390,6 +3482,7 @@ class App {
         document.querySelectorAll('#editTxTypeSwitcher .segment-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.editTxType = btn.getAttribute('data-type');
+        this.updateCylinderFields(true);
         const rationFields = document.getElementById('editRationFields');
         if (rationFields) {
           rationFields.style.display = this.editTxType === 'ration' ? 'block' : 'none';
@@ -3435,7 +3528,13 @@ class App {
         const amount = Number(document.getElementById('editTxAmount').value) || 0;
         const note = document.getElementById('editTxNote').value;
         const rationItem = this.editTxType === 'ration' ? document.getElementById('editTxRationItem').value : '';
-        const quantity = this.editTxType === 'ration' ? document.getElementById('editTxQuantity').value : '';
+        let quantity = this.editTxType === 'ration' ? document.getElementById('editTxQuantity').value : '';
+        if (this.editTxType === 'cylinder') {
+          const value = document.getElementById('editTxCylinderCount').value;
+          const count = Number(value);
+          if (value && (!Number.isSafeInteger(count) || count < 1)) return;
+          quantity = value ? `${count} सिलेंडर` : '';
+        }
 
         this.store.updateTransaction(txId, {
           type: this.editTxType,
@@ -4149,6 +4248,7 @@ class App {
     const modalSettings = document.getElementById('modalSettings');
 
     const openSettings = () => {
+      this.lendingLock.lock();
       const s = this.store.getSettings();
       document.getElementById('settingReminderTime').value = s.eveningReminderTime || '19:30';
       document.getElementById('settingNotifToggle').checked = s.reminderEnabled !== false;
@@ -4595,13 +4695,7 @@ class App {
     // Data Export & Import
     const btnExport = document.getElementById('btnExportData');
     if (btnExport) {
-      btnExport.addEventListener('click', () => {
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(this.store.exportData());
-        const dlAnchor = document.createElement('a');
-        dlAnchor.setAttribute("href", dataStr);
-        dlAnchor.setAttribute("download", `site_diary_backup_${getTodayString()}.json`);
-        dlAnchor.click();
-      });
+      btnExport.addEventListener('click', () => this.downloadBackup());
     }
 
     const btnImport = document.getElementById('btnImportData');
@@ -4655,7 +4749,7 @@ class App {
         )) return;
 
         if (confirm('पहले एक बैकअप फ़ाइल सेव कर लें?\n\nOK = बैकअप सेव करें (सुझाव)\nCancel = बिना बैकअप के आगे बढ़ें')) {
-          document.getElementById('btnExportData')?.click();
+          if (!await this.downloadBackup()) return;
           // Give the download a moment before the data it points at disappears.
           await new Promise(r => setTimeout(r, 1200));
         }
@@ -4898,7 +4992,7 @@ class App {
       siteTxs.forEach(t => {
         const meta = getTxTypeMeta(t.type);
         const where = t.targetType === 'group' ? `${this.store.getTrade(t.tradeId).name} ग्रुप` : (this.store.getWorker(t.workerId)?.name || 'साइट');
-        text += `- ${meta.icon} ${meta.hi} (${where}): ₹${t.amount}${t.note ? ' - ' + t.note : ''}\n`;
+        text += `- ${meta.icon} ${meta.hi}${t.quantity ? ' (' + t.quantity + ')' : ''} (${where}): ₹${t.amount}${t.note ? ' - ' + t.note : ''}\n`;
       });
     }
 
@@ -5271,6 +5365,8 @@ class App {
 
     document.getElementById('editTxId').value = tx.id;
     this.editTxType = tx.type || 'cash';
+    this.updateCylinderFields(true);
+    document.getElementById('editTxCylinderCount').value = parseInt(tx.quantity, 10) || '';
     document.querySelectorAll('#editTxTypeSwitcher .segment-btn').forEach(b => {
       b.classList.toggle('active', b.getAttribute('data-type') === this.editTxType);
     });

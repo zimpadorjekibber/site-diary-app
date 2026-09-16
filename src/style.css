@@ -3874,3 +3874,26 @@ body {
   font-size: 0.75rem;
   color: var(--text-muted);
 }
+.lending-lock-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.lending-password-dialog {
+  margin: auto;
+  width: min(420px, calc(100% - 32px));
+  max-height: 90dvh;
+  overflow: auto;
+  border: 1px solid var(--border-color, #ddd);
+  border-radius: 18px;
+  padding: 22px;
+  background: var(--bg-card, #fff);
+  color: var(--text-main, #222);
+}
+
+.lending-password-dialog::backdrop { background: rgba(0, 0, 0, 0.65); }
+.lending-password-dialog .form-label { margin-top: 16px; }
+.lending-password-error { color: #c62828; min-height: 1.5em; }
+#lendingPrivateContent[hidden], #lendingLocked[hidden] { display: none !important; }

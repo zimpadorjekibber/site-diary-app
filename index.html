@@ -554,6 +554,11 @@
           </div>
         </div>
 
+        <div id="cylinderFields" class="form-group" style="display: none;">
+          <label class="form-label" for="txCylinderCount">सिलेंडर की संख्या (Cylinder count):</label>
+          <input type="number" id="txCylinderCount" class="form-input" placeholder="जैसे: 2" min="1" step="1" inputmode="numeric" disabled />
+        </div>
+
         <!-- Amount Field -->
         <div class="form-group">
           <label class="form-label" id="txAmountLabel">रकम / खर्च (Amount in ₹):</label>
@@ -591,6 +596,16 @@
     <!-- TAB 6: LENDING REGISTER (उधार) — shared across every job, because lending
          in a village is personal rather than tied to one site. -->
     <section id="tab-lending" class="tab-view">
+      <div id="lendingLocked" class="lending-empty">
+        <h3>🔒 उधार का हिसाब निजी है</h3>
+        <p>हिसाब देखने के लिए अपना पासवर्ड भरें। पहली बार यहीं पासवर्ड बनाएँ।</p>
+        <button type="button" class="btn-primary" id="btnUnlockLending">🔓 पासवर्ड से खोलें / सेट करें</button>
+      </div>
+      <div id="lendingPrivateContent" hidden>
+      <div class="lending-lock-actions">
+        <button type="button" class="btn-secondary" id="btnChangeLendingPassword">पासवर्ड बदलें</button>
+        <button type="button" class="btn-secondary" id="btnLockLending">🔒 लॉक करें</button>
+      </div>
       <div class="lending-summary" id="lendingSummary"></div>
 
       <div class="lending-actions">
@@ -611,6 +626,7 @@
       </div>
 
       <div id="lendingList"></div>
+      </div>
     </section>
 
   <!-- ADD / EDIT A LENDING ENTRY -->
@@ -1597,6 +1613,11 @@
         <div class="form-group" id="editTxWorkerSelectGroup">
           <label class="form-label">कारीगर का नाम:</label>
           <select id="editTxWorkerSelect" class="form-select"></select>
+        </div>
+
+        <div id="editCylinderFields" class="form-group" style="display: none;">
+          <label class="form-label" for="editTxCylinderCount">सिलेंडर की संख्या (Cylinder count):</label>
+          <input type="number" id="editTxCylinderCount" class="form-input" placeholder="जैसे: 2" min="1" step="1" inputmode="numeric" disabled />
         </div>
 
         <div id="editRationFields" style="display: none;">
