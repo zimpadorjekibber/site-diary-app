@@ -2,7 +2,12 @@
 android/
 dist/
 scripts/
-src/
+# The endpoint needs one file from here: tools.js and writer.js both import
+# ../src/storage.js, so that the MCP server does the ledger's arithmetic with
+# the app's own code rather than a second copy of it. Excluding all of src/
+# left the function unable to resolve it at all.
+src/*
+!src/storage.js
 index.html
 *.apk
 *.jks
