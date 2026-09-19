@@ -2226,6 +2226,115 @@ body {
   .diary-table td[colspan] { grid-column: 1 / -1; grid-row: 1; text-align: center; }
 }
 
+/* SITE NOTES — what happened that was neither a mark nor an amount.
+   Styled as lines on the page rather than as a table: a note is a sentence,
+   not a row of figures. */
+.diary-notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.92rem;
+}
+
+.diary-note-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  border-bottom: 1px dotted var(--text-muted);
+  padding-bottom: 5px;
+}
+
+.diary-note-time {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.diary-note-text {
+  flex: 1;
+  line-height: 1.45;
+  overflow-wrap: break-word;
+}
+
+.diary-note-trade {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* Small and quiet until pointed at: deleting is not what this screen is for. */
+.diary-note-delete {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.diary-note-delete:hover {
+  color: #b91c1c;
+}
+
+.diary-notes-empty {
+  color: #94a3b8;
+  font-style: italic;
+  text-align: center;
+  padding: 6px 0;
+}
+
+.diary-note-form {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.diary-note-input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-card);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+
+.diary-note-input:focus {
+  outline: none;
+  border-color: #d97706;
+}
+
+.btn-add-note {
+  flex-shrink: 0;
+  padding: 10px 16px;
+  border: 1px solid #d97706;
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.15);
+  color: #78350f;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-add-note:active {
+  transform: scale(0.98);
+}
+
+/* A phone keyboard leaves no room for a button beside the field. */
+@media (max-width: 560px) {
+  .diary-note-form { flex-direction: column; }
+  .btn-add-note { width: 100%; }
+}
+
+/* The slip that goes to paper carries the notes, not the box they were typed in. */
+@media print {
+  .diary-note-form, .diary-note-delete { display: none !important; }
+}
+
 .diary-grand-total {
   background: rgba(245, 158, 11, 0.15);
   border: 2px solid #d97706;

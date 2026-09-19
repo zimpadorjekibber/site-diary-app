@@ -163,6 +163,17 @@ function cleanAbsenceReason(status, reason) {
   return String(reason == null ? '' : reason).trim().slice(0, 60);
 }
 
+/* A note is typed on a phone at the end of a long day, so it is taken exactly
+   as written — Hindi, English or both. Only the length is capped, generously:
+   long enough for what actually happened ("2:15 PM light chali gayi, kaam nahi
+   ho raha"), short enough that a day's notes still fit on the diary slip and
+   the whole ledger still fits in one Firestore document. */
+const SITE_NOTE_MAX_LENGTH = 500;
+
+function cleanSiteNoteText(text) {
+  return String(text == null ? '' : text).trim().slice(0, SITE_NOTE_MAX_LENGTH);
+}
+
 /** Hours between two "HH:MM" times. Work that runs past midnight is real on a
     site — a slab pour, a night dig — so an end before the start means next day. */
 export function computeHours(startTime, endTime) {
@@ -383,6 +394,7 @@ export class Store {
           haziri: data.haziri || {},
           haziriMeta: data.haziriMeta || {},
           diaryNotedDates: data.diaryNotedDates || {},
+          siteNotes: data.siteNotes || [],
           isCleanStarted: data.isCleanStarted === true
         }];
 
@@ -394,7 +406,8 @@ export class Store {
         transactions: p.transactions || [],
         haziri: p.haziri || {},
         haziriMeta: p.haziriMeta || {},
-        diaryNotedDates: p.diaryNotedDates || {}
+        diaryNotedDates: p.diaryNotedDates || {},
+        siteNotes: p.siteNotes || []
       })),
       activeProjectId: projects.some(p => p.id === data.activeProjectId)
         ? data.activeProjectId
@@ -457,6 +470,7 @@ export class Store {
       haziri: {},
       haziriMeta: {},
       diaryNotedDates: {},
+      siteNotes: [],
       isCleanStarted: true
     };
     this.data.projects.push(project);
@@ -659,6 +673,7 @@ export class Store {
         haziri: parsed.haziri || {},
         haziriMeta: parsed.haziriMeta || {},
         diaryNotedDates: parsed.diaryNotedDates || {},
+        siteNotes: parsed.siteNotes || [],
         isCleanStarted: parsed.isCleanStarted === true
       }];
       parsed.activeProjectId = parsed.projects[0].id;
@@ -669,6 +684,7 @@ export class Store {
       delete parsed.haziri;
       delete parsed.haziriMeta;
       delete parsed.diaryNotedDates;
+      delete parsed.siteNotes;
       delete parsed.isCleanStarted;
       needsSave = true;
     }
@@ -704,6 +720,8 @@ export class Store {
       project.haziri = project.haziri || {};
       project.haziriMeta = project.haziriMeta || {};
       project.diaryNotedDates = project.diaryNotedDates || {};
+      // Jobs that predate site notes simply have none.
+      project.siteNotes = project.siteNotes || [];
 
       // New built-in supplier trades reach existing jobs too; DEFAULT_TRADES only
       // applies to a first run. Trades the user deleted stay deleted.
@@ -779,6 +797,7 @@ export class Store {
       haziri: {},
       haziriMeta: {},
       diaryNotedDates: {},
+      siteNotes: [],
       isCleanStarted: false
     };
     const initial = {
@@ -883,6 +902,7 @@ export class Store {
     project.haziri = {};
     project.haziriMeta = {};
     project.diaryNotedDates = {};
+    project.siteNotes = [];
     // Marks the ledger as deliberately empty so the demo seed never returns.
     project.isCleanStarted = true;
     this.save();
@@ -1508,6 +1528,81 @@ export class Store {
       delete this.activeProject().diaryNotedDates[date];
     }
     this.save();
+  }
+
+  /* ===================================================
+     SITE NOTES (साइट के नोट)
+
+     Not everything about a day is a worker, a mark or an amount. The power goes
+     at 2:15 and the pour stops; the inspector comes; it rains until noon. None
+     of that fits attendance or an expense, and until now it had nowhere to go —
+     so it was either lost or forced into the note field of some unrelated
+     payment.
+
+     Stored per job alongside attendance and transactions, for the same reason
+     they are: a note belongs to one job's ledger, travels with it to the cloud
+     in the same document, and comes back with it in a backup.
+  =================================================== */
+
+  /** @param {string|null} date YYYY-MM-DD, or null for every note in this job. */
+  getSiteNotes(date = null) {
+    const notes = this.activeProject().siteNotes || [];
+    if (!date) return notes;
+    return notes.filter(n => n.date === date);
+  }
+
+  /**
+   * @param {object} note { date, text, tradeId }
+   * @returns the stored note. Throws if there is no text — an empty note is a
+   *   slip of the thumb, and writing it would put a blank line on the diary.
+   */
+  addSiteNote(note) {
+    const text = cleanSiteNoteText(note.text);
+    if (!text) throw new Error('नोट खाली है');
+
+    const newNote = {
+      id: makeId('note'),
+      date: note.date || getTodayString(),
+      text,
+      // null, never undefined — Firestore rejects an undefined field and fails
+      // the whole backup, the same trap addTransaction documents above.
+      tradeId: note.tradeId || null,
+      // The time it was written, not the time being written about: "light chali
+      // gayi at 2:15" belongs in the text, where the man put it.
+      time: note.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      createdAt: Date.now()
+    };
+    // Newest first, matching transactions.
+    this.activeProject().siteNotes.unshift(newNote);
+    this.save();
+    return newNote;
+  }
+
+  updateSiteNote(id, updates) {
+    const notes = this.activeProject().siteNotes;
+    const idx = notes.findIndex(n => n.id === id);
+    if (idx === -1) return null;
+
+    const next = { ...notes[idx] };
+    if (updates.text !== undefined) {
+      const text = cleanSiteNoteText(updates.text);
+      if (!text) throw new Error('नोट खाली है');
+      next.text = text;
+    }
+    if (updates.date !== undefined) next.date = updates.date || next.date;
+    if (updates.tradeId !== undefined) next.tradeId = updates.tradeId || null;
+
+    notes[idx] = next;
+    this.save();
+    return next;
+  }
+
+  deleteSiteNote(id) {
+    const project = this.activeProject();
+    const before = project.siteNotes.length;
+    project.siteNotes = project.siteNotes.filter(n => n.id !== id);
+    this.save();
+    return project.siteNotes.length < before;
   }
 
   // --- SETTINGS ---

@@ -104,6 +104,16 @@ function describeWorker(store, w) {
   return base;
 }
 
+/** One note as it reads outside the app: the trade spelled out, and no ids. */
+function describeNote(store, n) {
+  return {
+    date: n.date,
+    time: n.time || null,
+    text: n.text,
+    trade: n.tradeId ? store.getTrade(n.tradeId).name : null
+  };
+}
+
 const TOOLS = [
   {
     name: 'site_summary',
@@ -198,6 +208,23 @@ const TOOLS = [
         to: { type: 'string', description: 'YYYY-MM-DD, inclusive.' }
       }
     }
+  },
+  {
+    name: 'list_site_notes',
+    description:
+      'Plain notes written about the site on a day — what held the work up, who came, what the ' +
+      'weather did. Newest first. Use for questions about what happened on site as opposed to ' +
+      'who was present or what was spent.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        date: { type: 'string', description: 'YYYY-MM-DD, one day only. Overrides dateFrom/dateTo.' },
+        dateFrom: { type: 'string', description: 'YYYY-MM-DD, inclusive.' },
+        dateTo: { type: 'string', description: 'YYYY-MM-DD, inclusive.' },
+        trade: { type: 'string', description: 'Only notes tied to this work group.' },
+        limit: { type: 'number', description: 'Max rows, default 50.' }
+      }
+    }
   }
 ];
 
@@ -208,6 +235,7 @@ const handlers = {
     const txs = store.getTransactions(day);
     const haziri = store.getHaziri(day);
     const workers = store.getWorkers();
+    const notes = store.getSiteNotes(day);
 
     const byType = {};
     for (const t of txs) byType[t.type] = (byType[t.type] || 0) + (Number(t.amount) || 0);
@@ -227,6 +255,9 @@ const handlers = {
       attendance: { present, halfDay: half, absent, notMarked: workers.length - Object.keys(haziri).length },
       totalWorkers: workers.length,
       trades: store.getTrades().map(t => t.name),
+      // What happened on site that is neither a mark nor an amount. Left out
+      // entirely on a day with none, so the summary does not grow an empty list.
+      notes: notes.length ? notes.map(n => describeNote(store, n)) : undefined,
       diaryWritten: store.isDateMarkedInDiary(day)
     };
   },
@@ -391,6 +422,40 @@ const handlers = {
     };
   },
 
+  async list_site_notes({ date, dateFrom, dateTo, trade, limit }) {
+    const store = await getStore();
+    let notes = date ? store.getSiteNotes(date) : store.getSiteNotes();
+
+    if (!date) {
+      if (dateFrom) notes = notes.filter(n => n.date >= dateFrom);
+      if (dateTo) notes = notes.filter(n => n.date <= dateTo);
+    }
+    if (trade) {
+      const needle = String(trade).toLowerCase();
+      const match = store.getTrades().find(
+        t => t.id.toLowerCase() === needle || t.name.toLowerCase().includes(needle)
+      );
+      if (!match) {
+        return { error: `No trade matching "${trade}". Available: ${store.getTrades().map(t => t.name).join(', ')}` };
+      }
+      notes = notes.filter(n => n.tradeId === match.id);
+    }
+
+    /* Newest first. Sorted on createdAt rather than on the displayed time,
+       which is a locale string ("03:33 PM") and does not order correctly as
+       text — 11 AM would sort after 3 PM. */
+    notes = notes.slice().sort(
+      (a, b) => b.date.localeCompare(a.date) || (b.createdAt || 0) - (a.createdAt || 0)
+    );
+    const capped = notes.slice(0, limit || 50);
+
+    return {
+      matched: notes.length,
+      returned: capped.length,
+      notes: capped.map(n => describeNote(store, n))
+    };
+  },
+
   async spend_report({ from, to }) {
     const store = await getStore();
     let txs = store.getTransactions();
@@ -514,6 +579,24 @@ const WRITE_TOOLS = [
         date: { type: 'string', description: 'YYYY-MM-DD. Defaults to today.' }
       },
       required: ['amount']
+    }
+  },
+  {
+    name: 'add_site_note',
+    description:
+      'Write a plain note about the site for a day — what stopped the work, who visited, what ' +
+      'the weather did, anything worth remembering that is not attendance and not money. ' +
+      "Record it in the user's own words, Hindi or English, including any time of day they " +
+      'mention ("2:15 PM light chali gayi"). Use add_expense instead when money was spent, and ' +
+      'mark_attendance when it is about who worked.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: "The note, in the user's own words." },
+        date: { type: 'string', description: 'YYYY-MM-DD. Defaults to today.' },
+        trade: { type: 'string', description: 'Only if the note is about one work group, e.g. the masons.' }
+      },
+      required: ['text']
     }
   },
   {
@@ -738,6 +821,26 @@ const writeHandlers = {
         type: getTxTypeLabel(tx.type, 'en'),
         paidTo: worker ? worker.name : `${trade.name} (shared)`,
         date,
+        note: 'Open the app on the phone to pull this in.'
+      };
+    });
+  },
+
+  async add_site_note(args) {
+    return mutateLedger(siteRef, (store) => {
+      const text = String(args.text || '').trim();
+      if (!text) throw new Error('What should the note say?');
+
+      const date = validDate(args.date);
+      // Optional: most notes are about the day, not about one group.
+      const trade = args.trade ? findTrade(store, args.trade) : null;
+
+      const note = store.addSiteNote({ date, text, tradeId: trade ? trade.id : null });
+
+      return {
+        wrote: note.text,
+        date,
+        trade: trade ? trade.name : null,
         note: 'Open the app on the phone to pull this in.'
       };
     });

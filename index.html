@@ -450,7 +450,32 @@
               </table>
             </div>
 
-            <!-- 4. GRAND TOTAL OF TODAY -->
+            <!-- 4. PLAIN NOTES ABOUT THE DAY -->
+            <div>
+              <div class="diary-section-heading">
+                <span>📝 4. आज के नोट (Site Notes)</span>
+              </div>
+              <div class="diary-notes-list" id="diaryNotesList">
+                <!-- Injected via JS -->
+              </div>
+              <!-- Typed here as well as dictated to the assistant. Hidden when the
+                   slip is printed — a paper diary has no use for a text box. -->
+              <div class="diary-note-form">
+                <input
+                  type="text"
+                  id="diaryNoteInput"
+                  class="diary-note-input"
+                  maxlength="500"
+                  placeholder="जैसे: 2:15 PM लाइट चली गई, काम नहीं हो रहा"
+                  aria-label="आज का नोट"
+                />
+                <button type="button" id="btnAddDiaryNote" class="btn-add-note">
+                  + नोट जोड़ें
+                </button>
+              </div>
+            </div>
+
+            <!-- 5. GRAND TOTAL OF TODAY -->
             <div class="diary-grand-total">
               <span>आज का कुल खर्च (Total Expense):</span>
               <span id="diaryGrandTotalVal">₹0</span>

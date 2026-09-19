@@ -2712,14 +2712,35 @@ class App {
       }
     }
 
-    // 5. Grand Total
+    // 5. Site notes — what happened that was neither a mark nor an amount.
+    const notesList = document.getElementById('diaryNotesList');
+    if (notesList) {
+      const notes = this.store.getSiteNotes(today);
+      if (notes.length === 0) {
+        notesList.innerHTML = `<div class="diary-notes-empty">आज का कोई नोट नहीं — नीचे लिखकर जोड़ें</div>`;
+      } else {
+        notesList.innerHTML = notes.map(n => {
+          const trade = n.tradeId ? this.store.getTrade(n.tradeId) : null;
+          return `
+            <div class="diary-note-row">
+              <span class="diary-note-time">${esc(n.time || '')}</span>
+              <span class="diary-note-text">${esc(n.text)}</span>
+              ${trade ? `<span class="diary-note-trade">${esc(trade.name)}</span>` : ''}
+              <button type="button" class="diary-note-delete" data-delete-note="${esc(n.id)}" aria-label="नोट हटाएँ">✕</button>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+
+    // 6. Grand Total
     const grandTotal = txs.reduce((sum, t) => sum + (t.amount || 0), 0);
     const grandTotalEl = document.getElementById('diaryGrandTotalVal');
     if (grandTotalEl) {
       grandTotalEl.textContent = `₹${grandTotal.toLocaleString('en-IN')}`;
     }
 
-    // 6. Marked button status
+    // 7. Marked button status
     const btnMark = document.getElementById('btnMarkInDiary');
     const markedDesc = document.getElementById('markedStatusDesc');
     if (btnMark) {
@@ -4336,6 +4357,39 @@ class App {
       });
     }
 
+    /* Add a site note. Kept next to the diary it belongs to, so a note can be
+       typed on the spot rather than only dictated to the assistant. */
+    const noteInput = document.getElementById('diaryNoteInput');
+    const addNote = () => {
+      const text = (noteInput?.value || '').trim();
+      if (!text) {
+        this.showToast(this.currentLang === 'en' ? 'Type the note first.' : 'पहले नोट लिखें');
+        noteInput?.focus();
+        return;
+      }
+      this.store.addSiteNote({ date: getTodayString(), text });
+      noteInput.value = '';
+      this.commit('site-note');
+      this.showToast(this.currentLang === 'en' ? 'Note added' : 'नोट जुड़ गया');
+    };
+
+    document.getElementById('btnAddDiaryNote')?.addEventListener('click', addNote);
+    // Enter saves too: the keyboard is already open and the thumb is already there.
+    noteInput?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        addNote();
+      }
+    });
+
+    document.addEventListener('click', (e) => {
+      const delNote = e.target.closest('[data-delete-note]');
+      if (delNote && confirm('यह नोट हटाएँ?')) {
+        this.store.deleteSiteNote(delNote.getAttribute('data-delete-note'));
+        this.commit('site-note');
+      }
+    });
+
     // Print Diary
     const btnPrint = document.getElementById('btnPrintDiary');
     if (btnPrint) {
@@ -5089,6 +5143,16 @@ class App {
         const meta = getTxTypeMeta(t.type);
         const where = t.targetType === 'group' ? `${this.store.getTrade(t.tradeId).name} ग्रुप` : (this.store.getWorker(t.workerId)?.name || 'साइट');
         text += `- ${meta.icon} ${meta.hi}${t.quantity ? ' (' + t.quantity + ')' : ''} (${where}): ₹${t.amount}${t.note ? ' - ' + t.note : ''}\n`;
+      });
+    }
+
+    // Notes last, just above the total: they are read as the day's postscript.
+    const notes = this.store.getSiteNotes(today);
+    if (notes.length > 0) {
+      text += `\n📝 नोट (SITE NOTES):\n`;
+      notes.forEach(n => {
+        const tr = n.tradeId ? ` [${this.store.getTrade(n.tradeId).name}]` : '';
+        text += `- ${n.time ? n.time + ' ' : ''}${n.text}${tr}\n`;
       });
     }
 
