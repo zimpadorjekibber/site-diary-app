@@ -254,6 +254,32 @@
       <div id="haziriTradesContainer">
         <!-- Rendered per trade group with All Present button, compact toggle rows, and bottom summary dock -->
       </div>
+
+      <!-- A note about the day, written where the day is actually worked. Ties to
+           the date chosen above, not to today, so a register filled in the next
+           morning still gets its note on the right day. -->
+      <div class="haziri-notes-card">
+        <div class="haziri-notes-heading">
+          <span>📝 दिन का नोट (Note)</span>
+          <span class="haziri-notes-date" id="haziriNotesDate"></span>
+        </div>
+        <div class="diary-notes-list" id="haziriNotesList">
+          <!-- Injected via JS -->
+        </div>
+        <div class="diary-note-form">
+          <input
+            type="text"
+            id="haziriNoteInput"
+            class="diary-note-input"
+            maxlength="500"
+            placeholder="जैसे: 2:15 PM लाइट चली गई, काम नहीं हो रहा"
+            aria-label="दिन का नोट"
+          />
+          <button type="button" id="btnAddHaziriNote" class="btn-add-note">
+            + नोट जोड़ें
+          </button>
+        </div>
+      </div>
     </section>
 
     <!-- TAB 3: MONTHLY MUSTER ROLL REGISTER (पूरे महीने का हाजिरी रजिस्टर) -->

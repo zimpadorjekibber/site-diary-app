@@ -1980,6 +1980,10 @@ class App {
 
   // --- TAB 2: HAZIRI (ATTENDANCE) ---
   renderHaziri() {
+    // First, and outside the roster: a site with no workers yet still has days
+    // worth writing about, and the roster's own early return would skip this.
+    this.renderHaziriNotes();
+
     const container = document.getElementById('haziriTradesContainer');
     if (!container) return;
 
@@ -2713,25 +2717,7 @@ class App {
     }
 
     // 5. Site notes — what happened that was neither a mark nor an amount.
-    const notesList = document.getElementById('diaryNotesList');
-    if (notesList) {
-      const notes = this.store.getSiteNotes(today);
-      if (notes.length === 0) {
-        notesList.innerHTML = `<div class="diary-notes-empty">आज का कोई नोट नहीं — नीचे लिखकर जोड़ें</div>`;
-      } else {
-        notesList.innerHTML = notes.map(n => {
-          const trade = n.tradeId ? this.store.getTrade(n.tradeId) : null;
-          return `
-            <div class="diary-note-row">
-              <span class="diary-note-time">${esc(n.time || '')}</span>
-              <span class="diary-note-text">${esc(n.text)}</span>
-              ${trade ? `<span class="diary-note-trade">${esc(trade.name)}</span>` : ''}
-              <button type="button" class="diary-note-delete" data-delete-note="${esc(n.id)}" aria-label="नोट हटाएँ">✕</button>
-            </div>
-          `;
-        }).join('');
-      }
-    }
+    this.renderNotesInto('diaryNotesList', today);
 
     // 6. Grand Total
     const grandTotal = txs.reduce((sum, t) => sum + (t.amount || 0), 0);
@@ -2754,6 +2740,66 @@ class App {
         if (markedDesc) markedDesc.textContent = 'डायरी में नोट करने के बाद नीचे बटन दबाएं ताकि शाम का रिमाइंडर शांत हो जाए।';
       }
     }
+  }
+
+  /* One list of notes, drawn the same way wherever it is asked for: on the
+     attendance screen where the day is worked, and on the diary slip where the
+     day is copied into the paper register. */
+  renderNotesInto(elementId, date) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+
+    const notes = this.store.getSiteNotes(date);
+    if (notes.length === 0) {
+      el.innerHTML = `<div class="diary-notes-empty">${this.currentLang === 'en'
+        ? 'No note for this day — write one below'
+        : 'इस दिन का कोई नोट नहीं — नीचे लिखकर जोड़ें'}</div>`;
+      return;
+    }
+
+    el.innerHTML = notes.map(n => {
+      const trade = n.tradeId ? this.store.getTrade(n.tradeId) : null;
+      return `
+        <div class="diary-note-row">
+          <span class="diary-note-time">${esc(n.time || '')}</span>
+          <span class="diary-note-text">${esc(n.text)}</span>
+          ${trade ? `<span class="diary-note-trade">${esc(trade.name)}</span>` : ''}
+          <button type="button" class="diary-note-delete" data-delete-note="${esc(n.id)}" aria-label="नोट हटाएँ">✕</button>
+        </div>
+      `;
+    }).join('');
+  }
+
+  /** The attendance screen's notes follow the date chip, not today. */
+  renderHaziriNotes() {
+    const date = this.selectedHaziriDate || getTodayString();
+    this.renderNotesInto('haziriNotesList', date);
+
+    const dateEl = document.getElementById('haziriNotesDate');
+    if (dateEl) {
+      dateEl.textContent = date === getTodayString()
+        ? (this.currentLang === 'en' ? 'today' : 'आज')
+        : new Date(`${date}T12:00:00`).toLocaleDateString(
+            this.currentLang === 'en' ? 'en-IN' : 'hi-IN', { day: 'numeric', month: 'short' });
+    }
+  }
+
+  /**
+   * Saves what is typed in a note box against one date, and clears it.
+   * Shared by both boxes so neither can drift from the other.
+   */
+  addNoteFrom(inputId, date) {
+    const input = document.getElementById(inputId);
+    const text = (input?.value || '').trim();
+    if (!text) {
+      this.showToast(this.currentLang === 'en' ? 'Type the note first.' : 'पहले नोट लिखें');
+      input?.focus();
+      return;
+    }
+    this.store.addSiteNote({ date, text });
+    input.value = '';
+    this.commit('site-note');
+    this.showToast(this.currentLang === 'en' ? 'Note added' : 'नोट जुड़ गया');
   }
 
   // --- FORM HELPERS & POPULATION ---
@@ -4359,27 +4405,19 @@ class App {
 
     /* Add a site note. Kept next to the diary it belongs to, so a note can be
        typed on the spot rather than only dictated to the assistant. */
-    const noteInput = document.getElementById('diaryNoteInput');
-    const addNote = () => {
-      const text = (noteInput?.value || '').trim();
-      if (!text) {
-        this.showToast(this.currentLang === 'en' ? 'Type the note first.' : 'पहले नोट लिखें');
-        noteInput?.focus();
-        return;
-      }
-      this.store.addSiteNote({ date: getTodayString(), text });
-      noteInput.value = '';
-      this.commit('site-note');
-      this.showToast(this.currentLang === 'en' ? 'Note added' : 'नोट जुड़ गया');
-    };
+    const diaryNote = () => this.addNoteFrom('diaryNoteInput', getTodayString());
+    // The attendance box writes to the date on the chip above it.
+    const haziriNote = () => this.addNoteFrom('haziriNoteInput', this.selectedHaziriDate || getTodayString());
 
-    document.getElementById('btnAddDiaryNote')?.addEventListener('click', addNote);
+    document.getElementById('btnAddDiaryNote')?.addEventListener('click', diaryNote);
+    document.getElementById('btnAddHaziriNote')?.addEventListener('click', haziriNote);
+
     // Enter saves too: the keyboard is already open and the thumb is already there.
-    noteInput?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        addNote();
-      }
+    document.getElementById('diaryNoteInput')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); diaryNote(); }
+    });
+    document.getElementById('haziriNoteInput')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); haziriNote(); }
     });
 
     document.addEventListener('click', (e) => {

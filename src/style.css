@@ -2226,6 +2226,41 @@ body {
   .diary-table td[colspan] { grid-column: 1 / -1; grid-row: 1; text-align: center; }
 }
 
+/* The same notes, on the attendance screen — an ordinary app card there,
+   rather than the paper-page look the diary slip wears. */
+.haziri-notes-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  margin-top: 14px;
+}
+
+.haziri-notes-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 10px;
+}
+
+.haziri-notes-date {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.haziri-notes-card .diary-note-row {
+  border-bottom: 1px solid var(--border-card);
+}
+
+.haziri-notes-card .diary-note-text {
+  color: var(--text-main);
+}
+
 /* SITE NOTES — what happened that was neither a mark nor an amount.
    Styled as lines on the page rather than as a table: a note is a sentence,
    not a row of figures. */
