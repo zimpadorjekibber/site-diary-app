@@ -75,6 +75,29 @@ test('a note can name one work group, and usually does not', () => {
   assert.equal(plain.tradeId, null);
 });
 
+test('a note can be written against one worker on one day', () => {
+  const store = ledger();
+  const onWeld = store.addSiteNote({ date: DAY, text: 'jaldi chala gaya', workerId: 'w1' });
+  store.addSiteNote({ date: DAY, text: 'paani nahi aaya' });            // about the site
+  store.addSiteNote({ date: NEXT_DAY, text: 'aaj theek tha', workerId: 'w1' });
+
+  assert.equal(onWeld.workerId, 'w1');
+  assert.deepEqual(store.getWorkerSiteNotes(DAY, 'w1').map(n => n.text), ['jaldi chala gaya']);
+  // Another day's note about the same man does not leak into this one.
+  assert.deepEqual(store.getWorkerSiteNotes(NEXT_DAY, 'w1').map(n => n.text), ['aaj theek tha']);
+  assert.deepEqual(store.getWorkerSiteNotes(DAY, 'w2'), []);
+
+  // The day still shows both — the man's note and the site's.
+  assert.equal(store.getSiteNotes(DAY).length, 2);
+});
+
+test('a site note names no worker, and never undefined', () => {
+  const store = ledger();
+  const note = store.addSiteNote({ date: DAY, text: 'barish thi' });
+  assert.equal(note.workerId, null);
+  for (const value of Object.values(note)) assert.notEqual(value, undefined);
+});
+
 test('an empty note is refused rather than written as a blank line', () => {
   const store = ledger();
   assert.throws(() => store.addSiteNote({ date: DAY, text: '' }));

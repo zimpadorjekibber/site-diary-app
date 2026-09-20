@@ -15,7 +15,7 @@
 
 import { SiteDiaryClient } from './firestore.js';
 import { mutateLedger, findWorker, findTrade, validDate, todayString as writerToday } from './writer.js';
-import { Store, getThekaTotal, describeTheka, getTxTypeLabel, ABSENCE_REASONS, absenceReasonLabel } from '../src/storage.js';
+import { Store, getThekaTotal, describeTheka, getTxTypeLabel, ABSENCE_REASONS, absenceReasonLabel, supplierRoleLabel } from '../src/storage.js';
 
 const READ_ONLY = process.env.SITE_DIARY_READONLY === '1';
 
@@ -73,6 +73,9 @@ function resolveWorker(store, nameOrId) {
     as "Mistri" beside a seven-lakh contract looks like a mistake, so every
     place that reports a role goes through here rather than through w.role. */
 function roleLabel(w) {
+  // A tractor or JCB man is an owner or a driver, never a mistri or a helper.
+  const supplierRole = supplierRoleLabel(w.role, 'en');
+  if (supplierRole) return supplierRole;
   if (!w.isThekedar) return w.role === 'mistri' ? 'Mistri' : 'Helper';
   return w.worksHimself === false
     ? 'Thekedar (does not work on site)'
@@ -110,6 +113,8 @@ function describeNote(store, n) {
     date: n.date,
     time: n.time || null,
     text: n.text,
+    // Written on a worker's own attendance row, or about the site at large.
+    worker: n.workerId ? (store.getWorker(n.workerId)?.name || null) : null,
     trade: n.tradeId ? store.getTrade(n.tradeId).name : null
   };
 }

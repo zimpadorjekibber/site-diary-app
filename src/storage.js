@@ -110,6 +110,17 @@ export const TX_TYPES = [
    the owner confirmed they differ — reta is not priced like bajri. The rates
    live on the supplier (a worker record), not here; these are just the defaults
    offered when setting one up. */
+/* Who a supplier is, as against what a craftsman does. A tractor or a JCB has
+   an owner and a driver — sometimes the same man, often not — and neither is a
+   mistri or a helper. */
+export const SUPPLIER_ROLES = ['malik', 'driver'];
+
+export function supplierRoleLabel(role, lang = 'hi') {
+  if (role === 'malik') return lang === 'en' ? 'Owner' : 'मालिक';
+  if (role === 'driver') return lang === 'en' ? 'Driver' : 'ड्राइवर';
+  return '';
+}
+
 export const TROLLEY_MATERIALS = [
   { id: 'reta',   hi: 'रेता',   en: 'Reta (sand)' },
   { id: 'balu',   hi: 'बालू',   en: 'Balu (fine sand)' },
@@ -970,7 +981,7 @@ export class Store {
       id,
       name: name.trim(),
       tradeId,
-      role: role || 'mistri', // 'mistri' or 'helper'
+      role: role || 'mistri', // 'mistri', 'helper', 'thekedar', or a SUPPLIER_ROLE
       contractType: isTheka ? 'theka' : 'dihadi',
       isThekedar: holdsContract,
       dailyRate: isTheka ? 0 : (Number(dailyRate) || 0),
@@ -1567,6 +1578,9 @@ export class Store {
       // null, never undefined — Firestore rejects an undefined field and fails
       // the whole backup, the same trap addTransaction documents above.
       tradeId: note.tradeId || null,
+      // A note written on a worker's own attendance row belongs to that worker
+      // on that day. Null for a note about the site as a whole.
+      workerId: note.workerId || null,
       // The time it was written, not the time being written about: "light chali
       // gayi at 2:15" belongs in the text, where the man put it.
       time: note.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -1576,6 +1590,11 @@ export class Store {
     this.activeProject().siteNotes.unshift(newNote);
     this.save();
     return newNote;
+  }
+
+  /** Notes written against one worker on one date, newest first. */
+  getWorkerSiteNotes(date, workerId) {
+    return this.getSiteNotes(date).filter(n => n.workerId === workerId);
   }
 
   updateSiteNote(id, updates) {
@@ -1591,6 +1610,7 @@ export class Store {
     }
     if (updates.date !== undefined) next.date = updates.date || next.date;
     if (updates.tradeId !== undefined) next.tradeId = updates.tradeId || null;
+    if (updates.workerId !== undefined) next.workerId = updates.workerId || null;
 
     notes[idx] = next;
     this.save();

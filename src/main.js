@@ -2758,11 +2758,15 @@ class App {
     }
 
     el.innerHTML = notes.map(n => {
-      const trade = n.tradeId ? this.store.getTrade(n.tradeId) : null;
+      // A note written on a worker's row says whose day it was about; one about
+      // the site at large falls back to the trade, if it named one.
+      const worker = n.workerId ? this.store.getWorker(n.workerId) : null;
+      const trade = !worker && n.tradeId ? this.store.getTrade(n.tradeId) : null;
       return `
         <div class="diary-note-row">
           <span class="diary-note-time">${esc(n.time || '')}</span>
           <span class="diary-note-text">${esc(n.text)}</span>
+          ${worker ? `<span class="diary-note-trade">${esc(worker.name)}</span>` : ''}
           ${trade ? `<span class="diary-note-trade">${esc(trade.name)}</span>` : ''}
           <button type="button" class="diary-note-delete" data-delete-note="${esc(n.id)}" aria-label="नोट हटाएँ">✕</button>
         </div>
@@ -4151,6 +4155,17 @@ class App {
     }
 
     // Form Add Worker Submit
+    document.getElementById('workerTradeSelect')?.addEventListener('change', () => this.syncWorkerFormToTrade());
+
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('#workerSupplierRoleSwitcher .segment-btn');
+      if (!btn) return;
+      this.modalSupplierRole = btn.getAttribute('data-supplier-role');
+      this.modalWorkerRole = this.modalSupplierRole;
+      document.querySelectorAll('#workerSupplierRoleSwitcher .segment-btn')
+        .forEach(b => b.classList.toggle('active', b === btn));
+    });
+
     const formWorker = document.getElementById('formAddWorker');
     if (formWorker) {
       formWorker.noValidate = true;
@@ -4162,7 +4177,13 @@ class App {
           return;
         }
         const tradeId = document.getElementById('workerTradeSelect').value;
-        const dailyRate = this.modalContractType === 'dihadi' ? (Number(document.getElementById('workerDailyRate').value) || 0) : 0;
+        const isSupplier = this.store.isSupplierTrade(tradeId);
+        const supplierRates = isSupplier && this.store.getSupplierKind(tradeId) === 'trolley'
+          ? this.readSupplierRateInputs()
+          : null;
+        const dailyRate = isSupplier
+          ? 0
+          : (this.modalContractType === 'dihadi' ? (Number(document.getElementById('workerDailyRate').value) || 0) : 0);
         const isTheka = this.modalContractType === 'theka';
         const thekaAmount = isTheka ? (Number(document.getElementById('workerThekaAmount').value) || 0) : 0;
         const thekaRate = isTheka ? (Number(document.getElementById('workerThekaRate')?.value) || 0) : 0;
@@ -4177,11 +4198,11 @@ class App {
           return;
         }
 
-        this.store.addWorker({
+        const addedWorker = this.store.addWorker({
           name,
           tradeId,
-          role: this.modalWorkerRole,
-          contractType: this.modalContractType,
+          role: isSupplier ? (this.modalSupplierRole || 'malik') : this.modalWorkerRole,
+          contractType: isSupplier ? 'dihadi' : this.modalContractType,
           worksHimself: this.modalWorksHimself,
           dailyRate,
           isThekedar: this.modalIsThekedar,
@@ -4194,6 +4215,12 @@ class App {
           phone,
           photoUrl: this.newWorkerPhotoDataUrl
         });
+
+        // Rates are per material and belong to this man, so they go on his
+        // record the moment he is added rather than behind a second screen.
+        if (addedWorker && supplierRates && Object.keys(supplierRates).length) {
+          this.store.setTrolleyRates(addedWorker.id, supplierRates);
+        }
 
         // Set full attendance for today for the new worker by default
         const today = getTodayString();
@@ -5080,6 +5107,92 @@ class App {
 
   }
 
+  /* The add form is one form for two different things. For a trade of workers
+     it asks for a role and a daily wage; for a tractor or a JCB neither exists —
+     that man owns or drives the vehicle, and what is owed is counted by the
+     trolley. Asking a tractor owner for his dihadi is how the form read until
+     now, and it made no sense on the one screen where it mattered most. */
+  syncWorkerFormToTrade() {
+    const tradeId = document.getElementById('workerTradeSelect')?.value;
+    const isSupplier = tradeId ? this.store.isSupplierTrade(tradeId) : false;
+    const kind = isSupplier ? this.store.getSupplierKind(tradeId) : null;
+
+    const show = (id, on) => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = on ? '' : 'none';
+    };
+
+    show('workerRoleGroup', !isSupplier);
+    show('supplierRoleGroup', isSupplier);
+    show('dihadiRateGroup', !isSupplier);
+    show('supplierTrolleyRatesGroup', isSupplier && kind === 'trolley');
+    if (isSupplier) show('thekaDetailsGroup', false);
+
+    // A hidden required field blocks a submit the user cannot see the cause of.
+    const rate = document.getElementById('workerDailyRate');
+    if (rate) {
+      if (isSupplier) rate.removeAttribute('required');
+      else rate.setAttribute('required', 'true');
+    }
+
+    if (isSupplier) {
+      this.modalWorkerRole = this.modalSupplierRole || 'malik';
+      this.modalContractType = 'dihadi';
+      this.modalIsThekedar = false;
+    }
+
+    /* The form still called him a mistri in its own title, its name label and
+       its button — the exact words that make no sense on a tractor. */
+    const text = (id, value) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    };
+    const trolley = kind === 'trolley';
+    text('addWorkerTitle', isSupplier
+      ? (trolley ? 'ट्रैक्टर वाला जोड़ें' : 'मशीन वाला जोड़ें')
+      : 'नया कारीगर / हेल्पर जोड़ें');
+    text('workerNameLabel', isSupplier
+      ? 'नाम (Name):'
+      : 'कारीगर का नाम (Worker Name):');
+    text('btnSubmitAddWorker', isSupplier
+      ? (trolley ? 'ट्रैक्टर वाला जोड़ें' : 'मशीन वाला जोड़ें')
+      : 'कारीगर जोड़ें (Add Worker)');
+
+    const nameInput = document.getElementById('workerNameInput');
+    if (nameInput) {
+      nameInput.placeholder = isSupplier
+        ? 'जैसे: राम सिंह'
+        : 'जैसे: रमेश शर्मा';
+    }
+
+    if (isSupplier && trolley) this.renderSupplierRateInputs();
+  }
+
+  /** One rate box per material, because reta is not priced like bajri. */
+  renderSupplierRateInputs(worker = null) {
+    const box = document.getElementById('supplierTrolleyRates');
+    if (!box) return;
+    box.innerHTML = TROLLEY_MATERIALS.map(mat => `
+      <label class="supplier-rate-row">
+        <span>${esc(mat.hi)}</span>
+        <input type="number" min="0" inputmode="numeric" class="form-input"
+               data-supplier-rate="${esc(mat.id)}"
+               value="${worker ? (this.store.getTrolleyRate(worker.id, mat.id) || '') : ''}"
+               placeholder="₹ / ट्रॉली" />
+      </label>
+    `).join('');
+  }
+
+  /** What was typed into those boxes, as { materialId: rate }. */
+  readSupplierRateInputs() {
+    const rates = {};
+    document.querySelectorAll('[data-supplier-rate]').forEach(input => {
+      const value = Number(input.value);
+      if (value > 0) rates[input.getAttribute('data-supplier-rate')] = value;
+    });
+    return rates;
+  }
+
   openAddWorkerModal(tradeId = null) {
     const modal = document.getElementById('modalAddWorker');
     if (!modal) return;
@@ -5115,6 +5228,13 @@ class App {
     if (thekaGroup) thekaGroup.style.display = 'none';
     if (dailyRateInput) dailyRateInput.setAttribute('required', 'true');
     if (thekaAmtInput) thekaAmtInput.removeAttribute('required');
+
+    // A tractor owner gets the tractor's form, not a craftsman's.
+    this.modalSupplierRole = 'malik';
+    document.querySelectorAll('#workerSupplierRoleSwitcher .segment-btn').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-supplier-role') === 'malik');
+    });
+    this.syncWorkerFormToTrade();
 
     modal.classList.add('open');
   }
@@ -5189,8 +5309,9 @@ class App {
     if (notes.length > 0) {
       text += `\n📝 नोट (SITE NOTES):\n`;
       notes.forEach(n => {
-        const tr = n.tradeId ? ` [${this.store.getTrade(n.tradeId).name}]` : '';
-        text += `- ${n.time ? n.time + ' ' : ''}${n.text}${tr}\n`;
+        const who = n.workerId ? this.store.getWorker(n.workerId)?.name : null;
+        const tag = who ? ` [${who}]` : (n.tradeId ? ` [${this.store.getTrade(n.tradeId).name}]` : '');
+        text += `- ${n.time ? n.time + ' ' : ''}${n.text}${tag}\n`;
       });
     }
 

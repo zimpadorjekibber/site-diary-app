@@ -940,7 +940,7 @@
   <div id="modalAddWorker" class="modal-overlay">
     <div class="modal-card">
       <div class="modal-header">
-        <h3 class="modal-title">नया कारीगर / हेल्पर जोड़ें</h3>
+        <h3 class="modal-title" id="addWorkerTitle">नया कारीगर / हेल्पर जोड़ें</h3>
         <button class="btn-close-modal" data-close-modal>&times;</button>
       </div>
       <form id="formAddWorker" novalidate>
@@ -968,7 +968,7 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label">कारीगर का नाम (Worker Name):</label>
+          <label class="form-label" id="workerNameLabel">कारीगर का नाम (Worker Name):</label>
           <input type="text" id="workerNameInput" class="form-input" placeholder="जैसे: रमेश शर्मा" required />
         </div>
 
@@ -984,7 +984,7 @@
           </select>
         </div>
 
-        <div class="form-group">
+        <div class="form-group" id="workerRoleGroup">
           <label class="form-label">पद / भूमिका (Role):</label>
           <div class="segmented-control" id="workerRoleSwitcher">
             <button type="button" class="segment-btn active" data-role="mistri">मिस्त्री (Master/Craftsman)</button>
@@ -997,6 +997,25 @@
           <div class="segmented-control" id="workerContractSwitcher">
             <button type="button" class="segment-btn active" data-contract="dihadi">👷 दिहाड़ी (Daily Wage)</button>
             <button type="button" class="segment-btn" data-contract="theka">📜 ठेका (Contract)</button>
+          </div>
+        </div>
+
+        <!-- A supplier is not a craftsman. Nobody on a tractor is a mistri or a
+             helper, and he is not paid a daily wage — he owns or drives the
+             tractor, and what is owed is counted by the trolley. -->
+        <div class="form-group" id="supplierRoleGroup" style="display: none;">
+          <label class="form-label">यह कौन है? (Owner / Driver):</label>
+          <div class="segmented-control" id="workerSupplierRoleSwitcher">
+            <button type="button" class="segment-btn active" data-supplier-role="malik">🧑‍🌾 मालिक (Owner)</button>
+            <button type="button" class="segment-btn" data-supplier-role="driver">🚜 ड्राइवर (Driver)</button>
+          </div>
+        </div>
+
+        <div class="form-group" id="supplierTrolleyRatesGroup" style="display: none;">
+          <label class="form-label">प्रति ट्रॉली रेट (₹ per trolley):</label>
+          <p class="form-hint">जो सामान यह लाता है उसी का रेट भरें — बाकी खाली छोड़ दें। बाद में बदल भी सकते हैं।</p>
+          <div class="supplier-rate-grid" id="supplierTrolleyRates">
+            <!-- Injected via JS -->
           </div>
         </div>
 
@@ -1096,7 +1115,7 @@
 
         <div class="modal-actions">
           <button type="button" class="btn-secondary" data-close-modal>रद्द करें</button>
-          <button type="submit" class="btn-primary">कारीगर जोड़ें (Add Worker)</button>
+          <button type="submit" class="btn-primary" id="btnSubmitAddWorker">कारीगर जोड़ें (Add Worker)</button>
         </div>
       </form>
     </div>
