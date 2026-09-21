@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>प्राइवेसी पॉलिसी — श्रम व साइट डायरी</title>
+<style>
+  :root {
+    --bg: #faf9f5; --card: #ffffff; --text: #1f2421; --muted: #6b7280;
+    --line: #e3e7dc; --accent: #326b50;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171a; --card: #1c2024; --text: #e8eae7; --muted: #9aa3a0;
+      --line: #2c3238; --accent: #6fbf90;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.7; font-size: 16px;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 40px 16px 80px; }
+  header { border-bottom: 1px solid var(--line); padding-bottom: 20px; margin-bottom: 28px; }
+  h1 { font-size: 1.6rem; margin: 0 0 6px; }
+  .sub { color: var(--muted); font-size: 0.9rem; margin: 0; }
+  h2 { font-size: 1.15rem; margin: 34px 0 10px; color: var(--accent); }
+  h3 { font-size: 0.95rem; margin: 22px 0 6px; }
+  p, li { margin: 8px 0; }
+  ul { padding-left: 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin: 18px 0; }
+  .en { color: var(--muted); font-size: 0.92rem; }
+  code { background: rgba(127,127,127,.14); padding: 1px 6px; border-radius: 4px; font-size: 0.88em; }
+  footer { margin-top: 44px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>प्राइवेसी पॉलिसी</h1>
+  <p class="sub">श्रम व साइट डायरी (Shram &amp; Site Diary) · <code>com.shram.sitediary</code></p>
+  <p class="sub">अंतिम बदलाव: 21 सितम्बर 2026</p>
+</header>
+
+<div class="card">
+  <p><strong>छोटी बात पहले:</strong> यह ऐप आपका हिसाब रखने के लिए है। आपका डेटा आपके फ़ोन में
+  और आपके अपने Google खाते से जुड़े क्लाउड बैकअप में रहता है। हम इसे न बेचते हैं, न किसी
+  विज्ञापन कंपनी को देते हैं, न इसमें कोई ऐड या ट्रैकिंग है।</p>
+  <p class="en"><strong>In short:</strong> this app keeps your site ledger. Your data stays on your
+  phone and in a cloud backup tied to your own Google account. We do not sell it, share it with
+  advertisers, or run any ads or tracking in this app.</p>
+</div>
+
+<h2>1. कौन सा डेटा रखा जाता है</h2>
+
+<h3>आपका दर्ज किया हुआ हिसाब</h3>
+<p>जो आप ऐप में लिखते हैं — कारीगरों के नाम, फ़ोन नंबर (अगर आप जोड़ें), दिहाड़ी और ठेके की
+रक़म, रोज़ाना हाजिरी और गैरहाजिरी का कारण, भुगतान, राशन व अन्य खर्च, दिन के नोट, और अगर आप
+जोड़ें तो कारीगर की फ़ोटो व आवाज़ की रिकॉर्डिंग।</p>
+<p class="en">Whatever you enter: worker names, phone numbers (if you add them), daily and
+contract rates, attendance and absence reasons, payments, expenses, day notes, and optionally
+worker photos and voice recordings.</p>
+
+<h3>आपका Google खाता</h3>
+<p>लॉगिन करने पर Google से आपका नाम, ईमेल पता, प्रोफ़ाइल फ़ोटो और एक पहचान संख्या
+(user ID) मिलती है। इसका इस्तेमाल सिर्फ़ एक काम के लिए होता है — यह जानना कि कौन सा हिसाब
+आपका है, ताकि नया फ़ोन लेने पर वही हिसाब वापस आ सके।</p>
+<p class="en">On sign-in, Google provides your name, email address, profile photo and a user ID.
+These are used for one purpose only: to know which ledger is yours, so it can come back on a new
+phone.</p>
+
+<h3>फ़ोन की पहचान</h3>
+<p>हर इंस्टॉल के लिए एक बेतरतीब संख्या बनती है, ताकि दो फ़ोन के बीच हिसाब मिलाते समय ऐप
+अपने ही भेजे बदलाव को दोबारा न पढ़े। यह न आपका फ़ोन नंबर है, न कोई विज्ञापन पहचान।</p>
+<p class="en">A random per-install identifier, used so that syncing between two phones does not
+re-read the device's own writes. It is not your phone number and not an advertising ID.</p>
+
+<h2>2. डेटा कहाँ रहता है</h2>
+<ul>
+  <li><strong>आपके फ़ोन में</strong> — मुख्य कॉपी यहीं रहती है। ऐप बिना इंटरनेट भी पूरी तरह चलती है।</li>
+  <li><strong>Google Firebase (Firestore) में</strong> — क्लाउड बैकअप, ताकि फ़ोन खोने या बदलने पर
+      हिसाब वापस मिल सके। यह बैकअप आपके Google खाते से बँधा होता है; सिर्फ़ उसी खाते से पढ़ा
+      जा सकता है।</li>
+  <li><strong>आपकी बनाई बैकअप फ़ाइल में</strong> — अगर आप "बैकअप सेव करें" दबाते हैं, तो एक JSON
+      फ़ाइल बनती है। वह फ़ाइल आपकी है; आप उसे जहाँ रखें, वहाँ की सुरक्षा आपके हाथ में है।</li>
+</ul>
+<p class="en">On your phone (the main copy, fully usable offline); in Google Firebase Firestore as
+a cloud backup readable only by your own account; and in any JSON backup file you choose to save.</p>
+
+<h2>3. किसे दिया जाता है</h2>
+<p><strong>किसी को नहीं।</strong> यह डेटा बेचा नहीं जाता, विज्ञापन के लिए इस्तेमाल नहीं होता,
+और किसी तीसरे पक्ष को नहीं दिया जाता। इस ऐप में कोई विज्ञापन नेटवर्क, कोई एनालिटिक्स और कोई
+ट्रैकर नहीं है।</p>
+<p>सिर्फ़ दो सेवाएँ बीच में आती हैं, और दोनों Google की हैं: <strong>Firebase</strong> (आपका
+बैकअप रखने के लिए) और <strong>Google Sign-In</strong> (लॉगिन के लिए)। इनका अपना डेटा नियम
+Google की प्राइवेसी पॉलिसी के अंतर्गत आता है।</p>
+<p class="en">Not shared with anyone. No ads, no analytics, no trackers. The only third-party
+services involved are Google Firebase (for your backup) and Google Sign-In (for login), governed
+by Google's own privacy policy.</p>
+
+<h2>4. कारीगरों की जानकारी</h2>
+<p>आप इस ऐप में दूसरे लोगों की जानकारी रखते हैं — अपने कारीगरों की। वह जानकारी आपने दर्ज
+की है और आपकी ज़िम्मेदारी है। हम उससे कुछ नहीं करते: न पढ़ते हैं, न विश्लेषण करते हैं, न
+किसी को भेजते हैं। कृपया वही रखें जो हिसाब के लिए ज़रूरी है।</p>
+<p class="en">You store information about other people — your workers. That data is yours and
+your responsibility. We do not read, analyse or transmit it. Please store only what your ledger
+needs.</p>
+
+<h2>5. डेटा हटाना</h2>
+<ul>
+  <li><strong>फ़ोन से:</strong> ऐप की सेटिंग्स में मौजूद विकल्पों से हिसाब मिटाया जा सकता है,
+      या फ़ोन से ऐप हटाने पर फ़ोन वाली कॉपी चली जाती है।</li>
+  <li><strong>क्लाउड से और खाता बंद करना:</strong> अपना खाता और उससे जुड़ा पूरा क्लाउड बैकअप
+      हमेशा के लिए हटवाने के लिए नीचे दिए पते पर लिखिए। अनुरोध मिलने पर 30 दिन के भीतर
+      हटा दिया जाएगा।</li>
+</ul>
+<p class="en">Data can be cleared from the phone in the app's settings, or by uninstalling. To
+delete your account and its entire cloud backup permanently, write to the address below; requests
+are honoured within 30 days.</p>
+
+<h2>6. बच्चे</h2>
+<p>यह ऐप ठेकेदारों और साइट पर काम संभालने वालों के लिए है। यह 13 साल से कम उम्र के बच्चों
+के लिए नहीं है और जान-बूझकर उनका डेटा नहीं लिया जाता।</p>
+<p class="en">This app is for contractors and site supervisors. It is not directed at children
+under 13, and we do not knowingly collect their data.</p>
+
+<h2>7. बदलाव</h2>
+<p>यह पॉलिसी बदल सकती है। बदलने पर ऊपर लिखी तारीख़ बदल जाएगी।</p>
+
+<h2>8. संपर्क</h2>
+<div class="card">
+  <p>प्राइवेसी से जुड़ा कोई सवाल हो, या डेटा हटवाना हो:</p>
+  <p><strong>ईमेल:</strong> <code>[यहाँ अपना संपर्क ईमेल लिखें]</code></p>
+  <p class="en">For privacy questions or data deletion requests, email the address above.</p>
+</div>
+
+<footer>
+  श्रम व साइट डायरी · हिसाब साफ़, काम आसान।
+</footer>
+
+</div>
+</body>
+</html>

@@ -63,7 +63,11 @@ jobs:
             echo "No RELEASE_KEYSTORE_BASE64 secret set — falling back to a debug build."
           fi
 
-      - name: Build signed release APK
+      # Two outputs from one signed build. The APK is what a phone installs
+      # directly, which is how this app has always reached the site. The AAB is
+      # the only thing Play accepts for a new listing, signed with the same key,
+      # which Play then treats as the upload key.
+      - name: Build signed release APK and Play bundle
         if: steps.keystore.outputs.available == 'true'
         env:
           RELEASE_STORE_FILE: ${{ github.workspace }}/android/release.jks
@@ -72,11 +76,12 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           cd android
-          ./gradlew assembleRelease --no-daemon \
+          ./gradlew assembleRelease bundleRelease --no-daemon \
             -PappVersionCode=${{ github.run_number }} \
             -PappVersionName=1.0.${{ github.run_number }}
           mkdir -p "$GITHUB_WORKSPACE/out"
           cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/out/SiteDiary.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "$GITHUB_WORKSPACE/out/SiteDiary.aab"
 
       # Fallback until the keystore secret exists: an installable but debug-signed
       # build. It cannot be upgraded to a signed release later without uninstalling.
@@ -98,7 +103,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: site-diary-apk
-          path: out/SiteDiary.apk
+          path: out/SiteDiary.*
 
       - name: Release APK
         uses: softprops/action-gh-release@v3
@@ -109,10 +114,13 @@ jobs:
           body: |
             श्रम व साइट डायरी — Android APK
 
-            फ़ोन में डाउनलोड करके इंस्टॉल करें।
+            **SiteDiary.apk** — फ़ोन में डाउनलोड करके इंस्टॉल करें।
+            **SiteDiary.aab** — सिर्फ़ Play Console पर अपलोड करने के लिए; फ़ोन में इंस्टॉल नहीं होती।
             ${{ steps.keystore.outputs.available == 'true' && 'Signed release build.' || 'Debug-signed build — set RELEASE_KEYSTORE_BASE64 to publish signed releases.' }}
           draft: false
           prerelease: false
-          files: out/SiteDiary.apk
+          files: |
+            out/SiteDiary.apk
+            out/SiteDiary.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
