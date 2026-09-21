@@ -24,6 +24,7 @@ dist-ssr
 *.sw?
 
 # Android
+.build-tools/
 .gradle
 android/.gradle
 android/build

@@ -762,6 +762,12 @@ export class Store {
           w.thekaMode = w.isThekedar ? 'lumpsum' : null;
           needsSave = true;
         }
+        // Roles are now explicit. Older contractor records were stored as a
+        // mistri/helper plus two contract flags; promote only the contract holder.
+        if (w.contractType === 'theka' && w.isThekedar && w.role !== 'thekedar') {
+          w.role = 'thekedar';
+          needsSave = true;
+        }
       });
 
       // A restored-from-cloud payload used to lose this flag, which let the demo
@@ -827,6 +833,8 @@ export class Store {
     this._saveErrorHandler = handler;
   }
 
+  hasUnsavedChanges() { return !!this._lastSaveFailed; }
+
   save(data = this.data) {
     this.data = data;
     // A read-only Store (the MCP server) has nowhere to write and nothing to save.
@@ -841,10 +849,9 @@ export class Store {
       // stored inline as base64. Drop the heaviest optional data and retry once
       // so the ledger itself — the part that matters — still gets written.
       const recovered = this.trySaveAfterFreeingSpace(data);
-      if (!recovered && this._saveErrorHandler && !this._lastSaveFailed) {
-        this._lastSaveFailed = true;
-        this._saveErrorHandler(e);
-      }
+      const wasFailed = this._lastSaveFailed;
+      this._lastSaveFailed = !recovered;
+      if (!recovered && this._saveErrorHandler && !wasFailed) this._saveErrorHandler(e);
       return recovered;
     }
   }
@@ -932,6 +939,15 @@ export class Store {
     return id;
   }
 
+  updateTrade(id, updates = {}) {
+    const trade = this.activeProject().trades.find(t => t.id === id);
+    if (!trade) return null;
+    if (typeof updates.name === 'string' && updates.name.trim()) trade.name = updates.name.trim();
+    if (updates.icon) trade.icon = updates.icon;
+    this.save();
+    return trade;
+  }
+
   getTrade(id) {
     return this.activeProject().trades.find(t => t.id === id) || { id, name: 'Unknown Trade', color: '#64748b' };
   }
@@ -944,6 +960,8 @@ export class Store {
     if (attached.length > 0) {
       return { ok: false, reason: 'has_workers', workers: attached };
     }
+    const transactions = (this.activeProject().transactions || []).filter(t => t.tradeId === id);
+    if (transactions.length > 0) return { ok: false, reason: 'has_transactions', transactions };
     this.activeProject().trades = this.activeProject().trades.filter(t => t.id !== id);
     this.save();
     return { ok: true };
@@ -981,7 +999,12 @@ export class Store {
       id,
       name: name.trim(),
       tradeId,
-      role: role || 'mistri', // 'mistri', 'helper', 'thekedar', or a SUPPLIER_ROLE
+      /* A supplier is neither. The man who brings the trolleys owns the
+         tractor or drives it, and forcing him into 'mistri' here is what put
+         a craftsman's role on a tractor's record. */
+      role: SUPPLIER_ROLES.includes(role)
+        ? role
+        : (role === 'thekedar' ? 'thekedar' : (role === 'helper' ? 'helper' : 'mistri')),
       contractType: isTheka ? 'theka' : 'dihadi',
       isThekedar: holdsContract,
       dailyRate: isTheka ? 0 : (Number(dailyRate) || 0),
@@ -1453,7 +1476,11 @@ export class Store {
       days.push({ day, dateStr, dayOfWeek, isSunday: d.getDay() === 0 });
     }
 
-    const workers = this.getWorkers();
+    const supplierTrades = new Set(this.getTrades().filter(t => t.isSupplier).map(t => t.id));
+    const workers = this.getWorkers().filter(worker =>
+      !supplierTrades.has(worker.tradeId) &&
+      !(worker.isThekedar && worker.worksHimself === false)
+    );
     const rows = workers.map(worker => {
       let totalPresent = 0;
       let totalAbsent = 0;

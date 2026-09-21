@@ -9,6 +9,7 @@ import { initFirebase, isFirebaseReady, saveToFirebase, loadFromFirebase, enable
 import { translations } from './i18n.js';
 import { LendingLock } from './lending-lock.js';
 import { initModalUX } from './modal-ux.js';
+import { Workflow } from './workflow.js';
 
 /* Every list in this app is built with innerHTML from data a user typed — worker
    names, notes, trade names — and that data also arrives from cloud sync, i.e.
@@ -26,6 +27,14 @@ function esc(value) {
 
 function inr(n) {
   return `₹${(Number(n) || 0).toLocaleString('en-IN')}`;
+}
+
+function workerRoleLabel(worker) {
+  // A tractor or a JCB has an owner and a driver, never a mistri or a helper.
+  if (worker?.role === 'malik') return 'मालिक';
+  if (worker?.role === 'driver') return 'ड्राइवर';
+  if (worker?.role === 'thekedar' || worker?.isThekedar) return 'ठेकेदार';
+  return worker?.role === 'helper' ? 'हेल्पर' : 'मिस्त्री';
 }
 
 /* Common village lending items, as a starting point only. Whatever the user
@@ -84,7 +93,7 @@ function formatShortDate(dateStr, lang = 'hi') {
 class App {
   constructor() {
     this.store = store;
-    this.currentTab = 'tab-haziri'; // Daily Attendance is #1 contractor priority
+    this.currentTab = 'tab-home';
     this.tabScrollPositions = new Map();
     this.activeFilterType = 'all';
     this.activeFilterTrade = null;
@@ -142,6 +151,7 @@ class App {
     this.editWorkerPhotoDataUrl = null;
     this.editWorkerRole = 'mistri';
     this.editWorkerContract = 'dihadi';
+    this.editWorkerWorksHimself = true;
 
     // Edit transaction state
     this.editTxType = 'cash';
@@ -233,6 +243,7 @@ class App {
   }
 
   init() {
+    this.workflow = new Workflow(this);
     initModalUX();
     this.bindEvents();
     this.populateSelects();
@@ -1721,6 +1732,7 @@ class App {
   }
 
   renderStats() {
+    this.workflow?.render();
     const today = getTodayString();
     const txs = this.store.getTransactions(today);
     const haziri = this.store.getHaziri(today);
@@ -1933,7 +1945,7 @@ class App {
       const [iconBg, amountClass] = TYPE_TINTS[tx.type] || ['rgba(148, 163, 184, 0.15)', 'other'];
 
       const roleBadge = worker
-        ? `<span class="tag-badge ${worker.role === 'mistri' ? 'tag-mistri' : 'tag-helper'}">${worker.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'}</span>`
+        ? `<span class="tag-badge ${worker.role === 'helper' ? 'tag-helper' : 'tag-mistri'}">${workerRoleLabel(worker)}</span>`
         : `<span class="tag-badge tag-group">ग्रुप (सांझा)</span>`;
 
       const targetDisplayName = isGroup
@@ -1983,265 +1995,7 @@ class App {
     // First, and outside the roster: a site with no workers yet still has days
     // worth writing about, and the roster's own early return would skip this.
     this.renderHaziriNotes();
-
-    const container = document.getElementById('haziriTradesContainer');
-    if (!container) return;
-
-    const date = this.selectedHaziriDate || getTodayString();
-    const trades = this.store.getTrades();
-    const haziriRecord = this.store.getHaziri(date);
-    const allWorkers = this.store.getWorkers();
-
-    // 1. Update Date Display and native input
-    const dateDisplay = document.getElementById('haziriDateDisplay');
-    if (dateDisplay) {
-      dateDisplay.textContent = formatShortDate(date, this.currentLang);
-    }
-    const datePicker = document.getElementById('haziriDatePicker');
-    if (datePicker && datePicker.value !== date) {
-      datePicker.value = date;
-    }
-
-    // If no workers exist on site
-    if (allWorkers.length === 0) {
-      const groupTabsEl = document.getElementById('haziriGroupTabs');
-      if (groupTabsEl) groupTabsEl.innerHTML = '';
-      const countBadge = document.getElementById('haziriActiveGroupCount');
-      if (countBadge) countBadge.textContent = '0';
-
-      container.innerHTML = `
-        <div style="background: rgba(245, 158, 11, 0.08); border: 2px dashed rgba(245, 158, 11, 0.35); border-radius: 14px; padding: 40px 20px; text-align: center; margin: 20px 0;">
-          <div style="font-size: 3rem; margin-bottom: 12px;">👷‍♂️</div>
-          <h3 style="font-size: 1.25rem; font-weight: 700; color: var(--text-main); margin-bottom: 8px;">अभी आपकी साइट पर कोई कारीगर नहीं जुड़ा है</h3>
-          <p style="font-size: 0.88rem; color: var(--text-muted); max-width: 480px; margin: 0 auto 20px;">
-            हाजिरी लगाने के लिए पहले अपने मिस्त्री, हेल्पर या ठेकेदार को जोड़ें।
-          </p>
-          <button class="btn-primary btn-add-first-worker" style="font-size: 0.95rem; padding: 12px 28px;">
-            👷 + पहला कारीगर जोड़ें (Add Worker)
-          </button>
-        </div>
-      `;
-      return;
-    }
-
-    // Active trade determination
-    const tradesWithWorkers = trades.filter(t => this.store.getWorkers(t.id).length > 0);
-    if (!this.activeHaziriTradeId || (this.activeHaziriTradeId !== 'all' && !trades.some(t => t.id === this.activeHaziriTradeId))) {
-      this.activeHaziriTradeId = tradesWithWorkers.length > 0 ? tradesWithWorkers[0].id : (trades[0]?.id || 'all');
-    }
-
-    // 2. Render Horizontal Group / Trade Tabs
-    const groupTabsEl = document.getElementById('haziriGroupTabs');
-    if (groupTabsEl) {
-      let tabsHtml = trades.map(trade => {
-        const count = this.store.getWorkers(trade.id).length;
-        const isActive = this.activeHaziriTradeId === trade.id;
-        const shortName = trade.name.split(' ')[0];
-        return `
-          <button type="button" class="attendance-trade-tab ${isActive ? 'active' : ''}" data-trade-id="${esc(trade.id)}" title="${esc(trade.name)} (${count} कारीगर)">
-            ${isActive ? '<span class="tab-check">✓</span> ' : ''}${getTradeIcon(trade.icon)} ${shortName} <span class="tab-count">(${count})</span>
-          </button>
-        `;
-      }).join('');
-
-      const isAllActive = this.activeHaziriTradeId === 'all';
-      tabsHtml += `
-        <button type="button" class="attendance-trade-tab ${isAllActive ? 'active' : ''}" data-trade-id="all" title="सभी कारीगर (${allWorkers.length})">
-          ${isAllActive ? '<span class="tab-check">✓</span> ' : ''}📂 सभी <span class="tab-count">(${allWorkers.length})</span>
-        </button>
-      `;
-      groupTabsEl.innerHTML = tabsHtml;
-    }
-
-    // 3. Workers for Active Group
-    let currentWorkers = [];
-    let groupTitle = '';
-    let groupIcon = '👷';
-    let activeTradeObj = null;
-
-    if (this.activeHaziriTradeId === 'all') {
-      currentWorkers = allWorkers;
-      groupTitle = this.currentLang === 'en' ? 'All Workers' : 'सभी कारीगर';
-      groupIcon = '📂';
-    } else {
-      activeTradeObj = this.store.getTrade(this.activeHaziriTradeId);
-      currentWorkers = this.store.getWorkers(this.activeHaziriTradeId);
-      groupTitle = activeTradeObj ? activeTradeObj.name : 'कारीगर ग्रुप';
-      groupIcon = activeTradeObj ? getTradeIcon(activeTradeObj.icon) : '🔨';
-    }
-
-    // Update group count badge
-    const countBadge = document.getElementById('haziriActiveGroupCount');
-    if (countBadge) {
-      countBadge.textContent = currentWorkers.length;
-    }
-
-    // Calculate Group Stats
-    let presentCount = 0;
-    let halfCount = 0;
-    let absentCount = 0;
-    let otTotalHours = 0;
-
-    currentWorkers.forEach(w => {
-      const rec = haziriRecord[w.id];
-      if (!rec || !rec.status || rec.status === 0) {
-        absentCount++;
-      } else if (rec.status === 1.0) {
-        presentCount++;
-      } else if (rec.status === 0.5) {
-        halfCount++;
-      }
-      if (rec && rec.otHours > 0) {
-        otTotalHours += rec.otHours;
-      }
-    });
-
-    if (currentWorkers.length === 0) {
-      container.innerHTML = `
-        <div class="attendance-card" style="padding: 24px; text-align: center;">
-          <div style="font-size: 2.2rem; margin-bottom: 8px;">🏷️</div>
-          <h4 style="color: var(--text-main); margin-bottom: 6px;">इस ट्रेड (${esc(groupTitle)}) में कोई कारीगर नहीं है</h4>
-          <p style="color: var(--text-muted); font-size: 0.82rem; margin-bottom: 14px;">
-            इस ग्रुप में काम करने वाले मिस्त्री या हेल्पर को जोड़ें:
-          </p>
-          <button class="btn-primary" id="btnQuickAddWorkerToTrade" data-trade-id="${this.activeHaziriTradeId}" style="font-size: 0.85rem; padding: 8px 18px;">
-            + ${esc(groupTitle)} में कारीगर जोड़ें
-          </button>
-        </div>
-      `;
-      return;
-    }
-
-    // Warn before an edit silently replaces attendance that was already recorded
-    // for this date — on a shared site another phone may have marked it.
-    const savedAt = this.store.getHaziriSavedAt(date);
-    const savedNotice = savedAt
-      ? `<div class="attendance-saved-notice">
-           <span class="notice-icon">⚠️</span>
-           <span>${this.currentLang === 'en'
-             ? `Already saved ${esc(savedAt.byLabel)} — editing will overwrite.`
-             : `यह हाजिरी पहले ही सेव हो चुकी है ${esc(savedAt.byLabel)} — बदलने पर पुरानी मिट जाएगी।`}</span>
-         </div>`
-      : '';
-
-    // 4. Render Group Header + Compact Worker Rows + Bottom Summary Dock
-    container.innerHTML = `
-      ${savedNotice}
-      <div class="attendance-card">
-        <!-- Group Header Row with '✓ All Present' Button (Exact Reference Screenshot Style) -->
-        <div class="attendance-group-header">
-          <div class="group-header-info">
-            <span class="group-header-name">${groupIcon} ${esc(groupTitle)}</span>
-            <span class="group-header-count">· ${currentWorkers.length} ${this.currentLang === 'en' ? 'workers' : 'सदस्य'}</span>
-          </div>
-          <button type="button" class="btn-all-present" id="btnMarkAllPresent" title="इस ग्रुप के सभी कारीगरों को उपस्थित करें">
-            <span class="btn-check-icon">✓</span>
-            <span>${this.currentLang === 'en' ? 'All Present' : 'सब उपस्थित'}</span>
-          </button>
-        </div>
-
-        <!-- Ultra-Compact Worker List: Entire group fits on 1 mobile screen without scrolling -->
-        <div class="attendance-list-rows">
-          ${currentWorkers.map((worker, idx) => {
-            const rec = haziriRecord[worker.id] || { status: 0, otHours: 0 };
-            const isPresent = rec.status > 0;
-            const isFull = rec.status === 1.0;
-            const isHalf = rec.status === 0.5;
-            const numStr = String(idx + 1).padStart(2, '0');
-
-            const statusText = isFull
-              ? (this.currentLang === 'en' ? 'Present' : 'उपस्थित')
-              : (isHalf
-                  ? (this.currentLang === 'en' ? 'Half Day' : '½ हाफ डे')
-                  : (this.currentLang === 'en' ? 'Absent' : 'अनुपस्थित'));
-
-            const statusClass = isFull ? 'st-full' : (isHalf ? 'st-half' : 'st-absent');
-            const otText = rec.otHours > 0 ? ` • +${rec.otHours}h OT` : '';
-
-            /* Only a worker somebody actually marked absent is asked why. One
-               nobody has touched yet reads as absent too, and a reason box on
-               every untouched row would bury the screen on a fresh morning. */
-            const isMarkedAbsent = !!haziriRecord[worker.id] && rec.status === 0;
-            const reasonText = isMarkedAbsent && rec.reason
-              ? ` • ${esc(absenceReasonLabel(rec.reason, this.currentLang))}`
-              : '';
-
-            return `
-              <div class="attendance-row ${isPresent ? 'is-present' : 'is-absent'}${isHalf ? ' is-half' : ''}" data-worker-id="${esc(worker.id)}">
-                <!-- Number circle badge (01, 02, 03... Vibrant Green when present) -->
-                <div class="attendance-num-badge ${isPresent ? 'badge-green' : 'badge-gray'}">
-                  ${numStr}
-                </div>
-
-                <!-- Worker Name & Status Details -->
-                <div class="attendance-info-col">
-                  <div class="attendance-worker-title">
-                    <!-- The name is what the contractor reads down the column, so it
-                         gets the whole line. Role and contract used to sit here as
-                         badges and squeezed the name to nothing; they live in the
-                         worker's own screen now, one tap away. -->
-                    <button type="button" class="attendance-worker-name" data-open-statement="${esc(worker.id)}"
-                            title="${this.currentLang === 'en' ? 'Tap for full details' : 'पूरा विवरण देखने के लिए दबाएँ'}">
-                      ${esc(worker.name)}
-                      ${worker.isThekedar ? '<span class="thekedar-dot" title="Thekedar">📜</span>' : ''}
-                    </button>
-                  </div>
-
-                  <div class="attendance-status-line">
-                    <span class="attendance-status-text ${statusClass}">${statusText}${otText}${reasonText}</span>
-                    
-                    <!-- Micro-actions for rare Half-day / OT / Quick Edit without consuming vertical height -->
-                    <div class="attendance-micro-actions">
-                      <button type="button" class="btn-micro-pill ${isHalf ? 'active' : ''}" data-hz-half="${worker.id}" title="आधा दिन दर्ज करें">
-                        ½
-                      </button>
-                      <button type="button" class="btn-micro-pill ${rec.otHours > 0 ? 'active' : ''}" data-hz-ot="${worker.id}" title="ओवरटाइम दर्ज करें">
-                        ${rec.otHours > 0 ? `+${rec.otHours}h` : '+OT'}
-                      </button>
-                      <button type="button" class="btn-micro-pill" data-open-edit-worker="${worker.id}" title="कारीगर सुधारें">
-                        ✏️
-                      </button>
-                    </div>
-                  </div>
-
-                  ${isMarkedAbsent ? this.renderAbsenceReasonPicker(worker, rec) : ''}
-                </div>
-
-                <!-- Sleek iOS Toggle Switch (Reference Screenshot Style) -->
-                <div class="attendance-toggle-wrap">
-                  <label class="ios-toggle-switch">
-                    <input type="checkbox" class="attendance-toggle-input" data-worker-id="${worker.id}" ${isPresent ? 'checked' : ''} />
-                    <span class="ios-toggle-slider"></span>
-                  </label>
-                </div>
-              </div>
-            `;
-          }).join('')}
-
-          <button type="button" class="attendance-add-row" id="btnAddWorkerFromHaziri">
-            <span class="add-row-plus">+</span>
-            <span>${this.currentLang === 'en'
-              ? `Add a worker to ${esc(groupTitle)}`
-              : `${esc(groupTitle)} में कारीगर जोड़ें`}</span>
-          </button>
-        </div>
-
-        <!-- Bottom Summary & Update Dock (Reference Screenshot Style: P 6, A 0, Update Button) -->
-        <div class="attendance-bottom-bar">
-          <div class="attendance-stat-badges">
-            <span class="stat-badge-pill stat-p" title="उपस्थित कारीगर">P ${presentCount}</span>
-            <span class="stat-badge-pill stat-a" title="अनुपस्थित">A ${absentCount}</span>
-            ${halfCount > 0 ? `<span class="stat-badge-pill stat-half" title="हाफ डे">½ ${halfCount}</span>` : ''}
-            ${otTotalHours > 0 ? `<span class="stat-badge-pill stat-ot" title="कुल ओवरटाइम">OT ${otTotalHours}h</span>` : ''}
-          </div>
-
-          <button type="button" class="btn-attendance-update${savedAt ? ' is-saved' : ''}" id="btnHaziriSaveUpdate" title="हाजिरी अपने आप सुरक्षित हो जाती है">
-            <span class="save-icon">💾</span>
-            <span>${this.currentLang === 'en' ? 'Update' : 'अपडेट'}</span>
-          </button>
-        </div>
-      </div>
-    `;
+    this.workflow.renderAttendance();
   }
 
   /* Why a worker is away, asked for in one tap on the row that is already
@@ -2374,7 +2128,7 @@ class App {
                   <button type="button" data-open-edit-worker="${w.id}" title="कारीगर में सुधार करें (ट्रेड, नाम बदलें)" style="background: none; border: 1px solid rgba(15, 23, 42, 0.14); border-radius: 4px; color: var(--amber-light); cursor: pointer; font-size: 0.72rem; padding: 1px 4px;">✏️</button>
                 </div>
                 <div style="font-size: 0.72rem; color: var(--text-dim);">
-                  ${getTradeIcon(row.trade.icon)} ${row.trade.name} (${w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'})
+                  ${getTradeIcon(row.trade.icon)} ${row.trade.name} (${workerRoleLabel(w)})
                 </div>
               </div>
             </div>
@@ -2537,8 +2291,8 @@ class App {
                 <div>
                   <div class="worker-name-line">
                     <strong style="color: var(--text-main); text-decoration: underline dotted var(--amber-primary);">${esc(w.name)}</strong>
-                    <span class="tag-badge ${w.role === 'mistri' ? 'tag-mistri' : 'tag-helper'}">
-                      ${w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'}
+                    <span class="tag-badge ${w.role === 'helper' ? 'tag-helper' : 'tag-mistri'}">
+                      ${workerRoleLabel(w)}
                     </span>
                     ${contractBadge}
                     ${contactPills}
@@ -2621,10 +2375,13 @@ class App {
 
     // 1. Header Date
     const now = new Date();
-    const options = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' };
-    const dateStr = now.toLocaleDateString('hi-IN', options);
+    const options = { day: 'numeric', month: 'long', year: 'numeric' };
+    const locale = this.currentLang === 'en' ? 'en-IN' : 'hi-IN';
+    const dateStr = now.toLocaleDateString(locale, options);
     const dateEl = document.getElementById('diaryPaperDate');
     if (dateEl) dateEl.textContent = dateStr;
+    const dayEl = document.getElementById('diaryPaperDay');
+    if (dayEl) dayEl.textContent = now.toLocaleDateString(locale, { weekday: 'long' });
 
     // 2. Haziri Grid
     const haziriGrid = document.getElementById('diaryHaziriGrid');
@@ -2643,7 +2400,7 @@ class App {
             if (w.contractType === 'theka') {
               thekaPresent += 1;
             } else {
-              if (w.role === 'mistri') dihadiMistri += rec.status;
+              if (w.role === 'mistri' || (w.role === 'thekedar' && w.worksHimself !== false)) dihadiMistri += rec.status;
               else dihadiHelper += rec.status;
             }
           }
@@ -2674,7 +2431,7 @@ class App {
         cashBody.innerHTML = cashTxs.map(t => {
           const worker = this.store.getWorker(t.workerId);
           const trade = this.store.getTrade(t.tradeId);
-          const roleText = worker ? (worker.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर') : 'कारीगर';
+          const roleText = worker ? workerRoleLabel(worker) : 'कारीगर';
           const contractText = worker && worker.contractType === 'theka' ? ' [ठेका पेशगी]' : '';
           const typeName = getTxTypeLabel(t.type, 'hi');
           const noteText = t.note ? ` - ${t.note}` : '';
@@ -2838,7 +2595,7 @@ class App {
     }
 
     workerSelect.innerHTML = workers.map(w => {
-      const roleText = w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर';
+      const roleText = workerRoleLabel(w);
       return `<option value="${esc(w.id)}">${esc(w.name)} (${roleText}) - दर: ₹${w.dailyRate}</option>`;
     }).join('');
   }
@@ -2913,8 +2670,9 @@ class App {
     document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
   }
 
-  openAddTradeModal(returnToModal = null) {
+  openAddTradeModal(returnToModal = null, editTradeId = null) {
     this.tradeReturnModal = returnToModal;
+    this.editingTradeId = editTradeId;
     const modal = document.getElementById('modalAddTrade');
     if (!modal) return;
 
@@ -2931,6 +2689,23 @@ class App {
     document.querySelectorAll('#tradeIconPicker .trade-icon-option').forEach(opt => {
       opt.classList.toggle('active', opt.getAttribute('data-icon') === '🔨');
     });
+
+    const title = document.getElementById('tradeModalTitle');
+    const saveButton = document.getElementById('btnSaveTrade');
+    if (editTradeId) {
+      const trade = this.store.getTrade(editTradeId);
+      const nameInput = document.getElementById('tradeNameInput');
+      if (nameInput) nameInput.value = trade.name || '';
+      if (hiddenIcon) hiddenIcon.value = trade.icon || '🔨';
+      document.querySelectorAll('#tradeIconPicker .trade-icon-option').forEach(opt => {
+        opt.classList.toggle('active', opt.getAttribute('data-icon') === (trade.icon || '🔨'));
+      });
+      if (title) title.textContent = '✏️ ट्रेड सुधारें';
+      if (saveButton) saveButton.textContent = '✓ बदलाव सेव करें';
+    } else {
+      if (title) title.textContent = '🏷️ नया कारीगर प्रकार (Trade) जोड़ें';
+      if (saveButton) saveButton.textContent = '✓ नया ट्रेड जोड़ें';
+    }
 
     // Render existing trades list
     this.renderExistingTradesList();
@@ -2952,15 +2727,17 @@ class App {
         <div class="trade-tag-chip">
           <span>${getTradeIcon(t.icon)} ${esc(t.name)}</span>
           <span class="worker-badge-count">${workerCount} कारीगर</span>
-          ${workerCount === 0 ? `<button type="button" class="btn-del-custom-trade" data-del-trade-id="${t.id}" title="ट्रेड हटाएं">✕</button>` : ''}
+          <span class="trade-row-actions">
+            <button type="button" class="btn-edit-trade" data-edit-trade-id="${t.id}" title="नाम या आइकन सुधारें">✏️</button>
+            <button type="button" class="btn-del-custom-trade" data-del-trade-id="${t.id}" title="ट्रेड हटाएं" ${workerCount ? 'aria-label="पहले कारीगर दूसरे ट्रेड में करें"' : ''}>🗑️</button>
+          </span>
         </div>
       `;
     }).join('');
   }
 
-  /* The single way to change screen. Two tabs (evening diary, lending) have no
-     button in the dock any more — they are reached from settings — so this
-     must not depend on a nav button existing. */
+  /* Lending is reached from settings, so navigation must also support screens
+     without a button in the main dock. */
   goToTab(tabId) {
     const targetView = document.getElementById(tabId);
     if (!targetView) return;
@@ -2978,9 +2755,11 @@ class App {
     targetView.classList.add('active');
     document.querySelector(`.nav-tab-btn[data-tab="${tabId}"]`)?.classList.add('active');
     document.querySelector(`.nav-tab-btn[data-tab="${tabId}"]`)?.setAttribute('aria-current', 'page');
+    if (tabId === 'tab-monthly') document.querySelector('.nav-tab-btn[data-tab="tab-haziri"]')?.classList.add('active');
     this.currentTab = tabId;
 
     if (tabId === 'tab-monthly') this.renderMonthlyHaziri();
+    if (tabId === 'tab-home' || tabId === 'tab-groups' || tabId === 'tab-diary') this.workflow.render();
     requestAnimationFrame(() => {
       if (this.currentTab !== tabId) return;
       const headerHeight = document.querySelector('.app-header')?.offsetHeight || 0;
@@ -3037,7 +2816,7 @@ class App {
     }
 
     const btnCash = document.getElementById('btnQuickCash');
-    if (btnCash) btnCash.addEventListener('click', () => this.openAddTransactionModal({ type: 'cash', targetType: 'individual' }));
+    if (btnCash) btnCash.addEventListener('click', () => this.workflow.openPayment());
 
     const metricCash = document.getElementById('metricCardCash');
     if (metricCash) metricCash.addEventListener('click', () => this.openAddTransactionModal({ type: 'cash', targetType: 'individual' }));
@@ -3497,6 +3276,19 @@ class App {
         document.querySelectorAll('#editWorkerRoleSwitcher .segment-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.editWorkerRole = btn.getAttribute('data-role');
+        this.editWorkerContract = this.editWorkerRole === 'thekedar' ? 'theka' : 'dihadi';
+        const dihadiGroup = document.getElementById('editDihadiGroup');
+        const thekaGroup = document.getElementById('editThekaGroup');
+        if (dihadiGroup) dihadiGroup.style.display = this.editWorkerRole === 'thekedar' ? 'none' : 'block';
+        if (thekaGroup) thekaGroup.style.display = this.editWorkerRole === 'thekedar' ? 'block' : 'none';
+      });
+    });
+
+    document.querySelectorAll('#editWorkerWorksHimselfSwitcher .segment-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#editWorkerWorksHimselfSwitcher .segment-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.editWorkerWorksHimself = btn.getAttribute('data-works-himself') === 'yes';
       });
     });
 
@@ -3588,6 +3380,9 @@ class App {
           tradeId,
           role: this.editWorkerRole,
           contractType: this.editWorkerContract,
+          isThekedar: isTheka,
+          worksHimself: isTheka ? this.editWorkerWorksHimself : true,
+          thekaMode: isTheka ? 'lumpsum' : null,
           dailyRate,
           thekaAmount,
           thekaDescription,
@@ -3650,7 +3445,7 @@ class App {
         if (workerSelect) {
           const workers = this.store.getWorkers(e.target.value);
           workerSelect.innerHTML = workers.map(w => `
-            <option value="${esc(w.id)}">${esc(w.name)} (${w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'})</option>
+            <option value="${esc(w.id)}">${esc(w.name)} (${workerRoleLabel(w)})</option>
           `).join('');
         }
       });
@@ -3719,7 +3514,7 @@ class App {
     if (haziriDate) {
       haziriDate.value = this.selectedHaziriDate;
       haziriDate.addEventListener('change', (e) => {
-        this.selectedHaziriDate = e.target.value;
+        this.selectedHaziriDate = e.target.value || getTodayString();
         this.renderHaziri();
         this.renderStats();
         this.renderDiarySheet();
@@ -3855,9 +3650,9 @@ class App {
           const date = this.selectedHaziriDate || getTodayString();
           let currentWorkers = [];
           if (this.activeHaziriTradeId === 'all') {
-            currentWorkers = this.store.getWorkers();
+            currentWorkers = this.workflow.workers();
           } else {
-            currentWorkers = this.store.getWorkers(this.activeHaziriTradeId);
+            currentWorkers = this.workflow.workers().filter(w => w.tradeId === this.activeHaziriTradeId);
           }
           currentWorkers.forEach(w => {
             const currentRecord = this.store.getHaziri(date)[w.id] || { status: 0, otHours: 0 };
@@ -4040,9 +3835,19 @@ class App {
         document.querySelectorAll('#workerRoleSwitcher .segment-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         this.modalWorkerRole = btn.getAttribute('data-role');
+        const isThekedar = this.modalWorkerRole === 'thekedar';
+        this.modalContractType = isThekedar ? 'theka' : 'dihadi';
+        this.modalIsThekedar = isThekedar;
+        const dihadiGroup = document.getElementById('dihadiRateGroup');
+        const thekaGroup = document.getElementById('thekaDetailsGroup');
+        const dailyRateInput = document.getElementById('workerDailyRate');
+        if (dihadiGroup) dihadiGroup.style.display = isThekedar ? 'none' : 'block';
+        if (thekaGroup) thekaGroup.style.display = isThekedar ? 'block' : 'none';
+        if (dailyRateInput) isThekedar ? dailyRateInput.removeAttribute('required') : dailyRateInput.setAttribute('required', 'true');
+        if (isThekedar) this.syncThekaFields();
         const rateInput = document.getElementById('workerDailyRate');
         if (rateInput && !rateInput.value) {
-          rateInput.value = this.modalWorkerRole === 'mistri' ? 900 : 550;
+          rateInput.value = this.modalWorkerRole === 'mistri' ? 900 : (this.modalWorkerRole === 'helper' ? 550 : '');
         }
       });
     });
@@ -4222,13 +4027,8 @@ class App {
           this.store.setTrolleyRates(addedWorker.id, supplierRates);
         }
 
-        // Set full attendance for today for the new worker by default
-        const today = getTodayString();
-        const workers = this.store.getWorkers(tradeId);
-        const newW = workers[workers.length - 1];
-        if (newW) {
-          this.store.setWorkerHaziri(today, newW.id, 1.0);
-        }
+        // Adding a person does not assert that they worked today.
+        // Attendance stays pending until the contractor explicitly marks it.
 
         formWorker.reset();
         // Reset photo state
@@ -4266,6 +4066,18 @@ class App {
         this.closeModals();
         this.populateSelects();
         this.commit();
+        if (!this.workflow.workers().some(w => w.id === addedWorker.id)) {
+          this.goToTab('tab-home');
+          this.showToast(this.currentLang === 'en' ? 'Added. Record deliveries or machine hours from Today.' : 'जोड़ दिया। आज की स्क्रीन से सप्लाई या मशीन के घंटे दर्ज करें।');
+          return;
+        }
+        this.workflow.query = '';
+        this.workflow.status = 'pending';
+        document.getElementById('rosterSearch').value = '';
+        this.activeHaziriTradeId = 'all';
+        this.selectedHaziriDate = getTodayString();
+        this.renderHaziri();
+        this.goToTab('tab-haziri');
       });
     }
 
@@ -4275,6 +4087,13 @@ class App {
 
     const btnAddTrade = document.getElementById('btnAddTradeBtn');
     if (btnAddTrade) btnAddTrade.addEventListener('click', () => this.openAddTradeModal(null));
+
+    document.addEventListener('click', (e) => {
+      const button = e.target.closest('[data-settings-edit-trade]');
+      if (!button) return;
+      document.getElementById('modalSettings')?.classList.remove('open');
+      this.openAddTradeModal('modalSettings', button.getAttribute('data-settings-edit-trade'));
+    });
 
     const btnAddTradeFromHz = document.getElementById('btnAddTradeFromHaziri');
     if (btnAddTradeFromHz) btnAddTradeFromHz.addEventListener('click', () => this.openAddTradeModal(null));
@@ -4335,17 +4154,26 @@ class App {
     const existingList = document.getElementById('existingTradesList');
     if (existingList) {
       existingList.addEventListener('click', (e) => {
+        const editBtn = e.target.closest('[data-edit-trade-id]');
+        if (editBtn) {
+          this.openAddTradeModal(this.tradeReturnModal, editBtn.getAttribute('data-edit-trade-id'));
+          return;
+        }
         const delBtn = e.target.closest('[data-del-trade-id]');
         if (delBtn) {
           const tradeId = delBtn.getAttribute('data-del-trade-id');
           const trade = this.store.getTrade(tradeId);
           const workers = this.store.getWorkers(tradeId);
           if (workers.length > 0) {
-            alert(`इस ट्रेड में अभी ${workers.length} कारीगर जुड़े हुए हैं। पहले उन कारीगरों को किसी अन्य ट्रेड में बदलें या हटाएं।`);
+            alert(`इस ट्रेड में ${workers.length} कारीगर हैं। कारीगर खाता से उनका ट्रेड पहले दूसरे Block Builder में बदलें, फिर इसे हटाएं।`);
             return;
           }
           if (confirm(`क्या आप ट्रेड "${trade.name}" को सूची से हटाना चाहते हैं?`)) {
-            this.store.deleteTrade(tradeId);
+            const result = this.store.deleteTrade(tradeId);
+            if (!result.ok) {
+              alert('इस ट्रेड के पुराने लेन-देन दर्ज हैं। हिसाब को सुरक्षित रखने के लिए इसे सिर्फ rename करें।');
+              return;
+            }
             this.renderExistingTradesList();
             this.populateSelects();
             this.commit();
@@ -4365,14 +4193,22 @@ class App {
         const icon = (hiddenIcon && hiddenIcon.value) ? hiddenIcon.value : '🔨';
 
         if (name) {
-          const newTradeId = this.store.addTrade(name, icon);
+          const duplicate = this.store.getTrades().find(t => t.id !== this.editingTradeId && t.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase());
+          if (duplicate) {
+            alert('इसी नाम का ट्रेड पहले से मौजूद है। डुप्लिकेट ट्रेड को नीचे सूची से हटाएं।');
+            return;
+          }
+          const newTradeId = this.editingTradeId || this.store.addTrade(name, icon);
+          if (this.editingTradeId) this.store.updateTrade(this.editingTradeId, { name, icon });
+          const wasEditing = !!this.editingTradeId;
+          this.editingTradeId = null;
           formTrade.reset();
           document.getElementById('modalAddTrade')?.classList.remove('open');
           this.populateSelects();
           this.commit();
 
           // If opened from inside another modal, return to that modal and select the new trade
-          if (this.tradeReturnModal) {
+          if (this.tradeReturnModal && !wasEditing) {
             const returnModalEl = document.getElementById(this.tradeReturnModal);
             if (returnModalEl) returnModalEl.classList.add('open');
 
@@ -4402,6 +4238,18 @@ class App {
         const today = getTodayString();
         const isCurrentlyMarked = this.store.isDateMarkedInDiary(today);
         const newStatus = !isCurrentlyMarked;
+
+        if (newStatus && this.workflow.summary().pending > 0) {
+          this.showToast(this.currentLang === 'en' ? 'Complete pending attendance before finishing the diary.' : 'डायरी पूरी करने से पहले बाकी हाजिरी दर्ज करें।');
+          this.workflow.status = 'pending';
+          this.selectedHaziriDate = today;
+          this.activeHaziriTradeId = 'all';
+          this.workflow.query = '';
+          document.getElementById('rosterSearch').value = '';
+          this.renderHaziri();
+          this.goToTab('tab-haziri');
+          return;
+        }
 
         this.store.setMarkedInDiary(today, newStatus);
         this.renderStats();
@@ -4470,6 +4318,14 @@ class App {
 
     const openSettings = () => {
       this.lendingLock.lock();
+      // Sensitive recovery details stay closed every time Settings is opened.
+      document.getElementById('advancedTechSettingsDetails')?.removeAttribute('open');
+      const siteIdBox = document.getElementById('siteIdBox');
+      if (siteIdBox) siteIdBox.hidden = true;
+      const revealSiteId = document.getElementById('btnRevealSiteId');
+      if (revealSiteId) revealSiteId.textContent = '🔐 साइट आईडी दिखाएँ';
+      const firebaseDevConfig = document.getElementById('firebaseDevConfig');
+      if (firebaseDevConfig) firebaseDevConfig.style.display = 'none';
       const s = this.store.getSettings();
       document.getElementById('settingReminderTime').value = s.eveningReminderTime || '19:30';
       document.getElementById('settingNotifToggle').checked = s.reminderEnabled !== false;
@@ -4500,7 +4356,7 @@ class App {
         } else {
           workerSelect.innerHTML = workers.map(w => {
             const tr = this.store.getTrade(w.tradeId);
-            const roleText = w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर';
+            const roleText = workerRoleLabel(w);
             return `<option value="${esc(w.id)}">${esc(w.name)} — ${getTradeIcon(tr.icon)} ${esc(tr.name)} (${roleText})</option>`;
           }).join('');
         }
@@ -4513,8 +4369,9 @@ class App {
         tradesPills.innerHTML = trades.map(t => {
           const count = this.store.getWorkers(t.id).length;
           return `
-            <span class="filter-chip" style="cursor: default; background: rgba(15, 23, 42, 0.063); font-size: 0.8rem; border-color: rgba(15, 23, 42, 0.14); display: inline-flex; align-items: center; gap: 4px;">
-              ${getTradeIcon(t.icon)} ${esc(t.name)} <strong style="color: var(--amber-light); margin-left: 2px;">(${count})</strong>
+            <span class="filter-chip settings-trade-chip">
+              <span class="settings-trade-name">${getTradeIcon(t.icon)} ${esc(t.name)} <strong>(${count})</strong></span>
+              <button type="button" class="settings-edit-trade" data-settings-edit-trade="${esc(t.id)}" aria-label="${esc(t.name)} ट्रेड सुधारें या हटाएँ">✏️ सुधारें / हटाएँ</button>
             </span>
           `;
         }).join('');
@@ -4940,57 +4797,6 @@ class App {
       });
     }
 
-    /* Erase everything. Irreversible, so: offer the backup first, state the exact
-       counts being destroyed, and confirm twice. */
-    const btnErase = document.getElementById('btnEraseEverything');
-    if (btnErase) {
-      btnErase.addEventListener('click', async () => {
-        const workers = this.store.getWorkers().length;
-        const txs = this.store.getTransactions().length;
-        const days = Object.keys(this.store.data.haziri || {}).length;
-
-        if (workers === 0 && txs === 0 && days === 0) {
-          alert('मिटाने के लिए कुछ है ही नहीं — हिसाब पहले से खाली है।');
-          return;
-        }
-
-        if (!confirm(
-          `मिटाया जाएगा:\n\n` +
-          `• ${workers} कारीगर\n` +
-          `• ${txs} लेन-देन\n` +
-          `• ${days} दिन की हाजिरी\n\n` +
-          `यह फ़ोन और क्लाउड, दोनों से हट जाएगा और वापस नहीं आएगा।\n\n` +
-          `आगे बढ़ें?`
-        )) return;
-
-        if (confirm('पहले एक बैकअप फ़ाइल सेव कर लें?\n\nOK = बैकअप सेव करें (सुझाव)\nCancel = बिना बैकअप के आगे बढ़ें')) {
-          if (!await this.downloadBackup()) return;
-          // Give the download a moment before the data it points at disappears.
-          await new Promise(r => setTimeout(r, 1200));
-        }
-
-        if (!confirm('आख़िरी पुष्टि — सारा हिसाब अभी मिट जाएगा।\n\nमिटाएँ?')) return;
-
-        this.store.eraseAll({ keepTrades: true });
-
-        // Push the empty ledger up, otherwise the cloud keeps the old copy and
-        // the next device to sync pulls all of it straight back.
-        if (isFirebaseReady()) {
-          try {
-            await saveToFirebase(this.store.getSettings().firebaseSiteId, this.store.data, this.deviceId);
-          } catch (err) {
-            alert('फ़ोन से सब हट गया, पर क्लाउड साफ़ नहीं हो सका:\n' + err.message +
-                  '\n\nइंटरनेट आने पर ऐप खोलिए, तब अपने आप साफ़ हो जाएगा।');
-          }
-        }
-
-        this.closeModals();
-        this.populateSelects();
-        this.commit();
-        alert('सब मिटा दिया गया। अब अपने असली कारीगर जोड़ना शुरू कीजिए।');
-      });
-    }
-
     // Quick Text Entry (typed input fallback for voice)
     const quickEntryInput = document.getElementById('quickEntryInput');
     const btnQuickEntrySubmit = document.getElementById('btnQuickEntrySubmit');
@@ -5086,6 +4892,15 @@ class App {
       });
     }
 
+    const btnRevealSiteId = document.getElementById('btnRevealSiteId');
+    const siteIdBox = document.getElementById('siteIdBox');
+    if (btnRevealSiteId && siteIdBox) {
+      btnRevealSiteId.addEventListener('click', () => {
+        siteIdBox.hidden = !siteIdBox.hidden;
+        btnRevealSiteId.textContent = siteIdBox.hidden ? '🔐 साइट आईडी दिखाएँ' : '🙈 साइट आईडी छिपाएँ';
+      });
+    }
+
     // Firebase Dev Config Toggle (5 taps on Firebase title to reveal API config)
     let fbDevTapCount = 0;
     let fbDevTapTimer = null;
@@ -5150,7 +4965,7 @@ class App {
     const trolley = kind === 'trolley';
     text('addWorkerTitle', isSupplier
       ? (trolley ? 'ट्रैक्टर वाला जोड़ें' : 'मशीन वाला जोड़ें')
-      : 'नया कारीगर / हेल्पर जोड़ें');
+      : 'ठेकेदार / मिस्त्री / हेल्पर जोड़ें');
     text('workerNameLabel', isSupplier
       ? 'नाम (Name):'
       : 'कारीगर का नाम (Worker Name):');
@@ -5216,7 +5031,12 @@ class App {
     if (workerPhotoPlaceholder) workerPhotoPlaceholder.style.display = 'block';
     // Reset contract switcher
     this.modalWorksHimself = true;
+    this.modalWorkerRole = 'mistri';
+    this.modalIsThekedar = false;
     this.modalContractType = 'dihadi';
+    document.querySelectorAll('#workerRoleSwitcher .segment-btn').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-role') === 'mistri');
+    });
     document.querySelectorAll('#workerContractSwitcher .segment-btn').forEach(b => {
       b.classList.toggle('active', b.getAttribute('data-contract') === 'dihadi');
     });
@@ -5257,7 +5077,7 @@ class App {
       workers.forEach(w => {
         const rec = haziri[w.id];
         if (rec && rec.status > 0) {
-          if (w.role === 'mistri') mCount += rec.status;
+          if (w.role === 'mistri' || (w.role === 'thekedar' && w.worksHimself !== false)) mCount += rec.status;
           else hCount += rec.status;
         }
       });
@@ -5366,7 +5186,7 @@ class App {
       }).join(',');
 
       const contractStr = r.isTheka ? 'ठेका' : 'दिहाड़ी';
-      const roleStr = r.worker.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर';
+      const roleStr = workerRoleLabel(r.worker);
       csv += `"${r.worker.name}","${r.trade.name}","${roleStr}","${contractStr}",${dayValues},${r.totalPresent},${r.totalAbsent},${r.totalOtHours},${r.totalEarnedMonth},${r.totalPaidMonth},${r.netBalance}\n`;
     });
 
@@ -5421,7 +5241,7 @@ class App {
 
     const tradeRoleEl = document.getElementById('statementWorkerTradeRole');
     if (tradeRoleEl) {
-      tradeRoleEl.textContent = `${trade.name} (${worker.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'})`;
+      tradeRoleEl.textContent = `${trade.name} (${workerRoleLabel(worker)})`;
       tradeRoleEl.className = `tag-badge ${worker.role === 'mistri' ? 'tag-mistri' : 'tag-helper'}`;
     }
 
@@ -5564,7 +5384,7 @@ class App {
     let msg = `*श्रम व साइट डायरी - हिसाब पर्ची*\n`;
     msg += `------------------------------------\n`;
     msg += `👤 *कारीगर:* ${worker.name} (${trade.name})\n`;
-    msg += `📋 *पद / अनुबंध:* ${worker.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'} (${ledger.isTheka ? 'ठेका' : 'दिहाड़ी'})\n`;
+    msg += `📋 *पद / अनुबंध:* ${workerRoleLabel(worker)} (${ledger.isTheka ? 'ठेका' : 'दिहाड़ी'})\n`;
     if (ledger.isTheka) {
       msg += `📜 *तय ठेका राशि:* ₹${(worker.thekaAmount || 0).toLocaleString('en-IN')}\n`;
     } else {
@@ -5623,13 +5443,14 @@ class App {
     }
 
     // Role
-    this.editWorkerRole = worker.role || 'mistri';
+    this.editWorkerRole = (worker.isThekedar || worker.role === 'thekedar') ? 'thekedar' : (worker.role || 'mistri');
     document.querySelectorAll('#editWorkerRoleSwitcher .segment-btn').forEach(b => {
       b.classList.toggle('active', b.getAttribute('data-role') === this.editWorkerRole);
     });
 
     // Contract
-    this.editWorkerContract = worker.contractType || 'dihadi';
+    this.editWorkerContract = this.editWorkerRole === 'thekedar' ? 'theka' : 'dihadi';
+    this.editWorkerWorksHimself = worker.worksHimself !== false;
     document.querySelectorAll('#editWorkerContractSwitcher .segment-btn').forEach(b => {
       b.classList.toggle('active', b.getAttribute('data-contract') === this.editWorkerContract);
     });
@@ -5639,6 +5460,11 @@ class App {
     const rateInput = document.getElementById('editWorkerDailyRate');
     const thekaAmtInput = document.getElementById('editWorkerThekaAmount');
     const thekaDescInput = document.getElementById('editWorkerThekaDesc');
+
+    document.querySelectorAll('#editWorkerWorksHimselfSwitcher .segment-btn').forEach(b => {
+      const selectsYes = b.getAttribute('data-works-himself') === 'yes';
+      b.classList.toggle('active', selectsYes === this.editWorkerWorksHimself);
+    });
 
     if (this.editWorkerContract === 'theka') {
       if (dihadiGroup) dihadiGroup.style.display = 'none';
@@ -5716,7 +5542,7 @@ class App {
         const workers = this.store.getWorkers(tradeId);
         workerSelect.innerHTML = workers.map(w => `
           <option value="${w.id}" ${w.id === selectedWorkerId ? 'selected' : ''}>
-            ${esc(w.name)} (${w.role === 'mistri' ? 'मिस्त्री' : 'हेल्पर'})
+            ${esc(w.name)} (${workerRoleLabel(w)})
           </option>
         `).join('');
       }

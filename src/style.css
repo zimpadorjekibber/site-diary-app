@@ -2226,6 +2226,40 @@ body {
   .diary-table td[colspan] { grid-column: 1 / -1; grid-row: 1; text-align: center; }
 }
 
+/* Per-trolley rates on the add-supplier form: one row per material, because
+   reta is not priced like bajri and the man quotes them separately. */
+.supplier-rate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px 12px;
+}
+
+.supplier-rate-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--text-main);
+}
+
+.supplier-rate-row span {
+  flex: 0 0 4.5em;
+  font-weight: 600;
+}
+
+.supplier-rate-row .form-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+}
+
+.form-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 2px 0 8px;
+}
+
 /* The same notes, on the attendance screen — an ordinary app card there,
    rather than the paper-page look the diary slip wears. */
 .haziri-notes-card {
@@ -2259,40 +2293,6 @@ body {
 
 .haziri-notes-card .diary-note-text {
   color: var(--text-main);
-}
-
-/* Per-trolley rates on the add-supplier form: one row per material, because
-   reta is not priced like bajri and the man quotes them separately. */
-.supplier-rate-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 8px 12px;
-}
-
-.supplier-rate-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.9rem;
-  color: var(--text-main);
-}
-
-.supplier-rate-row span {
-  flex: 0 0 4.5em;
-  font-weight: 600;
-}
-
-.supplier-rate-row .form-input {
-  flex: 1;
-  min-width: 0;
-  padding: 8px 10px;
-  font-size: 0.9rem;
-}
-
-.form-hint {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  margin: 2px 0 8px;
 }
 
 /* SITE NOTES — what happened that was neither a mark nor an amount.
@@ -3511,7 +3511,7 @@ body {
   color: var(--text-muted);
 }
 
-.btn-del-custom-trade {
+.btn-del-custom-trade, .btn-edit-trade {
   background: none;
   border: none;
   color: var(--rose-danger);
@@ -4116,6 +4116,40 @@ body {
   gap: 10px;
   margin: 12px 0;
 }
+.btn-edit-trade { color: var(--indigo-primary); }
+.trade-row-actions { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; }
+.trade-tag-chip { flex: 1 1 230px; }
+.settings-trade-chip {
+  width: 100%;
+  max-width: 560px;
+  min-height: 52px;
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: default;
+  padding: 7px 8px 7px 16px;
+  background: rgba(15, 23, 42, 0.063);
+  border-color: rgba(15, 23, 42, 0.14);
+  font-size: 0.86rem;
+}
+.settings-trade-name { min-width: 0; text-align: left; }
+.settings-trade-name strong { color: var(--amber-light); margin-left: 2px; }
+.settings-edit-trade {
+  flex: 0 0 auto;
+  min-width: 132px;
+  min-height: 38px;
+  border: 1px solid rgba(15, 118, 110, 0.26);
+  border-radius: 12px;
+  padding: 7px 10px;
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--green-primary, #176b57);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.settings-edit-trade:active { transform: scale(0.97); }
 
 .lending-password-dialog {
   margin: auto;
