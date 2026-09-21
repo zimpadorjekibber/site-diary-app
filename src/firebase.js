@@ -2,7 +2,7 @@
 // Firebase Cloud Firestore integration for Shram & Site Diary
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, arrayUnion } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
 import { getAuth, GoogleAuthProvider, signInWithCredential, signOut as authSignOut, onAuthStateChanged } from 'firebase/auth';
 import { Capacitor } from '@capacitor/core';
 
@@ -254,9 +254,14 @@ function describeUser(u) {
    and the id recorded in the account's own directory. Two writes because the
    rules forbid listing site_diaries — without the directory a new phone would
    have no way to ask which ledger is its owner's, which is the entire point. */
-export async function claimSite(siteId, uid) {
+export async function claimSite(siteId, _uid) {
   if (!db) throw new Error(NOT_CONNECTED);
-  await waitForAuth();
+  /* The uid that matters is the JS SDK's, because that is the one the rules
+     see as request.auth.uid. The native sign-in returns its own copy and they
+     should agree, but "should" is doing real work in that sentence and a
+     mismatch here reads as a permissions error with nothing to point at. */
+  const account = await waitForAuth();
+  const uid = account.uid;
   const id = cleanId(siteId);
 
   /* The directory goes first, and the order is the whole point.
@@ -267,12 +272,34 @@ export async function claimSite(siteId, uid) {
      nobody able to reach it: locked out of your own hisaab by the act of
      claiming it. This way a broken token fails on the first write, having
      changed nothing, and the ledger stays as open as it was. */
-  await setDoc(doc(db, 'user_sites', uid), {
-    siteIds: arrayUnion(id),
-    updatedAt: new Date().toISOString()
-  }, { merge: true });
+  /* Read, merge, write — deliberately not arrayUnion.
 
-  await setDoc(doc(db, 'site_diaries', id), { ownerUid: uid }, { merge: true });
+     A field transform is applied after the rules run, so `siteIds` can be
+     absent from request.resource.data while the rule is being evaluated and a
+     check as ordinary as "siteIds is list" fails on a field the write plainly
+     contains. Computing the array here keeps what the rules see and what is
+     written the same thing. */
+  const directory = doc(db, 'user_sites', uid);
+  let siteIds = [];
+  try {
+    const existing = await getDoc(directory);
+    if (existing.exists() && Array.isArray(existing.data().siteIds)) siteIds = existing.data().siteIds;
+  } catch (e) {
+    throw new Error(`खाते की डायरेक्टरी पढ़ी नहीं जा सकी (${e.code || e.message})`);
+  }
+  if (!siteIds.includes(id)) siteIds = [...siteIds, id];
+
+  try {
+    await setDoc(directory, { siteIds, updatedAt: new Date().toISOString() }, { merge: true });
+  } catch (e) {
+    throw new Error(`खाते की डायरेक्टरी लिखी नहीं जा सकी (${e.code || e.message})`);
+  }
+
+  try {
+    await setDoc(doc(db, 'site_diaries', id), { ownerUid: uid }, { merge: true });
+  } catch (e) {
+    throw new Error(`हिसाब खाते से जोड़ा नहीं जा सका (${e.code || e.message})`);
+  }
   return id;
 }
 

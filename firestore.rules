@@ -107,10 +107,18 @@ service cloud.firestore {
 
       allow get: if isSelf();
       allow list: if false;
+      /* siteIds is checked only when it is actually there. A field written by a
+         transform — arrayUnion and its relatives — is applied after these rules
+         run, so it can be missing from request.resource.data while the write
+         plainly contains it, and an unguarded "is list" then refuses a write
+         that is perfectly well formed. The app writes a plain array for exactly
+         that reason; this guard means a transform would not lock anyone out
+         either. hasOnly still fixes which fields may be written at all. */
       allow create, update: if isSelf()
                             && request.resource.data.keys().hasOnly(['siteIds', 'updatedAt'])
-                            && request.resource.data.siteIds is list
-                            && request.resource.data.siteIds.size() <= 50;
+                            && (!('siteIds' in request.resource.data)
+                                || (request.resource.data.siteIds is list
+                                    && request.resource.data.siteIds.size() <= 50));
       allow delete: if false;
     }
 
