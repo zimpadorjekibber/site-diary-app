@@ -123,10 +123,45 @@ export class Workflow {
       return;
     }
     const saved = this.store.getHaziriSavedAt(date);
-    container.innerHTML = `<div class="roster-summary"><div><strong>${s.marked} / ${s.total}</strong> ${this.t('हाजिरी दर्ज','recorded')} <span>· ${s.pending} ${this.t('बाकी','pending')}</span></div><span class="autosave-label">${this.store.hasUnsavedChanges() ? this.t('सेव नहीं हुआ — बैकअप लें','Not saved — take a backup') : saved ? this.t('✓ बदलाव अपने आप सेव हैं','✓ Changes saved automatically') : this.t('चुनते ही सेव होगा','Saved when you choose')}</span></div><div class="roster-list"><div class="roster-list-heading"><span>${this.t('कारीगर / दिहाड़ी','WORKER / DAILY RATE')}</span><button class="flow-link" data-flow="markVisible" ${visible.some(w=>!records[w.id])?'':'disabled'}>${this.t('दिख रहे बाकी कारीगर: सब उपस्थित','Mark visible pending workers present')}</button></div>${visible.length ? visible.map(w => {
+    const groupLabel = this.visibleGroupLabel();
+    container.innerHTML = `<div class="roster-summary"><div><strong>${s.marked} / ${s.total}</strong> ${this.t('हाजिरी दर्ज','recorded')} <span>· ${s.pending} ${this.t('बाकी','pending')}</span></div><span class="autosave-label">${this.store.hasUnsavedChanges() ? this.t('सेव नहीं हुआ — बैकअप लें','Not saved — take a backup') : saved ? this.t('✓ बदलाव अपने आप सेव हैं','✓ Changes saved automatically') : this.t('चुनते ही सेव होगा','Saved when you choose')}</span></div><div class="roster-list"><div class="roster-list-heading"><span>${this.t('कारीगर / दिहाड़ी','WORKER / DAILY RATE')}</span><div class="roster-bulk"><button class="flow-link" data-flow="markVisible" ${visible.some(w=>!records[w.id])?'':'disabled'}>${this.t('बाकी: सब उपस्थित','Pending: all present')}</button><button class="flow-link flow-link-warn" data-flow="absentVisible" ${visible.length?'':'disabled'}>${esc(this.t(groupLabel+': सब गैरहाजिर',groupLabel+': all absent'))}</button></div></div>${visible.length ? visible.map(w => {
       const r = records[w.id];
       return `<div class="flow-attendance-row ${!r?'is-pending':''}" data-worker-id="${esc(w.id)}"><div class="roster-person"><span class="person-initial">${esc(w.name.slice(0,1))}</span><div><button class="flow-worker-name" data-open-statement="${esc(w.id)}">${esc(w.name)}</button><small>${esc(this.store.getTrade(w.tradeId).name)} · ${w.contractType==='theka' ? this.t('ठेका','Contract') : money(w.dailyRate)+this.t(' / दिन',' / day')}</small></div></div><div class="roster-choice-wrap"><span class="pending-label">${!r ? this.t('अभी दर्ज नहीं','Not recorded yet') : r.status===1?this.t('पूरा दिन','Full day'):r.status===.5?this.t('आधा दिन','Half day'):this.t('गैरहाजिर','Absent')}</span><div class="attendance-choices" role="group" aria-label="${esc(w.name)}">${[[1,this.t('पूरा','Full')],[.5,this.t('आधा','Half')],[0,this.t('गैरहाजिर','Absent')]].map(([value,label])=>`<button data-flow-attendance="${esc(w.id)}" data-value="${value}" class="${r?.status===value?'selected':''}" aria-pressed="${r?.status===value}">${label}</button>`).join('')}</div></div><div class="roster-more">${r?.status>0?`<button class="flow-link" data-hz-ot="${esc(w.id)}">${r.otHours?`+${r.otHours}h OT`:'+ OT'}</button>`:''}${r?.status===0?app.renderAbsenceReasonPicker(w,r):''}<button class="flow-link" data-hz-note="${esc(w.id)}">${this.t('+ नोट','+ Note')}</button></div>${this.renderWorkerNotes(w)}</div>`;
-    }).join('') : `<div class="flow-empty"><h4>${this.status==='pending' && !s.pending ? this.t('✓ सभी कारीगरों की हाजिरी दर्ज है','✓ Everyone’s attendance is recorded') : this.t('इस खोज में कोई कारीगर नहीं','No matching workers')}</h4><button class="flow-link" data-flow="clearRoster">${this.t('सभी कारीगर दिखाएं','Show all workers')}</button></div>`}</div><div class="roster-footer"><button class="btn-secondary" data-flow="worker">${this.t('+ कारीगर','+ Worker')}</button><span>${this.t('गैरहाजिर','Absent')}: ${s.absent} · ${this.t('आधा दिन','Half')}: ${s.half}</span><button class="btn-primary" data-flow="home">${this.t('आज पर लौटें','Back to today')} →</button></div>`;
+    }).join('') : `<div class="flow-empty"><h4>${this.status==='pending' && !s.pending ? this.t('✓ सभी कारीगरों की हाजिरी दर्ज है','✓ Everyone’s attendance is recorded') : this.t('इस खोज में कोई कारीगर नहीं','No matching workers')}</h4><button class="flow-link" data-flow="clearRoster">${this.t('सभी कारीगर दिखाएं','Show all workers')}</button></div>`}</div><div class="roster-footer"><button class="btn-secondary" data-flow="worker">${this.t('+ कारीगर','+ Worker')}</button><span>${this.t('गैरहाजिर','Absent')}: ${s.absent} · ${this.t('आधा दिन','Half')}: ${s.half}</span><button class="btn-primary" data-flow="home">${this.t('आज पर लौटें','Back to today')} →</button></div>${this.renderHaziriSubmit(date, s)}`;
+  }
+  /* A group tab is the name the contractor thinks in: on the Welder tab, "all
+     absent" means the welders, not the site. With no tab chosen it can only
+     honestly say "everyone on screen". */
+  visibleGroupLabel() {
+    const trade = this.app.activeHaziriTradeId !== 'all' ? this.store.getTrade(this.app.activeHaziriTradeId) : null;
+    return trade
+      ? `${trade.name} ${this.t('ग्रुप','group')}`
+      : this.t('दिख रहे सब','Everyone shown');
+  }
+  isEvening() {
+    const [h,m] = (this.store.getSettings().eveningReminderTime || '19:30').split(':').map(Number);
+    const now = new Date();
+    return now.getHours()*60 + now.getMinutes() >= h*60 + m;
+  }
+  /* The end of the day, at the end of the screen. Until it is pressed the marks
+     are only pencil — that is the whole point, so the line above the button
+     says so rather than leaving the contractor to guess. */
+  renderHaziriSubmit(date, s) {
+    const done = this.store.getHaziriSubmission(date);
+    const evening = date === getTodayString() && this.isEvening();
+    const pending = s.pending ? ` · ${this.t(`${s.pending} बाकी`,`${s.pending} pending`)}` : '';
+    const heading = done
+      ? `${this.t('✓ हाजिरी पक्की हो गई','✓ Attendance submitted')} (${done.timeLabel})`
+      : evening
+        ? this.t('📖 शाम हो गई — आज की हाजिरी पक्की करें','📖 Evening — submit today’s attendance')
+        : this.t('हाजिरी अभी बदली जा सकती है','Attendance is still open');
+    const detail = done
+      ? this.t('अब इसे डायरी में लिख लें। कुछ भी बदला तो दोबारा पक्की करनी होगी।','Now copy it into your diary. Any change reopens the day.')
+      : this.t('सुबह उपस्थित, दोपहर बाद बीमार तो आधा — दिन भर बदलिए, शाम को आख़िर में पक्की कीजिए।','Present in the morning, half if someone falls ill after lunch — change it all day, submit at the end.');
+    const button = done
+      ? `<button class="btn-secondary" data-flow="diary">${this.t('📖 डायरी खोलें','📖 Open diary')} →</button>`
+      : `<button class="btn-primary" data-flow="submitHaziri" ${s.marked?'':'disabled'}>${this.t('✓ हाजिरी पक्की करें','✓ Submit attendance')}</button>`;
+    return `<div class="roster-submit${done?' is-submitted':evening?' is-evening':''}"><div><strong>${esc(heading)}</strong><small>${esc(detail+pending)}</small></div>${button}</div>`;
   }
   /* What was written about this man on this day, under his own row. Kept
      closed until asked for: twenty-one rows each carrying an open text box is
@@ -289,6 +324,30 @@ export class Workflow {
         const date=this.app.selectedHaziriDate, records=this.store.getHaziri(date);
         this.visibleWorkers.filter(w=>!records[w.id]).forEach(w=>this.store.setWorkerHaziri(date,w.id,1));
         this.app.commit('haziri');
+      }
+      /* When the power stays off, a whole trade loses the day at once. Marking
+         it man by man is eleven taps and no record of why — so the reason is
+         asked once, written onto every row, and kept as one note under that
+         group's name, which is what the diary needs to read back. */
+      if(action==='absentVisible') {
+        if(!this.visibleWorkers.length) return;
+        const label=this.visibleGroupLabel();
+        const reason=prompt(this.t(`${label}: गैरहाजिरी का कारण (जैसे: लाइट नहीं आई)`,`${label}: reason for absence (e.g. no power)`),'');
+        if(reason===null) return;                     // cancelled — nothing touched
+        const date=this.app.selectedHaziriDate, records=this.store.getHaziri(date);
+        const why=reason.trim();
+        this.visibleWorkers.forEach(w=>this.store.setWorkerHaziri(date,w.id,0,0,why));
+        const tradeId=this.app.activeHaziriTradeId!=='all'?this.app.activeHaziriTradeId:null;
+        if(why) this.store.addSiteNote({date,tradeId,text:this.t(`${label} गैरहाजिर — ${why}`,`${label} absent — ${why}`)});
+        this.app.commit('haziri');
+        this.app.showToast(this.t(`${label}: ${this.visibleWorkers.length} कारीगर गैरहाजिर`,`${label}: ${this.visibleWorkers.length} marked absent`));
+      }
+      if(action==='submitHaziri') {
+        const date=this.app.selectedHaziriDate, s=this.summary(date);
+        if(s.pending && !confirm(this.t(`${s.pending} कारीगर की हाजिरी अभी बाकी है। फिर भी दिन पक्का करें?`,`${s.pending} workers are still unmarked. Submit the day anyway?`))) return;
+        if(!this.store.submitHaziri(date)) return;
+        this.app.commit('haziri');
+        this.app.showToast(this.t('✓ आज की हाजिरी पक्की — अब डायरी में लिख लें','✓ Attendance submitted — now write it in your diary'),3200);
       }
     });
   }

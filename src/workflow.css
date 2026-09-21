@@ -82,6 +82,16 @@
 .attendance-choices button[data-value="0"].selected { background: #a54f4c; }
 .roster-more { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
 .roster-more:empty { display: none; }
+.roster-bulk { display: flex; align-items: center; gap: 14px; }
+.flow-link-warn { color: #a54f4c; }
+/* The day's last action, and the only one that closes it — so it is a card of
+   its own below the roster, not another link in the footer. */
+.roster-submit { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; background: #fff; border: 1px solid var(--border-card); border-radius: 15px; padding: 16px 20px; margin: 0 0 24px; }
+.roster-submit strong { display: block; font-size: .95rem; font-weight: 600; }
+.roster-submit small { display: block; margin-top: 4px; font-size: .76rem; color: var(--text-muted); max-width: 46ch; line-height: 1.5; }
+.roster-submit.is-evening { border-color: #e0c48a; background: #fffaef; }
+.roster-submit.is-submitted { border-color: #cfe0cd; background: #f6faf4; }
+.roster-submit.is-submitted strong { color: #326b50; }
 .roster-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 20px 0; flex-wrap: wrap; }
 .roster-footer > span { font-size: .77rem; color: var(--text-muted); }
 .flow-page-heading { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin-bottom: 24px; }
@@ -188,6 +198,10 @@
   .pending-label { font-size: .68rem; }
   .roster-more { margin-top: -8px; }
   .roster-more .flow-link { padding: 0 12px; background: #f2f5ec; border-radius: 8px; }
+  .roster-bulk { gap: 10px; }
+  .roster-submit { padding: 14px; }
+  .roster-submit > div { flex: 1 1 100%; }
+  .roster-submit .btn-primary, .roster-submit .btn-secondary { flex: 1 1 100%; }
   .roster-footer { gap: 8px; }
   .roster-footer .btn-primary, .roster-footer .btn-secondary { font-size: .76rem; padding: 10px 14px; }
   .roster-footer > span { flex-basis: 100%; order: 3; text-align: center; }

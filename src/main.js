@@ -2524,7 +2524,7 @@ class App {
           <span class="diary-note-time">${esc(n.time || '')}</span>
           <span class="diary-note-text">${esc(n.text)}</span>
           ${worker ? `<span class="diary-note-trade">${esc(worker.name)}</span>` : ''}
-          ${trade ? `<span class="diary-note-trade">${esc(trade.name)}</span>` : ''}
+          ${trade ? `<span class="diary-note-trade is-group">${esc(trade.name)} ${this.currentLang === 'en' ? 'group' : 'ग्रुप'}</span>` : ''}
           <button type="button" class="diary-note-delete" data-delete-note="${esc(n.id)}" aria-label="नोट हटाएँ">✕</button>
         </div>
       `;
@@ -2535,6 +2535,7 @@ class App {
   renderHaziriNotes() {
     const date = this.selectedHaziriDate || getTodayString();
     this.renderNotesInto('haziriNotesList', date);
+    this.renderNoteTargets();
 
     const dateEl = document.getElementById('haziriNotesDate');
     if (dateEl) {
@@ -2545,11 +2546,33 @@ class App {
     }
   }
 
+  /* Who the day-note box is writing about. A worker's own note already has a
+     row of its own; this box covers the two cases that had nowhere to go — the
+     whole site, and one trade group. It opens on whichever group tab is being
+     worked, because that is almost always the answer. */
+  renderNoteTargets() {
+    const select = document.getElementById('haziriNoteTarget');
+    if (!select) return;
+
+    const active = this.activeHaziriTradeId && this.activeHaziriTradeId !== 'all' ? this.activeHaziriTradeId : '';
+    // A half-made choice survives the redraw that every attendance tap causes.
+    const chosen = select.dataset.touched === 'yes' ? select.value : active;
+    const en = this.currentLang === 'en';
+
+    select.innerHTML = [
+      `<option value="">${en ? 'Whole site' : 'पूरी साइट'}</option>`,
+      ...this.store.getTrades().map(t =>
+        `<option value="${esc(t.id)}">${esc(t.name)} ${en ? 'group' : 'ग्रुप'}</option>`)
+    ].join('');
+    select.value = this.store.getTrade(chosen) ? chosen : '';
+  }
+
   /**
    * Saves what is typed in a note box against one date, and clears it.
    * Shared by both boxes so neither can drift from the other.
+   * @param {string} [targetId] id of a group picker sitting beside the box.
    */
-  addNoteFrom(inputId, date) {
+  addNoteFrom(inputId, date, targetId) {
     const input = document.getElementById(inputId);
     const text = (input?.value || '').trim();
     if (!text) {
@@ -2557,10 +2580,17 @@ class App {
       input?.focus();
       return;
     }
-    this.store.addSiteNote({ date, text });
+    const target = targetId ? document.getElementById(targetId) : null;
+    const tradeId = target?.value || null;
+    this.store.addSiteNote({ date, text, tradeId });
     input.value = '';
+    // The group stays selected for the next note — the light is off for a while.
     this.commit('site-note');
-    this.showToast(this.currentLang === 'en' ? 'Note added' : 'नोट जुड़ गया');
+
+    const trade = tradeId ? this.store.getTrade(tradeId) : null;
+    this.showToast(this.currentLang === 'en'
+      ? (trade ? `Note added for ${trade.name} group` : 'Note added')
+      : (trade ? `${trade.name} ग्रुप का नोट जुड़ गया` : 'नोट जुड़ गया'));
   }
 
   // --- FORM HELPERS & POPULATION ---
@@ -4282,7 +4312,13 @@ class App {
        typed on the spot rather than only dictated to the assistant. */
     const diaryNote = () => this.addNoteFrom('diaryNoteInput', getTodayString());
     // The attendance box writes to the date on the chip above it.
-    const haziriNote = () => this.addNoteFrom('haziriNoteInput', this.selectedHaziriDate || getTodayString());
+    const haziriNote = () => this.addNoteFrom('haziriNoteInput', this.selectedHaziriDate || getTodayString(), 'haziriNoteTarget');
+
+    /* Once it has been set by hand it stops following the group tab: the man
+       chose, and a redraw has no business overruling him. */
+    document.getElementById('haziriNoteTarget')?.addEventListener('change', (e) => {
+      e.target.dataset.touched = 'yes';
+    });
 
     document.getElementById('btnAddDiaryNote')?.addEventListener('click', diaryNote);
     document.getElementById('btnAddHaziriNote')?.addEventListener('click', haziriNote);

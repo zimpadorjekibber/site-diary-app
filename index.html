@@ -283,6 +283,12 @@
           <!-- Injected via JS -->
         </div>
         <div class="diary-note-form">
+          <!-- Whose note this is. A site runs in groups, so "light nahi aayi"
+               said about the welders has to be filed against the welders —
+               otherwise the evening diary reads a row of unowned complaints. -->
+          <select id="haziriNoteTarget" class="diary-note-target" aria-label="यह नोट किसके लिए है">
+            <!-- Injected via JS: पूरी साइट + one option per trade -->
+          </select>
           <input
             type="text"
             id="haziriNoteInput"

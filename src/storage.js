@@ -1460,6 +1460,37 @@ export class Store {
     };
   }
 
+  /* A day is not finished the moment it is first marked. A man comes at eight,
+     works the morning and goes home sick after lunch; the register has to be
+     able to say "full" at noon and "half" at seven. So marks stay editable all
+     day and the contractor closes the day himself, once, in the evening.
+
+     The stamp lives in haziriMeta beside savedAt, which setWorkerHaziri
+     rewrites on every change — so any later edit reopens the day by itself and
+     has to be closed again. That is the honest behaviour, and it costs no new
+     field in the saved file, in a backup, or in the cloud document. */
+  submitHaziri(date = getTodayString()) {
+    const rows = this.activeProject().haziri[date];
+    if (!rows || Object.keys(rows).length === 0) return null;   // nothing to close
+
+    if (!this.activeProject().haziriMeta) this.activeProject().haziriMeta = {};
+    const meta = this.activeProject().haziriMeta[date] || { savedAt: Date.now(), deviceId: getDeviceId() };
+    meta.submittedAt = Date.now();
+    this.activeProject().haziriMeta[date] = meta;
+    this.save();
+    return meta;
+  }
+
+  /** Null until the day has been closed, and null again after any later edit. */
+  getHaziriSubmission(date = getTodayString()) {
+    const meta = this.activeProject().haziriMeta && this.activeProject().haziriMeta[date];
+    if (!meta || !meta.submittedAt) return null;
+    return {
+      submittedAt: meta.submittedAt,
+      timeLabel: new Date(meta.submittedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+  }
+
   // --- MONTHLY HAZIRI / MUSTER ROLL ---
   getMonthlyHaziri(year, month) {
     // year: e.g. 2026, month: 1 to 12

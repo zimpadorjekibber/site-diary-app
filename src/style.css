@@ -2331,6 +2331,17 @@ body {
   white-space: nowrap;
 }
 
+/* A group's note is read differently from one man's: it explains why a whole
+   row of the muster roll looks the way it does, so it is given a badge rather
+   than the quiet grey a name gets. */
+.diary-note-trade.is-group {
+  color: #78350f;
+  background: rgba(245, 158, 11, 0.16);
+  border-radius: 6px;
+  padding: 1px 7px;
+  font-weight: 700;
+}
+
 /* Small and quiet until pointed at: deleting is not what this screen is for. */
 .diary-note-delete {
   background: none;
@@ -2357,6 +2368,20 @@ body {
   display: flex;
   gap: 8px;
   margin-top: 10px;
+}
+
+/* Sits before the text box, so the group is chosen before the words are typed
+   — the order the sentence is actually thought in. */
+.diary-note-target {
+  flex-shrink: 0;
+  max-width: 45%;
+  padding: 10px 8px;
+  border: 1px solid var(--border-card);
+  border-radius: 8px;
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.88rem;
 }
 
 .diary-note-input {
@@ -2397,11 +2422,13 @@ body {
 @media (max-width: 560px) {
   .diary-note-form { flex-direction: column; }
   .btn-add-note { width: 100%; }
+  .diary-note-target { max-width: none; width: 100%; }
 }
 
 /* The slip that goes to paper carries the notes, not the box they were typed in. */
 @media print {
   .diary-note-form, .diary-note-delete { display: none !important; }
+  .diary-note-trade.is-group { background: none; border: 1px solid #999; }
 }
 
 .diary-grand-total {
