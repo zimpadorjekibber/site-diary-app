@@ -250,6 +250,13 @@ class App {
     // After the shell exists and the modals are in the DOM: it wraps goToTab
     // and watches every .modal-overlay, so both have to be there first.
     this.backNav = new BackNav(this);
+    this.renderAuthGate();
+    /* The gate tells the user whether the one thing it needs is available, so
+       it has to keep telling the truth: a phone that finds signal while the
+       gate is up should stop saying there is none. */
+    for (const event of ['online', 'offline']) {
+      window.addEventListener(event, () => this.renderAuthGate());
+    }
     this.populateSelects();
     this.applyLanguage(this.currentLang, false);
     this.renderAll();
@@ -354,9 +361,17 @@ class App {
     try {
       const ok = await initFirebase(s.firebaseConfig);
       if (ok && s.firebaseAutoSync) {
+        /* A claimed ledger only answers to its account, and auth restores a
+           moment after launch. Subscribing before that gets one refusal and
+           the listener stops there — the phone then runs all day believing it
+           is in touch with the cloud and hearing nothing from it. So wait for
+           the token first, the same as a write does. */
+        if (s.accountUid) await getCurrentUser();
         await enableRealtimeSync(s.firebaseSiteId, (remoteData) => this.onRemoteData(remoteData));
       }
       this.updateSyncIndicator();
+      // A ledger that is signed in but not yet owned is repaired here.
+      this.claimIfNeeded();
     } catch (err) {
       console.warn('Firebase init on start failed:', err);
       this.updateSyncIndicator();
@@ -2611,6 +2626,61 @@ class App {
       : (trade ? `${trade.name} ग्रुप का नोट जुड़ गया` : 'नोट जुड़ गया'));
   }
 
+  /* The gate, and the rule behind it: asked once, never again.
+
+     A phone that already knows its account is never stopped, even with no
+     signal and no way to check — the token may be stale, the valley may have
+     no bars, and none of that is a reason to stand between a man and today's
+     attendance. What it stops is the very first run, because a ledger that was
+     never tied to an account is one reinstall away from gone. */
+  renderAuthGate() {
+    const gate = document.getElementById('authGate');
+    if (!gate) return;
+    const known = !!this.store.getSettings().accountUid;
+    gate.hidden = known;
+    document.body.classList.toggle('auth-gated', !known);
+
+    if (!known) {
+      const en = this.currentLang === 'en';
+      const note = document.getElementById('authGateNote');
+      if (note) {
+        // Both branches write the text. Clearing only the styling left the
+        // words "there is no internet" sitting under a phone that had just
+        // found some.
+        const offline = !navigator.onLine;
+        note.textContent = offline
+          ? (en ? 'You are offline. Sign-in needs internet just this once.'
+                : 'अभी इंटरनेट नहीं है। सिर्फ़ पहली बार के लिए इंटरनेट चाहिए।')
+          : (en ? 'Internet is needed for this first time only. After that the app works offline.'
+                : 'पहली बार के लिए इंटरनेट चाहिए। उसके बाद ऐप बिना इंटरनेट भी चलती रहेगी।');
+        note.classList.toggle('is-offline', offline);
+      }
+    }
+  }
+
+  /* Signing in on a phone that has nothing on it is the whole promise of having
+     an account: the hisaab should simply be there. The account's directory is
+     the only way to find it, since the rules refuse to list ledgers. */
+  async restoreFromAccount(user) {
+    if (this.store.getWorkers().length > 0) return false;   // nothing to restore onto
+    let sites = [];
+    try {
+      sites = await listMySites(user.uid);
+    } catch { return false; }
+    if (!sites.length) return false;                        // a genuinely new user
+
+    for (const siteId of sites) {
+      try {
+        const remote = await loadFromFirebase(siteId);
+        if (!this.looksLikeLedger(remote)) continue;
+        this.store.updateSettings({ firebaseSiteId: siteId, claimedSiteId: siteId });
+        this.applyRemoteData(remote);
+        return true;
+      } catch { /* try the next one this account owns */ }
+    }
+    return false;
+  }
+
   /* The one fact the whole removed panel was really being read for: is my
      hisaab safe, and as of when. */
   lastSavedLine() {
@@ -2727,10 +2797,14 @@ class App {
         this.store.updateSettings({ claimedSiteId: settings.firebaseSiteId });
       }
 
+      const restored = await this.restoreFromAccount(user);
+
+      this.renderAuthGate();
       this.renderAccountCard();
-      this.showToast(en
-        ? `Signed in as ${user.name || user.email} — this ledger is now yours`
-        : `${user.name || user.email} से लॉगिन हो गया — अब यह हिसाब आपके खाते का है`, 4000);
+      this.showToast(restored
+        ? (en ? 'Signed in — your ledger is back' : 'लॉगिन हो गया — आपका हिसाब वापस आ गया')
+        : (en ? `Signed in as ${user.name || user.email} — this ledger is now yours`
+              : `${user.name || user.email} से लॉगिन हो गया — अब यह हिसाब आपके खाते का है`), 4000);
     } catch (err) {
       // Cancelling the Google sheet is not a failure worth an alarm.
       const cancelled = /cancel|closed|12501|popup/i.test(err && err.message || '');
@@ -2754,6 +2828,7 @@ class App {
     this.store.updateSettings({ accountUid: null });
     this._accountChecked = false;
     this.renderAccountCard();
+    this.renderAuthGate();
     this.showToast(en ? 'Signed out' : 'लॉगआउट हो गया');
   }
 
@@ -4974,7 +5049,7 @@ class App {
     /* Delegated: the account card is redrawn on every open, so its buttons are
        new elements each time and cannot hold their own listeners. */
     document.addEventListener('click', (e) => {
-      const signIn = e.target.closest('#btnGoogleSignIn');
+      const signIn = e.target.closest('#btnGoogleSignIn') || e.target.closest('#btnGateSignIn');
       if (signIn) { this.handleSignIn(signIn); return; }
       if (e.target.closest('#btnGoogleSignOut')) this.handleSignOut();
     });

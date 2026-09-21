@@ -4,21 +4,18 @@ rules_version = '2';
 //
 // Deploy with:  firebase deploy --only firestore:rules
 //
-// Context: the app has no sign-in. Every install generates its own unguessable
-// site id (site-XXXX-XXXX, see getOrCreateSiteId in src/storage.js) and that id
-// is the only thing protecting a site's ledger. These rules therefore do two
-// things the default test-mode rules do not:
+// A ledger belongs to a Google account. `ownerUid` on the document says whose,
+// and nothing outside that account can read or write it — knowing the site id
+// is no longer enough, and was only ever enough because there was nothing else
+// to go on.
 //
-//   1. Refuse access to any document whose id is not a well-formed site id, so
-//      a scan of short or guessed names finds nothing.
-//   2. Refuse writes that do not look like this app's payload, so a malformed
-//      or oversized document cannot replace a real ledger.
+// The site id still matters: it names the document, and the shape check below
+// keeps anything that is not this app's payload from replacing one. But it is
+// a name now, not a password.
 //
-// They deliberately do NOT allow listing the collection: without that, an
-// attacker cannot enumerate sites, only guess full ids (32^8 combinations).
-//
-// If you later add Firebase Authentication, tighten `isOwner()` below to compare
-// request.auth.uid against an ownerUid field on the document.
+// Listing is refused outright, so the collection cannot be walked. That is why
+// a signed-in phone finds its own ledgers through /user_sites/{uid} instead of
+// by querying — see the note there.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -56,17 +53,10 @@ service cloud.firestore {
         return isCurrentShape() || isLegacyShape();
       }
 
-      /* Ownership, added when the app learned to sign in.
-
-         Until a ledger is claimed it behaves exactly as it always has: the site
-         id is the only key, which is what every phone in the field still relies
-         on. The moment someone signs in and claims it, `ownerUid` is written and
-         the id alone stops being enough — knowing the code no longer gets you
-         in, the account does.
-
-         Both halves have to stay true at once for as long as there are phones
-         on the old build, which is why this is a property of the document and
-         not a flag in the rules. */
+      /* Ownership. A document written before accounts existed has no ownerUid
+         and is therefore unreachable — deliberately: such a ledger is one
+         nobody can prove belongs to them, and the app's own file backup is the
+         way back into it, not a rule that trusts whoever knows the code. */
       function isClaimed() {
         return resource != null && 'ownerUid' in resource.data;
       }
@@ -75,20 +65,22 @@ service cloud.firestore {
         return request.auth != null && request.auth.uid == resource.data.ownerUid;
       }
 
-      // A claim can be made by whoever holds the id — that is today's access
-      // rule — but it can never be moved to someone else afterwards.
-      function keepsOwner() {
-        return !isClaimed()
-               || (request.resource.data.ownerUid == resource.data.ownerUid && isOwner());
-      }
+      /* Every ledger belongs to an account, from the moment it is created.
 
-      // Installs made before per-site ids all wrote to one shared document
-      // ('khalen-dairy'). It held only demo data, confirmed with the owner, so it
-      // gets no exemption here — nothing outside the site-id pattern is reachable.
-      allow get: if isWellFormedSiteId() && (!isClaimed() || isOwner());
+         The id alone used to be enough, because there was nothing else to go
+         on. That was defensible while one contractor ran one site he had set
+         up himself; it is not defensible once strangers install this, because
+         it means anyone holding a code holds a ledger, and a ledger that was
+         never claimed cannot be got back after a reinstall.
+
+         A ledger is therefore created signed-in and owned, or not at all. */
+      allow get: if isWellFormedSiteId() && isClaimed() && isOwner();
       allow list: if false; // never allow enumerating sites
-      allow create: if isWellFormedSiteId() && looksLikeLedger();
-      allow update: if isWellFormedSiteId() && looksLikeLedger() && keepsOwner();
+      allow create: if isWellFormedSiteId() && looksLikeLedger()
+                    && request.auth != null
+                    && request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isWellFormedSiteId() && looksLikeLedger() && isClaimed() && isOwner()
+                    && request.resource.data.ownerUid == resource.data.ownerUid;
       allow delete: if false; // the app never deletes a site document
     }
 

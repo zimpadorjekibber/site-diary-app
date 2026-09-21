@@ -49,6 +49,35 @@
       </div>
     </header>
 
+    <!-- SIGN-IN GATE
+
+         Shown once, on a phone that has never signed in. It is not here to
+         protect the app from its user; it is here because the alternative is
+         what happened on 21 September: a ledger that lives only inside one
+         installation, and dies with it. A stranger downloading this from the
+         Play Store would meet that trap on their first reinstall and have no
+         idea it was coming.
+
+         It gates first use only. Once an account is known the app never asks
+         again, online or off — a contractor at the bottom of a valley with no
+         signal must still be able to mark attendance. -->
+    <div id="authGate" class="auth-gate" hidden>
+      <div class="auth-gate-card">
+        <div class="auth-gate-icon">📒</div>
+        <h2 id="authGateTitle">अपना हिसाब सुरक्षित रखिए</h2>
+        <p id="authGateBody">
+          एक बार Google से लॉगिन कर लीजिए। फिर आपका हिसाब आपके खाते के साथ चलेगा —
+          नया फ़ोन हो, फ़ोन खो जाए या ऐप दोबारा डालनी पड़े, लॉगिन करते ही सब वापस।
+        </p>
+        <button type="button" id="btnGateSignIn" class="btn-google-signin">
+          Google से लॉगिन करें
+        </button>
+        <p class="auth-gate-note" id="authGateNote">
+          पहली बार के लिए इंटरनेट चाहिए। उसके बाद ऐप बिना इंटरनेट भी चलती रहेगी।
+        </p>
+      </div>
+    </div>
+
     <!-- EVENING ALERT BANNER (Visible in evening or toggleable) -->
     <div id="eveningAlertBanner" class="evening-alert-banner" style="display: none;">
       <div class="evening-alert-content">
