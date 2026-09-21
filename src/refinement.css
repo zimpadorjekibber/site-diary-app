@@ -217,3 +217,7 @@ button { touch-action: manipulation; }
 .btn-google-signin:disabled { opacity: 0.6; cursor: default; }
 .btn-google-signin:active:not(:disabled) { transform: scale(0.99); }
 .account-signout { width: 100%; margin-top: 14px; }
+
+/* When the hisaab was last saved, under the name. The whole panel that used to
+   sit below this card was, in the end, being read for this one line. */
+.account-sync-line { margin-top: 6px; font-weight: 600; color: #487252 !important; }

@@ -2611,6 +2611,40 @@ class App {
       : (trade ? `${trade.name} ग्रुप का नोट जुड़ गया` : 'नोट जुड़ गया'));
   }
 
+  /* The one fact the whole removed panel was really being read for: is my
+     hisaab safe, and as of when. */
+  lastSavedLine() {
+    const en = this.currentLang === 'en';
+    if (this.syncErrorMessage) return en ? 'Not saved yet — will retry' : 'अभी सुरक्षित नहीं — दोबारा कोशिश होगी';
+    const at = this.store.getSettings().lastFirebaseSync;
+    if (!at) return en ? 'Saving…' : 'सेव हो रहा है…';
+    const time = new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return en ? `Saved · ${time}` : `सुरक्षित · ${time}`;
+  }
+
+  /* Claiming used to happen only while the sign-in button was being pressed,
+     so a phone that was already signed in when its ledger changed never tied
+     the two together — and the only way out was to sign out and back in, which
+     nobody would ever guess. Signed in with an unclaimed ledger is simply a
+     state to repair, so it is repaired on sight. */
+  async claimIfNeeded() {
+    const s = this.store.getSettings();
+    if (!s.firebaseSiteId || !s.accountUid) return;
+    if (s.claimedSiteId === s.firebaseSiteId) return;      // already done
+    if (!isFirebaseReady()) return;
+    try {
+      const user = await getCurrentUser();
+      if (!user) return;                                    // not signed in yet
+      await claimSite(s.firebaseSiteId, user.uid);
+      this.store.updateSettings({ claimedSiteId: s.firebaseSiteId });
+      this.renderAccountCard();
+    } catch (err) {
+      // A ledger owned by another account is a real answer, not a glitch; it is
+      // reported when the card is opened rather than shouted at on launch.
+      console.warn('claim on launch:', err && err.message);
+    }
+  }
+
   /* The account row in settings.
 
      Signed out it explains, in one line, the thing the site id never could:
@@ -2656,6 +2690,7 @@ class App {
           <small>${en
             ? 'This ledger is tied to your account. Sign in on any phone to get it back.'
             : 'यह हिसाब आपके खाते से जुड़ा है। किसी भी फ़ोन पर लॉगिन करके वापस पा सकते हैं।'}</small>
+          <small class="account-sync-line">${esc(this.lastSavedLine())}</small>
         </div>
       </div>
       <button type="button" id="btnGoogleSignOut" class="btn-secondary account-signout">
@@ -2687,7 +2722,10 @@ class App {
          a throw in between left runSync firing tokenless writes at a ledger
          that had started refusing them, and refusing them quietly. */
       this.store.updateSettings({ accountUid: user.uid });
-      if (settings.firebaseSiteId) await claimSite(settings.firebaseSiteId, user.uid);
+      if (settings.firebaseSiteId) {
+        await claimSite(settings.firebaseSiteId, user.uid);
+        this.store.updateSettings({ claimedSiteId: settings.firebaseSiteId });
+      }
 
       this.renderAccountCard();
       this.showToast(en
@@ -4620,6 +4658,7 @@ class App {
       });
 
       this.renderAccountCard();
+      this.claimIfNeeded();
       modalSettings.classList.add('open');
     };
 
@@ -4870,7 +4909,11 @@ class App {
         // Never fall back to the old shared id — that is what made every install
         // write into one another's ledger.
         const firebaseSiteId = document.getElementById('firebaseSiteIdInput')?.value.trim() || current.firebaseSiteId;
-        const firebaseAutoSync = document.getElementById('firebaseAutoSyncToggle') ? document.getElementById('firebaseAutoSyncToggle').checked : false;
+        /* There is no toggle any more — syncing is not a preference, it is
+           what keeps the hisaab. The old fallback here was `false`, so removing
+           the switch would have turned cloud backup off the first time anyone
+           saved settings, and said nothing. Keep whatever is already set. */
+        const firebaseAutoSync = current.firebaseAutoSync !== false;
         const otHoursPerDay = Number(document.getElementById('settingOtHours')?.value) || current.otHoursPerDay || 8;
 
         const siteChanged = firebaseSiteId !== current.firebaseSiteId;
