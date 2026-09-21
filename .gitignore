@@ -44,3 +44,7 @@ android/keystore.properties
 
 # MCP server ki apni dependencies
 mcp/node_modules
+
+# Recovered ledger dumps: real names, phone numbers and contract amounts.
+# These are the site owner's data, not the app's — they never belong in the repo.
+recovered/

@@ -10,6 +10,7 @@ import { translations } from './i18n.js';
 import { LendingLock } from './lending-lock.js';
 import { initModalUX } from './modal-ux.js';
 import { Workflow } from './workflow.js';
+import { BackNav } from './back.js';
 
 /* Every list in this app is built with innerHTML from data a user typed — worker
    names, notes, trade names — and that data also arrives from cloud sync, i.e.
@@ -246,6 +247,9 @@ class App {
     this.workflow = new Workflow(this);
     initModalUX();
     this.bindEvents();
+    // After the shell exists and the modals are in the DOM: it wraps goToTab
+    // and watches every .modal-overlay, so both have to be there first.
+    this.backNav = new BackNav(this);
     this.populateSelects();
     this.applyLanguage(this.currentLang, false);
     this.renderAll();

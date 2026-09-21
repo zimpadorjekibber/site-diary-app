@@ -225,6 +225,27 @@ body {
 .header-reminder-pill strong { color: var(--text-main); font-weight: 700; }
 .bell-icon { font-size: 0.9rem; }
 
+/* Back sits where a thumb reaches first, left of the job name, and is simply
+   absent on the home screen — a dead arrow teaches people to distrust it. */
+.btn-app-back {
+  flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border-card);
+  border-radius: 12px;
+  background: var(--bg-card);
+  color: var(--text-main);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.btn-app-back:active { transform: scale(0.93); }
+.btn-app-back[hidden] { display: none; }
+
 .btn-icon-header {
   width: 38px;
   height: 38px;
