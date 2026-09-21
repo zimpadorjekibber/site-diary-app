@@ -492,6 +492,20 @@ class App {
     const s = this.store.getSettings();
     if (!s.firebaseAutoSync || !isFirebaseReady()) return;
 
+    /* Once a ledger has been claimed by an account, the rules only accept
+       writes that carry that account's token. Auth restores asynchronously on
+       launch, so a sync fired in the first seconds — the attendance marked on
+       the way to site, before the SDK has woken up — would be refused, and
+       refused quietly: the phone would keep its copy and believe it had a
+       cloud one. That is the exact shape of the failure that lost a month of
+       hisaab, so a claimed ledger waits for its account. */
+    if (s.accountUid && !(await getCurrentUser())) {
+      this.updateSyncIndicator('pending');
+      clearTimeout(this._syncTimer);
+      this._syncTimer = setTimeout(() => this.runSync(reason), 4000);
+      return;
+    }
+
     this.updateSyncIndicator('syncing');
     try {
       await saveToFirebase(s.firebaseSiteId, this.store.data, this.deviceId);
@@ -2666,6 +2680,8 @@ class App {
       if (!user) throw new Error(en ? 'Sign-in cancelled' : 'लॉगिन रद्द हुआ');
 
       if (settings.firebaseSiteId) await claimSite(settings.firebaseSiteId, user.uid);
+      // Recorded so runSync knows this phone's ledger now needs a token.
+      this.store.updateSettings({ accountUid: user.uid });
 
       this.renderAccountCard();
       this.showToast(en
@@ -2691,6 +2707,8 @@ class App {
     try {
       await signOutUser();
     } catch {}
+    this.store.updateSettings({ accountUid: null });
+    this._accountChecked = false;
     this.renderAccountCard();
     this.showToast(en ? 'Signed out' : 'लॉगआउट हो गया');
   }
