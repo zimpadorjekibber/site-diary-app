@@ -2679,9 +2679,15 @@ class App {
       const user = await signInWithGoogle();
       if (!user) throw new Error(en ? 'Sign-in cancelled' : 'लॉगिन रद्द हुआ');
 
-      if (settings.firebaseSiteId) await claimSite(settings.firebaseSiteId, user.uid);
-      // Recorded so runSync knows this phone's ledger now needs a token.
+      /* Recorded before the claim, not after.
+
+         The claim is what makes the ledger need a token, and if it half
+         succeeds — or succeeded on an earlier attempt that then errored — the
+         ledger needs one whether or not this call finishes. Written afterwards,
+         a throw in between left runSync firing tokenless writes at a ledger
+         that had started refusing them, and refusing them quietly. */
       this.store.updateSettings({ accountUid: user.uid });
+      if (settings.firebaseSiteId) await claimSite(settings.firebaseSiteId, user.uid);
 
       this.renderAccountCard();
       this.showToast(en

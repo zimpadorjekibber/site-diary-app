@@ -189,7 +189,33 @@ export async function signInWithGoogle() {
     if (!idToken) throw new Error('Google से पहचान नहीं मिली — दोबारा कोशिश करें।');
     await signInWithCredential(getAuth(app), GoogleAuthProvider.credential(idToken));
   }
+  // Signed in is not the same as ready to write — see waitForAuth.
+  await waitForAuth();
   return describeUser(result.user);
+}
+
+/* Firestore does not become authenticated the instant signInWithCredential
+   resolves. The token has to reach the channel the writes go out on, and a
+   write fired in that gap leaves anonymously and comes back "Missing or
+   insufficient permissions" — which reads like a rules bug and is not one.
+
+   So sign-in ends here, holding until a token actually exists. Anything that
+   needs permission can then assume it has some. */
+async function waitForAuth(timeoutMs = 15000) {
+  if (!app) throw new Error(NOT_CONNECTED);
+  const auth = getAuth(app);
+
+  const settled = auth.currentUser || await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { stop(); reject(new Error('लॉगिन की पुष्टि नहीं हो पाई — दोबारा कोशिश करें।')); }, timeoutMs);
+    const stop = onAuthStateChanged(auth, user => {
+      if (!user) return;
+      clearTimeout(timer); stop(); resolve(user);
+    });
+  });
+
+  // Forces the token to be minted and cached, which is the part the writes need.
+  await settled.getIdToken();
+  return settled;
 }
 
 export async function signOutUser() {
@@ -230,12 +256,23 @@ function describeUser(u) {
    have no way to ask which ledger is its owner's, which is the entire point. */
 export async function claimSite(siteId, uid) {
   if (!db) throw new Error(NOT_CONNECTED);
+  await waitForAuth();
   const id = cleanId(siteId);
-  await setDoc(doc(db, 'site_diaries', id), { ownerUid: uid }, { merge: true });
+
+  /* The directory goes first, and the order is the whole point.
+
+     Writing it needs a working token, while stamping ownerUid on an unclaimed
+     ledger does not — the id alone still opens that one. Done the other way
+     round, a token that turns out not to work leaves the ledger claimed and
+     nobody able to reach it: locked out of your own hisaab by the act of
+     claiming it. This way a broken token fails on the first write, having
+     changed nothing, and the ledger stays as open as it was. */
   await setDoc(doc(db, 'user_sites', uid), {
     siteIds: arrayUnion(id),
     updatedAt: new Date().toISOString()
   }, { merge: true });
+
+  await setDoc(doc(db, 'site_diaries', id), { ownerUid: uid }, { merge: true });
   return id;
 }
 
