@@ -36,7 +36,7 @@ service cloud.firestore {
       function isCurrentShape() {
         return request.resource.data.keys().hasOnly([
                  'projects', 'activeProjectId', 'lending', 'settings',
-                 'lastWriterDeviceId', 'updatedAt', 'timestamp'
+                 'lastWriterDeviceId', 'updatedAt', 'timestamp', 'ownerUid'
                ])
                && request.resource.data.projects is list;
       }
@@ -45,7 +45,7 @@ service cloud.firestore {
         return request.resource.data.keys().hasOnly([
                  'trades', 'workers', 'transactions', 'haziri', 'haziriMeta',
                  'diaryNotedDates', 'isCleanStarted', 'settings',
-                 'lastWriterDeviceId', 'updatedAt', 'timestamp'
+                 'lastWriterDeviceId', 'updatedAt', 'timestamp', 'ownerUid'
                ])
                && request.resource.data.workers is list
                && request.resource.data.trades is list
@@ -56,13 +56,62 @@ service cloud.firestore {
         return isCurrentShape() || isLegacyShape();
       }
 
+      /* Ownership, added when the app learned to sign in.
+
+         Until a ledger is claimed it behaves exactly as it always has: the site
+         id is the only key, which is what every phone in the field still relies
+         on. The moment someone signs in and claims it, `ownerUid` is written and
+         the id alone stops being enough — knowing the code no longer gets you
+         in, the account does.
+
+         Both halves have to stay true at once for as long as there are phones
+         on the old build, which is why this is a property of the document and
+         not a flag in the rules. */
+      function isClaimed() {
+        return resource != null && 'ownerUid' in resource.data;
+      }
+
+      function isOwner() {
+        return request.auth != null && request.auth.uid == resource.data.ownerUid;
+      }
+
+      // A claim can be made by whoever holds the id — that is today's access
+      // rule — but it can never be moved to someone else afterwards.
+      function keepsOwner() {
+        return !isClaimed()
+               || (request.resource.data.ownerUid == resource.data.ownerUid && isOwner());
+      }
+
       // Installs made before per-site ids all wrote to one shared document
       // ('khalen-dairy'). It held only demo data, confirmed with the owner, so it
       // gets no exemption here — nothing outside the site-id pattern is reachable.
-      allow get: if isWellFormedSiteId();
+      allow get: if isWellFormedSiteId() && (!isClaimed() || isOwner());
       allow list: if false; // never allow enumerating sites
-      allow create, update: if isWellFormedSiteId() && looksLikeLedger();
+      allow create: if isWellFormedSiteId() && looksLikeLedger();
+      allow update: if isWellFormedSiteId() && looksLikeLedger() && keepsOwner();
       allow delete: if false; // the app never deletes a site document
+    }
+
+    /* Which ledgers belong to one signed-in person.
+
+       Rules forbid listing site_diaries — that is what stops a stranger walking
+       the collection — so a signed-in phone cannot ask "which site is mine?" by
+       querying. It reads this instead: one document per account, holding the ids
+       it has claimed. That is the whole of what a new phone needs after a Google
+       sign-in, and it is why the site id can finally leave the settings screen.
+
+       Only the account itself can read or write its own row, so this directory
+       never becomes a way to discover somebody else's id. */
+    match /user_sites/{uid} {
+      function isSelf() { return request.auth != null && request.auth.uid == uid; }
+
+      allow get: if isSelf();
+      allow list: if false;
+      allow create, update: if isSelf()
+                            && request.resource.data.keys().hasOnly(['siteIds', 'updatedAt'])
+                            && request.resource.data.siteIds is list
+                            && request.resource.data.siteIds.size() <= 50;
+      allow delete: if false;
     }
 
     // Anything outside site_diaries is not part of this app.

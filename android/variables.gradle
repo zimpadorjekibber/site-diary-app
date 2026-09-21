@@ -13,4 +13,10 @@ ext {
     androidxJunitVersion = '1.3.0'
     androidxEspressoCoreVersion = '3.7.0'
     cordovaAndroidVersion = '14.0.1'
+
+    // Google sign-in. The auth plugin defaults this to false, which leaves
+    // Play Services auth as compileOnly — the app builds, installs, and then
+    // throws NoClassDefFoundError the first time somebody taps "sign in".
+    // Nothing catches that at build time, so it is written down here.
+    rgcfaIncludeGoogle = true
 }

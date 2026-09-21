@@ -53,3 +53,57 @@ export async function parseFirebaseConfig(input) {
   const m = await load();
   return m.parseFirebaseConfig(input);
 }
+
+/* Sign-in goes through the same lazy door as everything else: a contractor who
+   never signs in should never pay for the auth code, and most days nobody does
+   — the account is asked for once, on a new phone. */
+export async function signInWithGoogle() {
+  const m = await load();
+  cachedUser = await m.signInWithGoogle();
+  return cachedUser;
+}
+
+export async function signOutUser() {
+  const m = await load();
+  await m.signOutUser();
+  cachedUser = null;
+  return true;
+}
+
+export async function claimSite(siteId, uid) {
+  const m = await load();
+  return m.claimSite(siteId, uid);
+}
+
+export async function listMySites(uid) {
+  const m = await load();
+  return m.listMySites(uid);
+}
+
+/* The signed-in user, kept here as a plain value.
+
+   Renders need it synchronously — the settings screen draws long before the
+   SDK has loaded — and a promise cannot answer a render. So the answer is
+   cached whenever auth settles, and `currentUser()` reads the cache. Before
+   the first answer arrives it is null, which is exactly what an unsigned app
+   should draw. */
+let cachedUser = null;
+
+export function currentUser() {
+  return cachedUser;
+}
+
+export async function getCurrentUser() {
+  if (!modulePromise) return cachedUser;
+  const m = await load();
+  cachedUser = m.currentUser();
+  return cachedUser;
+}
+
+export async function onAuthChanged(handler) {
+  const m = await load();
+  return m.onAuthChanged(user => {
+    cachedUser = user;
+    handler(user);
+  });
+}

@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "54398896553",
+    "project_id": "khalen-dairy",
+    "storage_bucket": "khalen-dairy.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:54398896553:android:01098f07474fc84ef35cb8",
+        "android_client_info": {
+          "package_name": "com.shram.sitediary"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "54398896553-rofutar9ojrjuaaf9edkiij4209hggus.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.shram.sitediary",
+            "certificate_hash": "4729c8b70d8f0393742567c21ee88a0b9a9e284d"
+          }
+        },
+        {
+          "client_id": "54398896553-jp629b5tjohl5lgblmvaiie5663kjg17.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBbaZ3ac2luDt622ZEvwMUhtgH4Oa2X364"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "54398896553-jp629b5tjohl5lgblmvaiie5663kjg17.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

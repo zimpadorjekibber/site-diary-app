@@ -2,7 +2,9 @@
 // Firebase Cloud Firestore integration for Shram & Site Diary
 
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, arrayUnion } from 'firebase/firestore';
+import { getAuth, GoogleAuthProvider, signInWithCredential, signOut as authSignOut, onAuthStateChanged } from 'firebase/auth';
+import { Capacitor } from '@capacitor/core';
 
 export function parseFirebaseConfig(input) {
   if (!input || typeof input !== 'string') throw new Error('इनपुट खाली है');
@@ -157,4 +159,92 @@ export function disableRealtimeSync() {
     unsubscribeRealtime();
     unsubscribeRealtime = null;
   }
+}
+
+/* ===================================================
+   SIGNING IN
+
+   The site id was the account: an unguessable code that had to be copied by
+   hand to reach the same ledger from another phone, and whose loss was the
+   loss of the ledger. That is the plumbing a normal app hides behind a login,
+   and this is that login.
+
+   Two sign-ins happen, not one. The native plugin talks to Google Play
+   Services, which is what makes the account picker look like every other
+   Android app; but the Firestore calls in this file go through the JS SDK,
+   and the JS SDK has its own idea of who is signed in. If only the native
+   half ran, every write would still arrive at the rules as an anonymous
+   request and `request.auth` would be null. So on a device the returned
+   credential is handed to the JS SDK as well. On the web the plugin already
+   drives the JS SDK, and signing in twice there would throw.
+=================================================== */
+
+export async function signInWithGoogle() {
+  if (!app) throw new Error(NOT_CONNECTED);
+  const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+  const result = await FirebaseAuthentication.signInWithGoogle();
+
+  if (Capacitor.isNativePlatform()) {
+    const idToken = result.credential && result.credential.idToken;
+    if (!idToken) throw new Error('Google से पहचान नहीं मिली — दोबारा कोशिश करें।');
+    await signInWithCredential(getAuth(app), GoogleAuthProvider.credential(idToken));
+  }
+  return describeUser(result.user);
+}
+
+export async function signOutUser() {
+  const { FirebaseAuthentication } = await import('@capacitor-firebase/authentication');
+  await FirebaseAuthentication.signOut();
+  if (app) { try { await authSignOut(getAuth(app)); } catch {} }
+  return true;
+}
+
+/** Who is signed in right now, or null. Reads the JS SDK, which is the half
+ *  that the Firestore rules actually see. */
+export function currentUser() {
+  if (!app) return null;
+  return describeUser(getAuth(app).currentUser);
+}
+
+/** Fires whenever sign-in state settles, including the silent restore on
+ *  launch — a phone at the bottom of a valley must not be asked to log in
+ *  again just because it has no signal. */
+export function onAuthChanged(handler) {
+  if (!app) return () => {};
+  return onAuthStateChanged(getAuth(app), u => handler(describeUser(u)));
+}
+
+function describeUser(u) {
+  if (!u) return null;
+  return {
+    uid: u.uid,
+    email: u.email || '',
+    name: u.displayName || u.email || '',
+    photoUrl: u.photoUrl || u.photoURL || ''
+  };
+}
+
+/* Claiming ties this ledger to the account: `ownerUid` on the site document,
+   and the id recorded in the account's own directory. Two writes because the
+   rules forbid listing site_diaries — without the directory a new phone would
+   have no way to ask which ledger is its owner's, which is the entire point. */
+export async function claimSite(siteId, uid) {
+  if (!db) throw new Error(NOT_CONNECTED);
+  const id = cleanId(siteId);
+  await setDoc(doc(db, 'site_diaries', id), { ownerUid: uid }, { merge: true });
+  await setDoc(doc(db, 'user_sites', uid), {
+    siteIds: arrayUnion(id),
+    updatedAt: new Date().toISOString()
+  }, { merge: true });
+  return id;
+}
+
+/** The site ids this account has claimed, newest claim last. Empty for an
+ *  account that has never claimed one — a genuinely new user, not an error. */
+export async function listMySites(uid) {
+  if (!db) throw new Error(NOT_CONNECTED);
+  const snap = await getDoc(doc(db, 'user_sites', uid));
+  if (!snap.exists()) return [];
+  const ids = snap.data().siteIds;
+  return Array.isArray(ids) ? ids : [];
 }

@@ -5,7 +5,7 @@ import { store, getTodayString, getDeviceId, getAllTxTypes, getTxTypeMeta, getTx
 import { VoiceManager } from './speech.js';
 import { ReminderManager } from './reminder.js';
 import confetti from 'canvas-confetti';
-import { initFirebase, isFirebaseReady, saveToFirebase, loadFromFirebase, enableRealtimeSync, parseFirebaseConfig } from './firebase-lazy.js';
+import { initFirebase, isFirebaseReady, saveToFirebase, loadFromFirebase, enableRealtimeSync, parseFirebaseConfig, signInWithGoogle, signOutUser, currentUser, getCurrentUser, onAuthChanged, claimSite, listMySites } from './firebase-lazy.js';
 import { translations } from './i18n.js';
 import { LendingLock } from './lending-lock.js';
 import { initModalUX } from './modal-ux.js';
@@ -2597,6 +2597,104 @@ class App {
       : (trade ? `${trade.name} ग्रुप का नोट जुड़ गया` : 'नोट जुड़ गया'));
   }
 
+  /* The account row in settings.
+
+     Signed out it explains, in one line, the thing the site id never could:
+     lose this phone and the hisaab comes back. Signed in it says whose it is
+     and gets out of the way. */
+  renderAccountCard() {
+    const box = document.getElementById('accountCard');
+    if (!box) return;
+    const en = this.currentLang === 'en';
+    const user = currentUser();
+
+    /* The SDK is lazy, so on the first draw after launch the answer is not in
+       yet and a signed-in contractor would be shown "no account". Ask once,
+       and redraw if somebody turns up — guarded, so the redraw cannot ask
+       again and loop. */
+    if (!user && !this._accountChecked) {
+      this._accountChecked = true;
+      getCurrentUser().then(found => { if (found) this.renderAccountCard(); }).catch(() => {});
+    }
+
+    if (!user) {
+      box.innerHTML = `
+        <div class="account-card-head">
+          <span class="account-card-icon">👤</span>
+          <div>
+            <strong>${en ? 'No account yet' : 'अभी कोई खाता नहीं'}</strong>
+            <small>${en
+              ? 'Sign in once and this ledger follows your account. New phone, lost phone — sign in and it is back. No codes, no files.'
+              : 'एक बार लॉगिन कर लीजिए — फिर हिसाब आपके खाते के साथ चलेगा। नया फ़ोन हो या फ़ोन खो जाए, लॉगिन करते ही हिसाब वापस। न कोई कोड, न फ़ाइल।'}</small>
+          </div>
+        </div>
+        <button type="button" id="btnGoogleSignIn" class="btn-google-signin">
+          ${en ? 'Sign in with Google' : 'Google से लॉगिन करें'}
+        </button>`;
+      return;
+    }
+
+    box.innerHTML = `
+      <div class="account-card-head">
+        <span class="account-card-icon">✅</span>
+        <div>
+          <strong>${esc(user.name || user.email)}</strong>
+          <small>${en
+            ? 'This ledger is tied to your account. Sign in on any phone to get it back.'
+            : 'यह हिसाब आपके खाते से जुड़ा है। किसी भी फ़ोन पर लॉगिन करके वापस पा सकते हैं।'}</small>
+        </div>
+      </div>
+      <button type="button" id="btnGoogleSignOut" class="btn-secondary account-signout">
+        ${en ? 'Sign out' : 'लॉगआउट'}
+      </button>`;
+  }
+
+  /* Signing in has to do two things, and the second is the one that matters:
+     claim this ledger for the account. Without the claim the login is
+     decorative — the account would know nothing about the hisaab already on
+     the phone, which is the only hisaab there is. */
+  async handleSignIn(button) {
+    const en = this.currentLang === 'en';
+    button.disabled = true;
+    const original = button.textContent;
+    button.textContent = en ? 'Signing in…' : 'लॉगिन हो रहा है…';
+    try {
+      const settings = this.store.getSettings();
+      if (!isFirebaseReady()) await initFirebase(settings.firebaseConfig);
+
+      const user = await signInWithGoogle();
+      if (!user) throw new Error(en ? 'Sign-in cancelled' : 'लॉगिन रद्द हुआ');
+
+      if (settings.firebaseSiteId) await claimSite(settings.firebaseSiteId, user.uid);
+
+      this.renderAccountCard();
+      this.showToast(en
+        ? `Signed in as ${user.name || user.email} — this ledger is now yours`
+        : `${user.name || user.email} से लॉगिन हो गया — अब यह हिसाब आपके खाते का है`, 4000);
+    } catch (err) {
+      // Cancelling the Google sheet is not a failure worth an alarm.
+      const cancelled = /cancel|closed|12501|popup/i.test(err && err.message || '');
+      if (!cancelled) {
+        alert((en ? 'Sign-in failed: ' : 'लॉगिन नहीं हो सका: ') + (err && err.message || err));
+      }
+      button.textContent = original;
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async handleSignOut() {
+    const en = this.currentLang === 'en';
+    if (!confirm(en
+      ? 'Sign out? The ledger stays on this phone.'
+      : 'लॉगआउट करें? हिसाब इसी फ़ोन में रहेगा।')) return;
+    try {
+      await signOutUser();
+    } catch {}
+    this.renderAccountCard();
+    this.showToast(en ? 'Signed out' : 'लॉगआउट हो गया');
+  }
+
   // --- FORM HELPERS & POPULATION ---
   populateSelects() {
     const trades = this.store.getTrades();
@@ -4497,6 +4595,7 @@ class App {
         btn.classList.toggle('active', btn.getAttribute('data-lang') === this.currentLang);
       });
 
+      this.renderAccountCard();
       modalSettings.classList.add('open');
     };
 
@@ -4805,6 +4904,14 @@ class App {
     }
 
     // Data Export & Import
+    /* Delegated: the account card is redrawn on every open, so its buttons are
+       new elements each time and cannot hold their own listeners. */
+    document.addEventListener('click', (e) => {
+      const signIn = e.target.closest('#btnGoogleSignIn');
+      if (signIn) { this.handleSignIn(signIn); return; }
+      if (e.target.closest('#btnGoogleSignOut')) this.handleSignOut();
+    });
+
     const btnExport = document.getElementById('btnExportData');
     if (btnExport) {
       btnExport.addEventListener('click', () => this.downloadBackup());

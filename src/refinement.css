@@ -177,3 +177,43 @@ button { touch-action: manipulation; }
   .workspace-intro, .daily-overview-layout, .nav-tabs-wrapper { display: none !important; }
   .app-container { padding: 0; }
 }
+
+/* The account card. It sits above the backup plumbing because it is what will
+   eventually replace it — a contractor should meet "sign in" before he ever
+   meets "site id". */
+.account-card {
+  border: 1px solid var(--border-card);
+  border-radius: 14px;
+  padding: 16px;
+  margin-bottom: 18px;
+  background: var(--bg-card);
+}
+
+.account-card-head { display: flex; gap: 12px; align-items: flex-start; }
+.account-card-icon { font-size: 1.4rem; line-height: 1.2; }
+.account-card-head strong { display: block; font-size: 0.98rem; font-weight: 700; }
+.account-card-head small {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.btn-google-signin {
+  width: 100%;
+  margin-top: 14px;
+  min-height: 46px;
+  border: 1px solid var(--border-card);
+  border-radius: 10px;
+  background: #fff;
+  color: #1f2937;
+  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-google-signin:disabled { opacity: 0.6; cursor: default; }
+.btn-google-signin:active:not(:disabled) { transform: scale(0.99); }
+.account-signout { width: 100%; margin-top: 14px; }
