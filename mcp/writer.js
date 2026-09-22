@@ -5,16 +5,18 @@
 //
 // 1. Never lose a concurrent edit. The phone writes to the same document, so a
 //    naive read-modify-write would silently drop whatever it saved in between.
-//    Every change runs inside a Firestore transaction: if the document moved
-//    while we were working, the transaction retries against the new state.
+//    Every write carries the updateTime it read, and Firestore refuses it if the
+//    document has moved since; we re-read and retry against the new state. That
+//    is what the client SDK's transaction used to do here. It had to go: a
+//    ledger belongs to a Google account now, the rules only answer to that
+//    account, and the client SDK cannot hold a service account's identity.
 //
 // 2. Never reimplement the ledger. Changes are applied through the app's own
 //    Store, so a worker added here is shaped exactly like one added in the app,
 //    ids are generated the same way, and the accounting stays consistent.
 
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getFirestore, doc, runTransaction } from 'firebase/firestore';
 import { Store } from '../src/storage.js';
+import { loadServiceAccount, getAccessToken } from './auth.js';
 
 const DEFAULT_CONFIG = {
   apiKey: 'AIzaSyBWCY6fp7P1i5ubqG_OXV74Aq9fGeyrzOQ',
@@ -29,16 +31,61 @@ const DEFAULT_CONFIG = {
 // change and pulls them in rather than ignoring its own echo.
 const WRITER_DEVICE_ID = 'mcp-server';
 
-let db = null;
-
-function getDb(projectId, apiKey) {
-  if (!db) {
-    const config = { ...DEFAULT_CONFIG };
-    if (projectId) config.projectId = projectId;
-    if (apiKey) config.apiKey = apiKey;
-    db = getFirestore(getApps().length ? getApp() : initializeApp(config));
+/* Firestore REST wants every value type-tagged. decodeValue in firestore.js is
+   the other half of this; they must agree, so change them together. */
+function encodeValue(v) {
+  if (v === null || v === undefined) return { nullValue: null };
+  if (typeof v === 'boolean') return { booleanValue: v };
+  if (typeof v === 'number') {
+    return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
   }
-  return db;
+  if (typeof v === 'string') return { stringValue: v };
+  if (Array.isArray(v)) return { arrayValue: { values: v.map(encodeValue) } };
+  if (typeof v === 'object') return { mapValue: { fields: encodeFields(v) } };
+  return { nullValue: null };
+}
+
+function encodeFields(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === undefined) continue;   // Firestore refuses undefined anywhere
+    out[k] = encodeValue(v);
+  }
+  return out;
+}
+
+function decodeValue(v) {
+  if (v === null || v === undefined || 'nullValue' in v) return null;
+  if ('stringValue' in v) return v.stringValue;
+  if ('booleanValue' in v) return v.booleanValue;
+  if ('integerValue' in v) return Number(v.integerValue);
+  if ('doubleValue' in v) return Number(v.doubleValue);
+  if ('timestampValue' in v) return v.timestampValue;
+  if ('arrayValue' in v) return (v.arrayValue.values || []).map(decodeValue);
+  if ('mapValue' in v) return decodeFields(v.mapValue.fields || {});
+  return null;
+}
+
+function decodeFields(fields) {
+  const out = {};
+  for (const [k, v] of Object.entries(fields)) out[k] = decodeValue(v);
+  return out;
+}
+
+function docUrl(projectId, siteId) {
+  return `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId || DEFAULT_CONFIG.projectId)}` +
+    `/databases/(default)/documents/site_diaries/${encodeURIComponent(siteId)}`;
+}
+
+function requireAccount() {
+  const account = loadServiceAccount();
+  if (!account) {
+    throw new Error(
+      'Writing needs a service account: this ledger belongs to a Google account and ' +
+      'the rules only answer to one. Set SITE_DIARY_SERVICE_ACCOUNT (see mcp/README.md).'
+    );
+  }
+  return account;
 }
 
 /** The same field set the app itself writes (see buildSyncPayload in
@@ -127,24 +174,65 @@ export async function mutateLedger({ siteId, projectId, apiKey, allowShrink = fa
     );
   }
 
-  const ref = doc(getDb(projectId, apiKey), 'site_diaries', siteId);
+  const account = requireAccount();
+  const url = docUrl(projectId, siteId);
 
-  return runTransaction(getDb(projectId, apiKey), async (tx) => {
-    const snap = await tx.get(ref);
-    if (!snap.exists()) {
+  // Three tries, because the only reason to fail is that the phone wrote in the
+  // same moment — and it does not do that repeatedly.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const token = await getAccessToken(account);
+
+    const read = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (read.status === 404) {
       throw new Error(
         `No ledger found for site "${siteId}". Open the app once with cloud backup ` +
         `switched on so the site exists, then try again.`
       );
     }
+    if (!read.ok) {
+      throw new Error(`Could not read the ledger before writing (${read.status}).`);
+    }
 
-    const before = snap.data();
+    const snapshot = await read.json();
+    const before = decodeFields(snapshot.fields || {});
+
     const store = new Store({ data: before, persist: false });
     const result = apply(store);
-    // Checked inside the transaction, so a refusal writes nothing at all.
-    tx.set(ref, refuseIfDestructive(before, toPayload(store.data), allowShrink));
-    return result;
-  });
+
+    const payload = refuseIfDestructive(before, toPayload(store.data), allowShrink);
+    /* The owner comes back untouched. This is a whole-document write, so a
+       payload without ownerUid would strip the ledger's owner off it — the
+       rules refuse that, but only because they were asked to; the write should
+       never have been trying. */
+    if (before.ownerUid) payload.ownerUid = before.ownerUid;
+
+    // Refuse the write if the document moved since the read above.
+    const write = await fetch(
+      `${url}?currentDocument.updateTime=${encodeURIComponent(snapshot.updateTime)}`,
+      {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: encodeFields(payload) })
+      }
+    );
+
+    if (write.ok) return result;
+
+    // 400/409 here is the precondition: somebody else wrote first. Read again.
+    if ((write.status === 400 || write.status === 409) && attempt < 2) continue;
+
+    const detail = await write.text();
+    throw new Error(
+      write.status === 403
+        ? `Firestore refused the write for site "${siteId}". Check the service account ` +
+          `belongs to this project.`
+        : `Could not save the change (${write.status}). Nothing was written. ${detail.slice(0, 160)}`
+    );
+  }
+
+  throw new Error(
+    'The ledger kept changing while this was being saved. Nothing was written — try again.'
+  );
 }
 
 /** Resolves a worker by name or id, refusing to guess between near-matches. */
