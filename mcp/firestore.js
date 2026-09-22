@@ -2,9 +2,15 @@
 // Reads one site's ledger out of Firestore over the REST API.
 //
 // Deliberately no Firebase SDK: this process starts on every MCP session, and
-// the REST endpoint needs nothing but fetch. The security rules apply to REST
-// exactly as they do to the SDK, so an unguessable site id is still the only
-// thing standing between a caller and the data.
+// the REST endpoint needs nothing but fetch.
+//
+// Two ways in. With a service account configured it sends that account's token,
+// which is what an owned ledger requires — every ledger is owned now, so this is
+// the ordinary path. Without one it falls back to the API key, which can still
+// read a ledger nobody has claimed; that is only old sites and test data, and it
+// keeps this useful before the key is set up.
+
+import { loadServiceAccount, getAccessToken } from './auth.js';
 
 const DEFAULT_PROJECT_ID = 'khalen-dairy';
 const DEFAULT_API_KEY = 'AIzaSyBWCY6fp7P1i5ubqG_OXV74Aq9fGeyrzOQ';
@@ -31,10 +37,13 @@ function decodeFields(fields) {
 }
 
 export class SiteDiaryClient {
-  constructor({ siteId, projectId, apiKey } = {}) {
+  constructor({ siteId, projectId, apiKey, serviceAccount } = {}) {
     this.siteId = siteId;
     this.projectId = projectId || DEFAULT_PROJECT_ID;
     this.apiKey = apiKey || DEFAULT_API_KEY;
+    // Read once at construction so a bad key is reported when the server
+    // starts, not in the middle of answering a question about wages.
+    this.account = serviceAccount === undefined ? loadServiceAccount() : serviceAccount;
     this._cache = null;
     this._cachedAt = 0;
   }
@@ -54,11 +63,18 @@ export class SiteDiaryClient {
       );
     }
 
-    const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(this.projectId)}` +
-      `/databases/(default)/documents/site_diaries/${encodeURIComponent(this.siteId)}` +
-      `?key=${encodeURIComponent(this.apiKey)}`;
+    const base = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(this.projectId)}` +
+      `/databases/(default)/documents/site_diaries/${encodeURIComponent(this.siteId)}`;
 
-    const res = await fetch(url);
+    let url = base;
+    const headers = {};
+    if (this.account) {
+      headers.Authorization = `Bearer ${await getAccessToken(this.account)}`;
+    } else {
+      url += `?key=${encodeURIComponent(this.apiKey)}`;
+    }
+
+    const res = await fetch(url, { headers });
 
     if (res.status === 404) {
       throw new Error(
@@ -73,11 +89,13 @@ export class SiteDiaryClient {
          an API key, and a claimed ledger answers to a signed-in account. The
          message used to send people off to check a site id that was perfectly
          correct. */
-      throw new Error(
-        `Firestore refused the read for site "${this.siteId}". Most likely this ` +
-        `ledger now belongs to a Google account, and this tool reads without ` +
-        `signing in — it needs a service account to see an owned ledger. ` +
-        `(The other possibility is an id that does not match site-XXXX-XXXX.)`
+      throw new Error(this.account
+        ? `Firestore refused the read for site "${this.siteId}" even with the service ` +
+          `account. Check that the key belongs to project "${this.projectId}" and that ` +
+          `the site id is right.`
+        : `Firestore refused the read for site "${this.siteId}". This ledger belongs to ` +
+          `a Google account, and this tool reads without signing in. Set ` +
+          `SITE_DIARY_SERVICE_ACCOUNT to a service account key so it can read an owned ledger.`
       );
     }
     if (!res.ok) {

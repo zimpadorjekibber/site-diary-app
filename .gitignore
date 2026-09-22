@@ -48,3 +48,9 @@ mcp/node_modules
 # Recovered ledger dumps: real names, phone numbers and contract amounts.
 # These are the site owner's data, not the app's — they never belong in the repo.
 recovered/
+
+# Service account keys: full Firestore access, above the security rules.
+# These belong in the environment, never in the repository.
+*service-account*.json
+*serviceaccount*.json
+*-firebase-adminsdk-*.json

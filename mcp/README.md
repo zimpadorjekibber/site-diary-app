@@ -93,3 +93,30 @@ Token header में भी भेजा जा सकता है (`Authoriz
 | `SITE_DIARY_TOKEN` | *(ज़रूरी — न हो तो endpoint बंद रहता है)* |
 | `SITE_DIARY_SITE_ID` | *(ज़रूरी)* |
 | `SITE_DIARY_ALLOW_WRITE` | `0` — `1` करने पर लिखने वाले tools चालू |
+
+## Reading a ledger that belongs to an account
+
+Since ledgers became owned by a Google account, the security rules only answer
+to that account. This server is not a person and cannot sign in as one, so to
+read an owned ledger it needs a **service account**.
+
+1. [Firebase Console](https://console.firebase.google.com/project/khalen-dairy/settings/serviceaccounts/adminsdk)
+   → Project settings → **Service accounts** → **Generate new private key**
+2. Save the downloaded JSON somewhere outside this repository — for example
+   `C:\Users\<you>\site-diary-key.json`
+3. Point the server at it:
+
+```
+SITE_DIARY_SERVICE_ACCOUNT=C:\Users\<you>\site-diary-key.json
+SITE_DIARY_SITE_ID=site-XXXX-XXXX
+```
+
+The variable also accepts the JSON inline, but a path is better: it keeps the
+key out of process listings and out of any config file that gets shared.
+
+**That key reads and writes every ledger in the project, above the security
+rules.** Treat it like the keystore password: never commit it, never paste it
+into a chat, and revoke it in the console if it leaks.
+
+Without the variable the server falls back to the public API key, which can
+still read a ledger nobody has claimed — old sites and test data only.
