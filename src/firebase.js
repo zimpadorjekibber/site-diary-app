@@ -84,9 +84,21 @@ function cleanId(siteId) {
 // backup was running.
 const FIRESTORE_DOC_LIMIT = 1024 * 1024;
 
-export function buildSyncPayload(data, deviceId) {
+export function buildSyncPayload(data, deviceId, ownerUid = null) {
   const settings = data.settings || {};
   return {
+    /* Owned from the first write, not claimed afterwards.
+
+       The rules require a new ledger to arrive already carrying its owner, and
+       they are right to: a ledger that exists for even a moment unowned is one
+       anybody holding the id can take. It also has to be here rather than only
+       in claimSite, because claimSite merges `ownerUid` onto a document that
+       may not exist yet, and a document whose only field is ownerUid is not a
+       ledger — the shape check refuses it, correctly.
+
+       Omitted entirely when signed out: Firestore rejects an undefined field,
+       and null would read as a ledger that has been disowned. */
+    ...(ownerUid ? { ownerUid } : {}),
     // Every job the contractor is running, each with its own ledger.
     projects: data.projects || [],
     activeProjectId: data.activeProjectId || null,
@@ -111,7 +123,8 @@ export function buildSyncPayload(data, deviceId) {
 export async function saveToFirebase(siteId = 'default_site', data, deviceId = null) {
   if (!db) throw new Error(NOT_CONNECTED);
 
-  const payload = buildSyncPayload(data, deviceId);
+  const signedIn = app ? getAuth(app).currentUser : null;
+  const payload = buildSyncPayload(data, deviceId, signedIn ? signedIn.uid : null);
 
   const approxSize = new Blob([JSON.stringify(payload)]).size;
   if (approxSize > FIRESTORE_DOC_LIMIT) {
