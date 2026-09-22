@@ -67,9 +67,17 @@ export class SiteDiaryClient {
       );
     }
     if (res.status === 403) {
+      /* Two different refusals arrive as the same 403, and blaming the id was
+         wrong for the common one. Since ledgers became owned by a Google
+         account, a well-formed id is no longer enough: this reader holds only
+         an API key, and a claimed ledger answers to a signed-in account. The
+         message used to send people off to check a site id that was perfectly
+         correct. */
       throw new Error(
-        `Firestore refused the read for site "${this.siteId}". The id must match ` +
-        `the site-XXXX-XXXX pattern the security rules allow.`
+        `Firestore refused the read for site "${this.siteId}". Most likely this ` +
+        `ledger now belongs to a Google account, and this tool reads without ` +
+        `signing in — it needs a service account to see an owned ledger. ` +
+        `(The other possibility is an id that does not match site-XXXX-XXXX.)`
       );
     }
     if (!res.ok) {
