@@ -6,9 +6,12 @@
 
 ## 1. Firestore security rules (सबसे ज़रूरी)
 
-ऐप में कोई login नहीं है। हर install अपनी एक **अनुमान-रहित site ID** बनाता है
-(`site-XXXX-XXXX`) और वही उसके हिसाब की पूरी सुरक्षा है। इसलिए rules ज़रूरी हैं —
-बिना इनके Firestore test mode में सबके लिए खुला रहता है।
+ऐप में अब Google login है, और हर हिसाब किसी एक खाते का होता है — document पर
+`ownerUid` बताता है किसका। **site ID अब सिर्फ़ एक नाम है, password नहीं:** उसे
+जान लेने भर से हिसाब नहीं खुलता, खाता चाहिए।
+
+(21 सितम्बर 2026 तक ऐसा नहीं था। तब site ID ही पूरी सुरक्षा थी, और वही एक
+reinstall में पूरा महीना ले गया — देखिए `mcp/README.md` और `PLAYSTORE.md`।)
 
 Rules फ़ाइल: [`firestore.rules`](firestore.rules)
 
@@ -36,8 +39,9 @@ Rules क्या करती हैं:
 | सिर्फ़ इस ऐप जैसा payload लिखा जा सकता है | कोई कचरा document असली हिसाब की जगह नहीं ले सकता |
 | delete कभी नहीं | ऐप कभी साइट document मिटाता ही नहीं |
 
-आगे चलकर Firebase Authentication जोड़ें तो `firestore.rules` में `ownerUid`
-वाला comment देखें।
+Rules बदलने के बाद **MCP endpoint की भी जाँच करें**: वह बिना login पढ़ता था, और
+अब उसे service account चाहिए (`SITE_DIARY_SERVICE_ACCOUNT`) — देखिए
+`mcp/README.md`। बिना उसके वह हर owned हिसाब पर "permission denied" देगा।
 
 ---
 
