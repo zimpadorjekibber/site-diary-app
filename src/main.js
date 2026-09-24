@@ -1944,6 +1944,12 @@ class App {
       txs = txs.filter(t => t.tradeId === this.activeFilterTrade);
     }
 
+    if (this.workflow) txs = this.workflow.filterTimeline(txs);
+    const filteredTotal = document.getElementById('timelineFilteredTotal');
+    if (filteredTotal) filteredTotal.textContent = this.currentLang === 'en'
+      ? `${txs.length} matching entries · Total ${inr(txs.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0))}`
+      : `${txs.length} चुनी हुई एंट्री · कुल ${inr(txs.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0))}`;
+
     if (txs.length === 0) {
       container.innerHTML = `
         <div style="text-align: center; padding: 40px 20px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px dashed var(--border-card);">

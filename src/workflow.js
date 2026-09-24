@@ -1,5 +1,5 @@
 import { getTodayString, getTxTypeLabel } from './storage.js';
-import { attendanceSummary, attendanceWorkers, validatePayment, transactionHistory } from './workflow-model.js';
+import { attendanceSummary, attendanceWorkers, validatePayment, transactionHistory, filterRecipient } from './workflow-model.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money = n => `₹${Number(n || 0).toLocaleString('en-IN')}`;
@@ -16,6 +16,8 @@ export class Workflow {
     this.status = 'all';
     this.accountQuery = '';
     this.accountFilter = 'all';
+    this.recipientMode = 'all';
+    this.recipientId = '';
     this.installShell();
     this.bind();
   }
@@ -54,6 +56,7 @@ export class Workflow {
     details.append(document.querySelector('#groupsLedgerContainer'));
     groups.append(details);
     document.querySelector('#tab-timeline .screen-tools').insertAdjacentHTML('afterend', '<div class="history-shortcuts" id="timelineHistoryLinks"></div>');
+    document.getElementById('timelineHistoryLinks').insertAdjacentHTML('afterend', '<div class="history-filters" id="timelineRecipientFilters"></div><p id="timelineFilteredTotal" aria-live="polite"></p>');
     groups.insertAdjacentHTML('afterbegin', '<section class="flow-panel" id="historyDirectory"></section>');
     document.body.insertAdjacentHTML('beforeend', '<div class="modal-overlay" id="modalHistory"><div class="modal-card modal-large"><div class="modal-header"><h3 class="modal-title" id="historyTitle"></h3><button type="button" class="btn-close-modal" data-close-modal aria-label="Close">×</button></div><div id="historyControls"></div><div id="historyResults" aria-live="polite"></div></div></div>');
     groups.insertAdjacentHTML('afterbegin', '<div id="accountOverview"></div><div class="roster-controls"><label class="flow-search"><span aria-hidden="true">⌕</span><input type="search" id="accountSearch" /></label><div id="accountFilters" class="flow-filter-row"></div></div><div id="accountList"></div>');
@@ -96,6 +99,20 @@ export class Workflow {
       const id = row.querySelector('[data-flow-pay]')?.dataset.flowPay;
       if (id) row.insertAdjacentHTML('beforeend', `<button type="button" class="btn-secondary account-history" data-history-kind="individual" data-history-id="${esc(id)}">${this.t('कब-कितना दिया देखें','View payment history')}</button>`);
     });
+  }
+  filterTimeline(txs) {
+    const people = this.recipientMode === 'group' ? this.store.getTrades() : this.store.getWorkers();
+    const recipients = people.map(p => ({ id: p.id, name: p.name }));
+    if (this.recipientMode === 'individual') for (const tx of this.store.getTransactions()) {
+      if (tx.targetType !== 'group' && tx.workerId && !recipients.some(p => p.id === tx.workerId)) recipients.push({id: tx.workerId, name: (tx.workerName || this.t('पुराना कारीगर','Former worker')) + this.t(' (हटाया गया)',' (removed)')});
+    }
+    if (this.recipientProject !== this.store.data.activeProjectId) {
+      this.recipientProject = this.store.data.activeProjectId;
+      this.recipientMode = 'all'; this.recipientId = '';
+    }
+    if (this.recipientId && !recipients.some(p => p.id === this.recipientId)) this.recipientId = '';
+    document.getElementById('timelineRecipientFilters').innerHTML = `<label>${this.t('किसका रिकॉर्ड देखें?','Whose records?')}<select id="timelineRecipientMode">${[['all',this.t('सभी — Individual और Group','All — Individual and Group')],['individual',this.t('Individual — कारीगर को दिया','Individual — given to a worker')],['group',this.t('Group — सांझा सामान / खर्च','Group — shared supplies / expenses')]].map(([value,label]) => `<option value="${value}" ${value === this.recipientMode ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>${this.recipientMode === 'group' ? this.t('ग्रुप चुनें','Choose group') : this.t('कारीगर चुनें','Choose individual')}<select id="timelineRecipientId" ${this.recipientMode === 'all' ? 'disabled' : ''}><option value="">${this.recipientMode === 'group' ? this.t('सभी ग्रुप','All groups') : this.t('सभी कारीगर','All individuals')}</option>${recipients.map(p => `<option value="${esc(p.id)}" ${p.id === this.recipientId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>`;
+    return filterRecipient(txs, this.recipientMode, this.recipientId);
   }
   openHistory(targetType, recipientId) {
     const people = targetType === 'group' ? this.store.getTrades() : this.store.getWorkers();
@@ -283,6 +300,11 @@ export class Workflow {
       }
     });
     document.addEventListener('change',e=>{
+      if (e.target.id === 'timelineRecipientMode' || e.target.id === 'timelineRecipientId') {
+        if (e.target.id === 'timelineRecipientMode') { this.recipientMode = e.target.value; this.recipientId = ''; }
+        else this.recipientId = e.target.value;
+        this.app.renderTimeline();
+      }
       if (e.target.dataset.historyField && this.history) {
         this.history[e.target.dataset.historyField] = e.target.value;
         this.renderHistoryResults();
@@ -355,6 +377,7 @@ export class Workflow {
           this.app.closeModals(); this.app.commit(); this.app.timelineDateMode=d.date===getTodayString()?'today':'custom'; this.app.timelineCustomDate=d.date;
           document.getElementById('timelineDatePreset').value=this.app.timelineDateMode;
           const picker=document.getElementById('timelineDatePicker'); picker.value=d.date; picker.style.display=this.app.timelineDateMode==='custom'?'':'none';
+          this.recipientMode='all'; this.recipientId='';
           this.app.activeFilterType='all'; this.app.timelineSearchQuery=''; document.getElementById('timelineSearchInput').value='';
           document.querySelectorAll('[data-filter-type]').forEach(b=>b.classList.toggle('active',b.dataset.filterType==='all'));
           this.app.renderTimeline(); this.app.goToTab('tab-timeline'); this.app.showToast(this.t('✓ एंट्री सेव हुई — लेन-देन में दिख रही है','✓ Entry saved — shown in transactions'));

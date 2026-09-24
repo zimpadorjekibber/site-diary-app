@@ -1,4 +1,10 @@
 // Shared view rules. A missing attendance record is pending, never absent.
+export function filterRecipient(transactions, targetType = 'all', recipientId = '') {
+  return transactions.filter(tx => targetType === 'all' || (targetType === 'group'
+    ? tx.targetType === 'group' && (!recipientId || tx.tradeId === recipientId)
+    : tx.targetType !== 'group' && !!tx.workerId && (!recipientId || tx.workerId === recipientId)));
+}
+
 export function transactionHistory(transactions, { targetType, recipientId, from = '', to = '', type = '' }) {
   const entries = transactions.filter(tx =>
     (targetType === 'group' ? tx.targetType === 'group' && tx.tradeId === recipientId : tx.targetType !== 'group' && tx.workerId === recipientId) &&
