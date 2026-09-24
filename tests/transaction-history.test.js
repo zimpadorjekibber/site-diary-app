@@ -35,8 +35,8 @@ test('worker history spans all dates, isolates people and sorts newest day first
   assert.equal(result.count, 2);
   assert.equal(transactions[0].id, 'a');
 });
-test('group history includes quantity-only supplies and separates other groups and individuals', () => {
-  const result = transactionHistory(transactions, {targetType:'group', recipientId:'mason'});
+test('trade history includes quantity-only supplies and leaves out other trades', () => {
+  const result = transactionHistory(transactions, {targetType:'trade', recipientId:'mason'});
   assert.equal(result.count, 3);
   assert.equal(result.total, 1400);
   assert.equal(result.days[0].total, 1400);
@@ -44,8 +44,16 @@ test('group history includes quantity-only supplies and separates other groups a
   assert.equal(result.days[1].entries[0].amount, 0);
 });
 test('date boundaries and item type filters apply to both entries and totals', () => {
-  const result = transactionHistory(transactions, {targetType:'group', recipientId:'mason', from:'2026-09-22', to:'2026-09-22', type:'ration'});
+  const result = transactionHistory(transactions, {targetType:'trade', recipientId:'mason', from:'2026-09-22', to:'2026-09-22', type:'ration'});
   assert.equal(result.total, 400);
   assert.equal(result.count, 1);
   assert.equal(transactionHistory(transactions, {targetType:'individual', recipientId:'missing'}).count, 0);
+  assert.equal(transactionHistory(transactions, {targetType:'trade', recipientId:''}).count, 0);
+});
+test("trade history adds the trade's worker payments to its shared supplies, by day", () => {
+  const tradeOf = tx => tx.tradeId || (tx.workerId === 'ram' ? 'mason' : 'painter');
+  const result = transactionHistory(transactions, {targetType:'trade', recipientId:'mason', tradeOf});
+  assert.deepEqual(result.days.map(d => d.date), ['2026-09-22','2026-09-21','2026-09-20']);
+  assert.equal(result.days[0].total, 2100);
+  assert.equal(result.total, 2600);
 });
