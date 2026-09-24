@@ -1992,10 +1992,10 @@ class App {
 
       const roleBadge = worker
         ? `<span class="tag-badge ${worker.role === 'helper' ? 'tag-helper' : 'tag-mistri'}">${workerRoleLabel(worker)}</span>`
-        : `<span class="tag-badge tag-group">ग्रुप (सांझा)</span>`;
+        : `<span class="tag-badge tag-group">ट्रेड (सांझा)</span>`;
 
       const targetDisplayName = isGroup
-        ? `${trade.name} (सांझा ग्रुप)`
+        ? `${trade.name} (सांझा)`
         : (worker ? worker.name : (tx.workerName ? `${tx.workerName} (हटाया गया)` : 'साइट खर्च'));
 
       return `
@@ -2385,7 +2385,7 @@ class App {
           <!-- Group Ration Box -->
           <div class="group-ration-summary">
             <div class="group-ration-title">
-              <span>🍚 ग्रुप राशन व सामान खर्च:</span>
+              <span>🍚 ट्रेड राशन व सामान खर्च:</span>
               <strong style="color: var(--text-main); margin-left: auto;">₹${groupData.totalGroupRationCost.toLocaleString('en-IN')}</strong>
             </div>
             <div class="ration-items-pills">
@@ -2509,7 +2509,7 @@ class App {
           const itemLabel = t.rationItem || meta.hi;
           return `
             <tr>
-              <td><strong>${esc(trade.name)} ग्रुप</strong></td>
+              <td><strong>${esc(trade.name)} ट्रेड</strong></td>
               <td>${meta.icon} ${esc(itemLabel)} ${t.quantity ? `(${esc(t.quantity)})` : ''}</td>
               <td>${esc(t.note || '-')}</td>
               <td style="text-align: right; font-weight: 700; color: #b45309;">${inr(t.amount)}</td>
@@ -2570,7 +2570,7 @@ class App {
           <span class="diary-note-time">${esc(n.time || '')}</span>
           <span class="diary-note-text">${esc(n.text)}</span>
           ${worker ? `<span class="diary-note-trade">${esc(worker.name)}</span>` : ''}
-          ${trade ? `<span class="diary-note-trade is-group">${esc(trade.name)} ${this.currentLang === 'en' ? 'group' : 'ग्रुप'}</span>` : ''}
+          ${trade ? `<span class="diary-note-trade is-group">${esc(trade.name)} ${this.currentLang === 'en' ? 'group' : 'ट्रेड'}</span>` : ''}
           <button type="button" class="diary-note-delete" data-delete-note="${esc(n.id)}" aria-label="नोट हटाएँ">✕</button>
         </div>
       `;
@@ -2608,7 +2608,7 @@ class App {
     select.innerHTML = [
       `<option value="">${en ? 'Whole site' : 'पूरी साइट'}</option>`,
       ...this.store.getTrades().map(t =>
-        `<option value="${esc(t.id)}">${esc(t.name)} ${en ? 'group' : 'ग्रुप'}</option>`)
+        `<option value="${esc(t.id)}">${esc(t.name)} ${en ? 'group' : 'ट्रेड'}</option>`)
     ].join('');
     select.value = this.store.getTrade(chosen) ? chosen : '';
   }
@@ -2636,7 +2636,7 @@ class App {
     const trade = tradeId ? this.store.getTrade(tradeId) : null;
     this.showToast(this.currentLang === 'en'
       ? (trade ? `Note added for ${trade.name} group` : 'Note added')
-      : (trade ? `${trade.name} ग्रुप का नोट जुड़ गया` : 'नोट जुड़ गया'));
+      : (trade ? `${trade.name} ट्रेड का नोट जुड़ गया` : 'नोट जुड़ गया'));
   }
 
   /* The gate, and the rule behind it: asked once, never again.
@@ -5410,14 +5410,14 @@ class App {
       });
     }
 
-    text += `\n🍚 3. ग्रुप राशन व चूल्हा खर्च:\n`;
+    text += `\n🍚 3. ट्रेड राशन व चूल्हा खर्च:\n`;
     const rationTxs = txs.filter(t => t.type === 'ration');
     if (rationTxs.length === 0) {
       text += `- कोई सांझा राशन नहीं\n`;
     } else {
       rationTxs.forEach(t => {
         const tr = this.store.getTrade(t.tradeId);
-        text += `- ${tr.name} ग्रुप: ${t.rationItem} ${t.quantity ? '(' + t.quantity + ')' : ''} - ₹${t.amount}\n`;
+        text += `- ${tr.name} ट्रेड: ${t.rationItem} ${t.quantity ? '(' + t.quantity + ')' : ''} - ₹${t.amount}\n`;
       });
     }
 
@@ -5430,7 +5430,7 @@ class App {
       text += `\n🧱 4. साइट का अन्य खर्च:\n`;
       siteTxs.forEach(t => {
         const meta = getTxTypeMeta(t.type);
-        const where = t.targetType === 'group' ? `${this.store.getTrade(t.tradeId).name} ग्रुप` : (this.store.getWorker(t.workerId)?.name || 'साइट');
+        const where = t.targetType === 'group' ? `${this.store.getTrade(t.tradeId).name} ट्रेड` : (this.store.getWorker(t.workerId)?.name || 'साइट');
         text += `- ${meta.icon} ${meta.hi}${t.quantity ? ' (' + t.quantity + ')' : ''} (${where}): ₹${t.amount}${t.note ? ' - ' + t.note : ''}\n`;
       });
     }

@@ -283,7 +283,7 @@
           <input type="date" id="haziriDatePicker" class="attendance-date-native-input" aria-label="हाजिरी की तारीख / Attendance date" />
         </div>
 
-        <div class="attendance-count-badge" id="haziriActiveGroupCount" title="ग्रुप के कुल कारीगर">
+        <div class="attendance-count-badge" id="haziriActiveGroupCount" title="ट्रेड के कुल कारीगर">
           0
         </div>
 
@@ -433,8 +433,8 @@
       <h2 class="screen-heading" data-i18n="tabGroups">कारीगर खाता</h2>
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
         <div>
-          <h2 style="font-size: 1.15rem; font-weight: 700;">कारीगर ग्रुप और राशन खाता</h2>
-          <p style="font-size: 0.82rem; color: var(--text-muted);">हर ट्रेड के मिस्त्री, हेल्पर और ग्रुप राशन का पूरा ब्यौरा</p>
+          <h2 style="font-size: 1.15rem; font-weight: 700;">ट्रेड और राशन खाता</h2>
+          <p style="font-size: 0.82rem; color: var(--text-muted);">हर ट्रेड के मिस्त्री, हेल्पर और ट्रेड राशन का पूरा ब्यौरा</p>
         </div>
         <div style="display: flex; gap: 8px;">
           <button id="btnAddWorkerBtn" class="btn-primary" style="font-size: 0.85rem;">
@@ -510,12 +510,12 @@
             <!-- 3. GROUP RATION & SUPPLIES -->
             <div>
               <div class="diary-section-heading">
-                <span>🍚 3. ग्रुप राशन व चूल्हा खर्च (Ration / Gas / Groceries)</span>
+                <span>🍚 3. ट्रेड राशन व चूल्हा खर्च (Ration / Gas / Groceries)</span>
               </div>
               <table class="diary-table">
                 <thead>
                   <tr>
-                    <th>ग्रुप का नाम</th>
+                    <th>ट्रेड का नाम</th>
                     <th>सामान (Item & Qty)</th>
                     <th>नोट / विवरण</th>
                     <th style="text-align: right;">लागत (₹)</th>
@@ -610,7 +610,7 @@
         <!-- Trade Group Selector -->
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <label class="form-label" style="margin-bottom: 0;">कारीगर ग्रुप (Trade):</label>
+            <label class="form-label" style="margin-bottom: 0;">ट्रेड (Trade):</label>
             <button type="button" id="btnOpenAddTradeFromTx" style="background: none; border: none; color: var(--amber-light); font-size: 0.8rem; font-weight: 600; cursor: pointer; text-decoration: underline;">
               🏷️ + नया ट्रेड जोड़ें
             </button>
@@ -625,7 +625,7 @@
           <label class="form-label">किसके नाम लिखें:</label>
           <div class="segmented-control" id="txTargetTypeSwitcher">
             <button type="button" class="segment-btn active" data-target="individual">👤 किसी एक कारीगर के नाम</button>
-            <button type="button" class="segment-btn" data-target="group">👥 पूरे ग्रुप के लिए (सांझा)</button>
+            <button type="button" class="segment-btn" data-target="group">👥 पूरे ट्रेड के लिए (सांझा)</button>
           </div>
         </div>
 
@@ -1025,7 +1025,7 @@
 
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-            <label class="form-label" style="margin-bottom: 0;">ट्रेड चुनें (Trade Group):</label>
+            <label class="form-label" style="margin-bottom: 0;">ट्रेड चुनें (Trade):</label>
             <button type="button" id="btnOpenAddTradeFromWorker" style="background: none; border: none; color: var(--amber-light); font-size: 0.8rem; font-weight: 600; cursor: pointer; text-decoration: underline;">
               🏷️ + नया ट्रेड जोड़ें
             </button>
@@ -1292,14 +1292,14 @@
             </button>
           </div>
           <p style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 10px;">
-            यदि किसी कारीगर को गलती से गलत ग्रुप में डाल दिया है (जैसे Mason को Carpenter), तो नीचे से चुनें और <strong>"सुधारें"</strong> दबाएं:
+            यदि किसी कारीगर को गलती से गलत ट्रेड में डाल दिया है (जैसे Mason को Carpenter), तो नीचे से चुनें और <strong>"सुधारें"</strong> दबाएं:
           </p>
           <div style="display: flex; gap: 8px; align-items: center;">
             <select id="settingsWorkerSelect" class="form-select" style="flex: 1; font-size: 0.85rem; margin: 0;">
               <!-- Populated dynamically via JS -->
             </select>
             <button type="button" id="btnSettingsEditWorker" class="btn-secondary" style="font-size: 0.82rem; padding: 9px 12px; border-color: var(--amber-primary); color: var(--amber-light); font-weight: 700; white-space: nowrap;">
-              ✏️ सुधारें / ग्रुप बदलें
+              ✏️ सुधारें / ट्रेड बदलें
             </button>
           </div>
         </div>
@@ -1318,7 +1318,7 @@
             </button>
           </div>
           <p style="font-size: 0.76rem; color: var(--text-muted); margin-bottom: 8px;">
-            आपकी साइट पर सक्रिय काम के ग्रुप:
+            आपकी साइट पर सक्रिय काम के ट्रेड:
           </p>
           <div id="settingsTradesPills" style="display: flex; flex-wrap: wrap; gap: 6px;">
             <!-- Populated via JS -->
@@ -1699,7 +1699,7 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label">कारीगर ग्रुप (Trade):</label>
+          <label class="form-label">ट्रेड (Trade):</label>
           <select id="editTxTradeSelect" class="form-select" required></select>
         </div>
 
@@ -1707,7 +1707,7 @@
           <label class="form-label">किसके नाम:</label>
           <div class="segmented-control" id="editTxTargetTypeSwitcher">
             <button type="button" class="segment-btn" data-target="individual">👤 व्यक्तिगत कारीगर</button>
-            <button type="button" class="segment-btn" data-target="group">👥 पूरे ग्रुप के लिए</button>
+            <button type="button" class="segment-btn" data-target="group">👥 पूरे ट्रेड के लिए</button>
           </div>
         </div>
 
