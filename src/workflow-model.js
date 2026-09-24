@@ -1,4 +1,19 @@
 // Shared view rules. A missing attendance record is pending, never absent.
+export function transactionHistory(transactions, { targetType, recipientId, from = '', to = '', type = '' }) {
+  const entries = transactions.filter(tx =>
+    (targetType === 'group' ? tx.targetType === 'group' && tx.tradeId === recipientId : tx.targetType !== 'group' && tx.workerId === recipientId) &&
+    (!from || tx.date >= from) && (!to || tx.date <= to) && (!type || tx.type === type)
+  ).sort((a, b) => b.date.localeCompare(a.date));
+  const days = [];
+  for (const tx of entries) {
+    let day = days.at(-1);
+    if (!day || day.date !== tx.date) { day = { date: tx.date, total: 0, entries: [] }; days.push(day); }
+    day.entries.push(tx);
+    day.total += Number(tx.amount) || 0;
+  }
+  return { days, count: entries.length, total: days.reduce((sum, day) => sum + day.total, 0) };
+}
+
 export function attendanceSummary(workers, records) {
   const result = { total: workers.length, full: 0, half: 0, absent: 0, pending: 0, marked: 0 };
   for (const worker of workers) {

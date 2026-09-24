@@ -7,8 +7,8 @@ android {
         applicationId "com.shram.sitediary"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode (project.hasProperty("appVersionCode") ? appVersionCode.toInteger() : 70)
-        versionName (project.hasProperty("appVersionName") ? appVersionName : "1.0.70")
+        versionCode (project.hasProperty("appVersionCode") ? appVersionCode.toInteger() : 71)
+        versionName (project.hasProperty("appVersionName") ? appVersionName : "1.0.71")
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

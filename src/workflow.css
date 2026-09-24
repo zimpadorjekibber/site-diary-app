@@ -283,3 +283,18 @@
   .worker-note-form { flex-direction: column; }
   .worker-note-form .btn-primary { width: 100%; }
 }
+.history-shortcuts { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 20px; }
+.history-shortcuts button { min-height: 44px; white-space: normal; text-align: left; }
+#historyDirectory { margin: 20px 0; }
+.history-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.history-filters label { display: flex; flex-direction: column; gap: 6px; font-size: .85rem; }
+.history-filters input, .history-filters select { min-width: 0; width: 100%; box-sizing: border-box; min-height: 44px; padding: 10px; border: 1px solid var(--border-card); border-radius: 8px; background: white; color: var(--text-main); font: inherit; }
+.history-summary, .history-day-heading { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 14px 0; }
+.history-day { border: 1px solid var(--border-card); border-radius: 12px; margin: 12px 0; padding: 0 14px; }
+.history-day-heading h4 { margin: 0; }
+.history-entry { display: flex; justify-content: space-between; gap: 12px; padding: 14px 0; border-top: 1px solid var(--border-card); }
+.history-entry > div { min-width: 0; overflow-wrap: anywhere; }
+.history-entry > b { flex-shrink: 0; }
+.history-entry small { display: block; color: var(--text-muted); margin-top: 4px; }
+.history-entry p { margin: 6px 0 0; }
+@media (max-width: 560px) { .account-history { flex-basis: 100%; min-height: 44px; } }

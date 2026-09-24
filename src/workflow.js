@@ -1,5 +1,5 @@
-import { getTodayString } from './storage.js';
-import { attendanceSummary, attendanceWorkers, validatePayment } from './workflow-model.js';
+import { getTodayString, getTxTypeLabel } from './storage.js';
+import { attendanceSummary, attendanceWorkers, validatePayment, transactionHistory } from './workflow-model.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money = n => `₹${Number(n || 0).toLocaleString('en-IN')}`;
@@ -53,6 +53,9 @@ export class Workflow {
     details.innerHTML = '<summary data-flow-label="groupDetails"></summary>';
     details.append(document.querySelector('#groupsLedgerContainer'));
     groups.append(details);
+    document.querySelector('#tab-timeline .screen-tools').insertAdjacentHTML('afterend', '<div class="history-shortcuts" id="timelineHistoryLinks"></div>');
+    groups.insertAdjacentHTML('afterbegin', '<section class="flow-panel" id="historyDirectory"></section>');
+    document.body.insertAdjacentHTML('beforeend', '<div class="modal-overlay" id="modalHistory"><div class="modal-card modal-large"><div class="modal-header"><h3 class="modal-title" id="historyTitle"></h3><button type="button" class="btn-close-modal" data-close-modal aria-label="Close">×</button></div><div id="historyControls"></div><div id="historyResults" aria-live="polite"></div></div></div>');
     groups.insertAdjacentHTML('afterbegin', '<div id="accountOverview"></div><div class="roster-controls"><label class="flow-search"><span aria-hidden="true">⌕</span><input type="search" id="accountSearch" /></label><div id="accountFilters" class="flow-filter-row"></div></div><div id="accountList"></div>');
     // The searchable directory replaces the duplicated introductory block.
     const oldHeading = groups.querySelector('.screen-heading');
@@ -83,6 +86,38 @@ export class Workflow {
       input.placeholder = this.t('नाम या ट्रेड से खोजें…','Search by name or trade…'); input.setAttribute('aria-label', input.placeholder);
     }
     this.renderHome(); this.renderAccounts(); this.renderReview();
+    if (document.getElementById('modalHistory').classList.contains('open')) this.renderHistoryResults();
+  }
+  renderHistoryDirectory() {
+    const links = `<button type="button" class="btn-secondary" data-history-kind="individual">${this.t('कारीगर को कब-कितना दिया','Worker payment history')}</button><button type="button" class="btn-secondary" data-history-kind="group">${this.t('ग्रुप का राशन / सिलेंडर रिकॉर्ड','Group ration / cylinder history')}</button>`;
+    document.getElementById('timelineHistoryLinks').innerHTML = links;
+    document.getElementById('historyDirectory').innerHTML = `<h3>${this.t('पुराना रिकॉर्ड देखें','View past records')}</h3><p>${this.t('किसे, किस दिन, कितना पैसा या सामान दिया — तारीख के अनुसार देखें।','See who received money or supplies, on which date, and how much.')}</p><div class="history-shortcuts">${links}</div><h4>${this.t('ग्रुप चुनें','Choose a group')}</h4><div class="history-shortcuts">${this.store.getTrades().map(t => `<button type="button" class="btn-secondary" data-history-kind="group" data-history-id="${esc(t.id)}">${esc(t.name)} · ${this.t('रिकॉर्ड देखें','View history')}</button>`).join('')}</div>`;
+    document.querySelectorAll('#accountList .account-row').forEach(row => {
+      const id = row.querySelector('[data-flow-pay]')?.dataset.flowPay;
+      if (id) row.insertAdjacentHTML('beforeend', `<button type="button" class="btn-secondary account-history" data-history-kind="individual" data-history-id="${esc(id)}">${this.t('कब-कितना दिया देखें','View payment history')}</button>`);
+    });
+  }
+  openHistory(targetType, recipientId) {
+    const people = targetType === 'group' ? this.store.getTrades() : this.store.getWorkers();
+    // Preserve access to entries belonging to a worker removed from the roster.
+    const recipients = people.map(p => ({ id: p.id, name: p.name }));
+    if (targetType === 'individual') for (const tx of this.store.getTransactions()) {
+      if (tx.targetType !== 'group' && tx.workerId && !recipients.some(p => p.id === tx.workerId)) recipients.push({ id: tx.workerId, name: (tx.workerName || this.t('पुराना कारीगर','Former worker')) + this.t(' (हटाया गया)',' (removed)') });
+    }
+    this.history = { targetType, recipientId: recipientId || recipients[0]?.id || '', from: '', to: '', type: '' };
+    document.getElementById('historyTitle').textContent = targetType === 'group' ? this.t('ग्रुप का दिनवार सामान और खर्च','Group supplies and expenses by day') : this.t('कारीगर को कब-कितना दिया','Worker payment history');
+    document.getElementById('historyControls').innerHTML = `<div class="history-filters"><label>${this.t('नाम / ग्रुप','Name / group')}<select data-history-field="recipientId">${recipients.map(p => `<option value="${esc(p.id)}" ${p.id === this.history.recipientId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label><label>${this.t('किस तारीख से','From date')}<input type="date" data-history-field="from"></label><label>${this.t('किस तारीख तक','To date')}<input type="date" data-history-field="to"></label><label>${this.t('पैसा / सामान','Money / supplies')}<select data-history-field="type"><option value="">${this.t('सभी एंट्री','All entries')}</option>${[...new Set(['cash','ration','cylinder',...this.store.getTransactions().map(tx => tx.type)])].map(type => `<option value="${esc(type)}">${esc(getTxTypeLabel(type, this.app.currentLang))}</option>`).join('')}</select></label></div><button type="button" class="flow-link" data-history-reset>${this.t('सभी तारीखें और प्रकार दिखाएँ','Show all dates and types')}</button>`;
+    this.renderHistoryResults();
+    document.getElementById('modalHistory').classList.add('open');
+  }
+  renderHistoryResults() {
+    if (!this.history) return;
+    const box = document.getElementById('historyResults');
+    if (this.history.from && this.history.to && this.history.from > this.history.to) {
+      box.innerHTML = `<p role="alert">${this.t('शुरू की तारीख, आखिरी तारीख के बाद नहीं हो सकती।','From date must be on or before the to date.')}</p>`; return;
+    }
+    const history = transactionHistory(this.store.getTransactions(), this.history);
+    box.innerHTML = `<div class="history-summary"><strong>${this.t('चुनी गई एंट्री का कुल','Total for selected entries')}: ${money(history.total)}</strong><span>${history.count} ${this.t('एंट्री','entries')}</span></div>${history.days.length ? history.days.map(day => `<section class="history-day"><div class="history-day-heading"><h4>${esc(day.date.split('-').reverse().join('/'))}</h4><strong>${this.t('दिन का कुल','Day total')}: ${money(day.total)}</strong></div>${day.entries.map(tx => `<article class="history-entry"><div><strong>${esc(getTxTypeLabel(tx.type, this.app.currentLang))}${tx.rationItem ? ` · ${esc(tx.rationItem)}` : ''}</strong><small>${esc(tx.time || '')}</small>${tx.quantity ? `<p>${this.t('मात्रा','Quantity')}: ${esc(tx.quantity)}</p>` : ''}${tx.note ? `<p>${esc(tx.note)}</p>` : ''}</div><b>${money(tx.amount)}</b></article>`).join('')}</section>`).join('') : `<p class="flow-empty">${this.t('इस नाम और तारीख के लिए कोई एंट्री नहीं है। दूसरे नाम या सभी तारीखें चुनें।','No entries for this recipient and date range. Choose another recipient or show all dates.')}</p>`}`;
   }
   renderHome() {
     const s = this.summary();
@@ -196,6 +231,7 @@ export class Workflow {
     document.getElementById('accountFilters').innerHTML = [['all',this.t('सभी','All')],['due',this.t('बकाया','Due')],['advance',this.t('एडवांस','Advance')]].map(([v,l])=>`<button class="flow-filter ${this.accountFilter===v?'active':''}" data-account-filter="${v}" aria-pressed="${this.accountFilter===v}">${l}</button>`).join('');
     const shown = ledgers.filter(l=>`${l.worker.name} ${this.store.getTrade(l.worker.tradeId).name}`.toLocaleLowerCase().includes(this.accountQuery.toLocaleLowerCase()) && (this.accountFilter==='all'||this.accountFilter==='due'&&l.balanceDue>0||this.accountFilter==='advance'&&l.balanceDue<0));
     document.getElementById('accountList').innerHTML = shown.length ? shown.map(l=>`<article class="account-row"><span class="person-initial">${esc(l.worker.name.slice(0,1))}</span><div class="account-person"><button class="flow-worker-name" data-open-statement="${esc(l.worker.id)}">${esc(l.worker.name)}</button><small>${esc(this.store.getTrade(l.worker.tradeId).name)}</small></div><div class="account-balance"><strong>${money(Math.abs(l.balanceDue))}</strong><small>${l.balanceDue<0?this.t('एडवांस दिया','Advance paid'):this.t('देना बाकी','Due')}</small></div><button class="btn-secondary" data-flow-pay="${esc(l.worker.id)}">${this.t('भुगतान','Pay')}</button></article>`).join('') : `<div class="onboarding-empty"><h3>${this.t('कोई खाता नहीं मिला','No accounts found')}</h3><p>${this.t('खोज बदलें या टीम में नया कारीगर जोड़ें।','Change your search or add a worker to your team.')}</p><button class="btn-primary" data-flow="worker">${this.t('+ कारीगर जोड़ें','+ Add worker')}</button></div>`;
+    this.renderHistoryDirectory();
   }
   renderReview() {
     const s = this.summary(), txs = this.store.getTransactions(getTodayString());
@@ -247,6 +283,10 @@ export class Workflow {
       }
     });
     document.addEventListener('change',e=>{
+      if (e.target.dataset.historyField && this.history) {
+        this.history[e.target.dataset.historyField] = e.target.value;
+        this.renderHistoryResults();
+      }
       if(e.target.id==='flowRecipient') this.draft[this.draft.targetType==='individual'?'workerId':'tradeId']=e.target.value;
     });
     document.addEventListener('submit',e=>{
@@ -258,6 +298,14 @@ export class Workflow {
     document.addEventListener('click', e => {
       const btn=e.target.closest('button'); if(!btn) return;
       const data=btn.dataset;
+      if (data.historyKind) this.openHistory(data.historyKind, data.historyId);
+      if (data.historyReset !== undefined && this.history) {
+        for (const key of ['from', 'to', 'type']) {
+          this.history[key] = '';
+          document.querySelector(`[data-history-field="${key}"]`).value = '';
+        }
+        this.renderHistoryResults();
+      }
       if(data.flowPay) this.openPayment(data.flowPay);
       if(data.rosterFilter) { this.status=data.rosterFilter; this.renderAttendance(); }
       if(data.accountFilter) { this.accountFilter=data.accountFilter; this.renderAccounts(); }
