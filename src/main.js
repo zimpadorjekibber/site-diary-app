@@ -2013,8 +2013,8 @@ class App {
               <button class="btn-icon-action btn-edit-tx" data-edit-tx="${tx.id}" title="सुधारें">
                 ✏️
               </button>
-              <button class="btn-icon-action btn-del-tx" data-delete-tx="${tx.id}" title="हटाएं">
-                🗑️
+              <button type="button" class="btn-icon-action btn-del-tx" data-delete-tx="${tx.id}">
+                🗑️ ${this.currentLang === 'en' ? 'Delete' : 'हटाएँ'}
               </button>
             </div>
           </div>
@@ -3310,9 +3310,18 @@ class App {
       const delBtn = e.target.closest('[data-delete-tx]');
       if (delBtn) {
         const txId = delBtn.getAttribute('data-delete-tx');
-        if (confirm('क्या आप इस लेन-देन को हटाना चाहते हैं?')) {
+        const tx = this.store.getTransaction(txId);
+        if (!tx) return;
+        const message = this.currentLang === 'en'
+          ? `Delete this entry of ${inr(tx.amount)} dated ${tx.date}?\n\nThis cannot be undone.`
+          : `${tx.date} की ${inr(tx.amount)} वाली एंट्री हटाएँ?\n\nयह वापस नहीं आएगी।`;
+        if (confirm(message)) {
           this.store.deleteTransaction(txId);
           this.commit();
+          if (this.activeStatementWorkerId && document.getElementById('modalWorkerStatement')?.classList.contains('open')) {
+            this.openWorkerStatementModal(this.activeStatementWorkerId);
+          }
+          this.showToast(this.currentLang === 'en' ? 'Entry deleted' : 'एंट्री हटा दी गई');
         }
       }
     });
@@ -5608,7 +5617,7 @@ class App {
             <td style="text-align: right; font-weight: 700; color: #38bdf8;">₹${(t.amount || 0).toLocaleString('en-IN')}</td>
             <td style="text-align: center; white-space: nowrap;">
               <button class="btn-icon-action btn-edit-tx" data-edit-tx="${t.id}" title="सुधारें">✏️</button>
-              <button class="btn-icon-action btn-del-tx" data-delete-tx="${t.id}" title="हटाएं">🗑️</button>
+              <button type="button" class="btn-icon-action btn-del-tx" data-delete-tx="${t.id}">🗑️ ${this.currentLang === 'en' ? 'Delete' : 'हटाएँ'}</button>
             </td>
           </tr>
         `).join('');
@@ -5927,4 +5936,3 @@ window.addEventListener('DOMContentLoaded', () => {
     console.log('Site Diary installed successfully!');
   });
 });
-
