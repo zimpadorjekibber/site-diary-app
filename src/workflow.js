@@ -101,8 +101,7 @@ export class Workflow {
     });
   }
   filterTimeline(txs) {
-    const byTrade = this.recipientMode === 'group' || this.recipientMode === 'trade';
-    const people = byTrade ? this.store.getTrades() : this.store.getWorkers();
+    const people = this.recipientMode === 'trade' ? this.store.getTrades() : this.store.getWorkers();
     const recipients = people.map(p => ({ id: p.id, name: p.name }));
     if (this.recipientMode === 'individual') for (const tx of this.store.getTransactions()) {
       if (tx.targetType !== 'group' && tx.workerId && !recipients.some(p => p.id === tx.workerId)) recipients.push({id: tx.workerId, name: (tx.workerName || this.t('पुराना कारीगर','Former worker')) + this.t(' (हटाया गया)',' (removed)')});
@@ -112,7 +111,7 @@ export class Workflow {
       this.recipientMode = 'all'; this.recipientId = '';
     }
     if (this.recipientId && !recipients.some(p => p.id === this.recipientId)) this.recipientId = '';
-    document.getElementById('timelineRecipientFilters').innerHTML = `<label>${this.t('किसका रिकॉर्ड देखें?','Whose records?')}<select id="timelineRecipientMode">${[['all',this.t('सभी — Individual और Group','All — Individual and Group')],['individual',this.t('Individual — कारीगर को दिया','Individual — given to a worker')],['group',this.t('Group — सांझा सामान / खर्च','Group — shared supplies / expenses')],['trade',this.t('Trade — एक ट्रेड का पूरा खर्च','Trade — everything spent on one trade')]].map(([value,label]) => `<option value="${value}" ${value === this.recipientMode ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>${this.recipientMode === 'trade' ? this.t('ट्रेड चुनें','Choose trade') : this.recipientMode === 'group' ? this.t('ग्रुप चुनें','Choose group') : this.t('कारीगर चुनें','Choose individual')}<select id="timelineRecipientId" ${this.recipientMode === 'all' ? 'disabled' : ''}><option value="">${this.recipientMode === 'trade' ? this.t('सभी ट्रेड','All trades') : this.recipientMode === 'group' ? this.t('सभी ग्रुप','All groups') : this.t('सभी कारीगर','All individuals')}</option>${recipients.map(p => `<option value="${esc(p.id)}" ${p.id === this.recipientId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>`;
+    document.getElementById('timelineRecipientFilters').innerHTML = `<label>${this.t('किसका रिकॉर्ड देखें?','Whose records?')}<select id="timelineRecipientMode">${[['all',this.t('सभी — Individual और Trade','All — Individual and Trade')],['individual',this.t('Individual — कारीगर को दिया','Individual — given to a worker')],['trade',this.t('Trade — एक ट्रेड का पूरा खर्च','Trade — everything spent on one trade')]].map(([value,label]) => `<option value="${value}" ${value === this.recipientMode ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>${this.recipientMode === 'trade' ? this.t('ट्रेड चुनें','Choose trade') : this.t('कारीगर चुनें','Choose individual')}<select id="timelineRecipientId" ${this.recipientMode === 'all' ? 'disabled' : ''}><option value="">${this.recipientMode === 'trade' ? this.t('सभी ट्रेड','All trades') : this.t('सभी कारीगर','All individuals')}</option>${recipients.map(p => `<option value="${esc(p.id)}" ${p.id === this.recipientId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>`;
     return filterRecipient(txs, this.recipientMode, this.recipientId, tx => tx.tradeId || this.store.getWorker(tx.workerId)?.tradeId);
   }
   openHistory(targetType, recipientId) {

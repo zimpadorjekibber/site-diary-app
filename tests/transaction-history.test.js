@@ -11,13 +11,12 @@ const transactions = [
   {id:'f', date:'2026-09-21', tradeId:'painter', targetType:'group', type:'ration', amount:300},
   {id:'g', date:'2026-09-21', tradeId:'mason', targetType:'group', type:'ration', quantity:'2 kg', amount:0},
 ];
-test('recipient filters isolate a group from its individuals and reset to all', () => {
+test('recipient filters isolate one worker and reset to all', () => {
   assert.equal(filterRecipient(transactions).length, 7);
   assert.equal(filterRecipient(transactions, 'individual').length, 3);
-  assert.equal(filterRecipient(transactions, 'group').length, 4);
   assert.deepEqual(filterRecipient(transactions, 'individual', 'ram').map(t => t.id), ['a','b']);
-  assert.deepEqual(filterRecipient(transactions, 'group', 'mason').map(t => t.id), ['d','e','g']);
-  assert.equal(filterRecipient(transactions, 'group', 'missing').length, 0);
+  assert.equal(filterRecipient(transactions, 'individual', 'missing').length, 0);
+  assert.equal(filterRecipient(transactions, 'trade', 'missing').length, 0);
 });
 test('trade filter joins a trade\'s worker payments with its shared supplies', () => {
   const withTrades = [

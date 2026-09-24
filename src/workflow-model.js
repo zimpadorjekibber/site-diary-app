@@ -4,8 +4,6 @@
 export function filterRecipient(transactions, targetType = 'all', recipientId = '', tradeOf = tx => tx.tradeId) {
   return transactions.filter(tx => targetType === 'all' || (targetType === 'trade'
     ? (!recipientId || tradeOf(tx) === recipientId)
-    : targetType === 'group'
-    ? tx.targetType === 'group' && (!recipientId || tx.tradeId === recipientId)
     : tx.targetType !== 'group' && !!tx.workerId && (!recipientId || tx.workerId === recipientId)));
 }
 
