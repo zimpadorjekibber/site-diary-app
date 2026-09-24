@@ -1,14 +1,8 @@
-# Only the MCP endpoint is hosted here; the app itself lives on Netlify.
+# Vercel builds the app (src/, index.html, public/) and hosts the MCP endpoint.
+# Nothing Android-only, and never the signing key, goes up.
 android/
 dist/
 scripts/
-# The endpoint needs one file from here: tools.js and writer.js both import
-# ../src/storage.js, so that the MCP server does the ledger's arithmetic with
-# the app's own code rather than a second copy of it. Excluding all of src/
-# left the function unable to resolve it at all.
-src/*
-!src/storage.js
-index.html
 *.apk
 *.jks
 *.keystore
