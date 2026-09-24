@@ -1,6 +1,10 @@
 // Shared view rules. A missing attendance record is pending, never absent.
-export function filterRecipient(transactions, targetType = 'all', recipientId = '') {
-  return transactions.filter(tx => targetType === 'all' || (targetType === 'group'
+// 'trade' covers everything spent on a trade: its workers' payments and its shared supplies.
+// tradeOf lets old entries saved without a tradeId fall back to their worker's trade.
+export function filterRecipient(transactions, targetType = 'all', recipientId = '', tradeOf = tx => tx.tradeId) {
+  return transactions.filter(tx => targetType === 'all' || (targetType === 'trade'
+    ? (!recipientId || tradeOf(tx) === recipientId)
+    : targetType === 'group'
     ? tx.targetType === 'group' && (!recipientId || tx.tradeId === recipientId)
     : tx.targetType !== 'group' && !!tx.workerId && (!recipientId || tx.workerId === recipientId)));
 }

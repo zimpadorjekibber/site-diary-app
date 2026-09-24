@@ -19,6 +19,16 @@ test('recipient filters isolate a group from its individuals and reset to all', 
   assert.deepEqual(filterRecipient(transactions, 'group', 'mason').map(t => t.id), ['d','e','g']);
   assert.equal(filterRecipient(transactions, 'group', 'missing').length, 0);
 });
+test('trade filter joins a trade\'s worker payments with its shared supplies', () => {
+  const withTrades = [
+    ...transactions.map(t => t.workerId === 'ram' ? {...t, tradeId: 'mason'} : t),
+    {id:'h', date:'2026-09-23', workerId:'old', targetType:'individual', type:'cash', amount:200, tradeId:null},
+  ];
+  const tradeOf = tx => tx.tradeId || (tx.workerId === 'old' ? 'mason' : null);
+  assert.deepEqual(filterRecipient(withTrades, 'trade', 'mason', tradeOf).map(t => t.id), ['a','b','d','e','g','h']);
+  assert.deepEqual(filterRecipient(withTrades, 'trade', 'painter', tradeOf).map(t => t.id), ['f']);
+  assert.equal(filterRecipient(withTrades, 'trade', '', tradeOf).length, 8);
+});
 test('worker history spans all dates, isolates people and sorts newest day first', () => {
   const result = transactionHistory(transactions, {targetType:'individual', recipientId:'ram'});
   assert.equal(result.total, 1200);

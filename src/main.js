@@ -1946,9 +1946,16 @@ class App {
 
     if (this.workflow) txs = this.workflow.filterTimeline(txs);
     const filteredTotal = document.getElementById('timelineFilteredTotal');
-    if (filteredTotal) filteredTotal.textContent = this.currentLang === 'en'
-      ? `${txs.length} matching entries · Total ${inr(txs.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0))}`
-      : `${txs.length} चुनी हुई एंट्री · कुल ${inr(txs.reduce((sum, tx) => sum + (Number(tx.amount) || 0), 0))}`;
+    if (filteredTotal) {
+      const sum = list => list.reduce((s, tx) => s + (Number(tx.amount) || 0), 0);
+      const shared = sum(txs.filter(tx => tx.targetType === 'group'));
+      const split = this.workflow?.recipientMode !== 'trade' ? '' : this.currentLang === 'en'
+        ? ` (workers ${inr(sum(txs) - shared)} · shared supplies ${inr(shared)})`
+        : ` (कारीगरों को ${inr(sum(txs) - shared)} · सांझा सामान ${inr(shared)})`;
+      filteredTotal.textContent = this.currentLang === 'en'
+        ? `${txs.length} matching entries · Total ${inr(sum(txs))}${split}`
+        : `${txs.length} चुनी हुई एंट्री · कुल ${inr(sum(txs))}${split}`;
+    }
 
     if (txs.length === 0) {
       container.innerHTML = `
