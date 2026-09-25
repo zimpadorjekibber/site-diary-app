@@ -4456,7 +4456,7 @@ class App {
           const trade = this.store.getTrade(tradeId);
           const workers = this.store.getWorkers(tradeId);
           if (workers.length > 0) {
-            alert(`इस ट्रेड में ${workers.length} कारीगर हैं। कारीगर खाता से उनका ट्रेड पहले दूसरे Block Builder में बदलें, फिर इसे हटाएं।`);
+            alert(`इस ट्रेड में ${workers.length} कारीगर हैं। कारीगर खाता से उनका ट्रेड पहले किसी दूसरे ट्रेड में बदलें, फिर इसे हटाएं।`);
             return;
           }
           if (confirm(`क्या आप ट्रेड "${trade.name}" को सूची से हटाना चाहते हैं?`)) {
@@ -4668,7 +4668,7 @@ class App {
           return `
             <span class="filter-chip settings-trade-chip">
               <span class="settings-trade-name">${getTradeIcon(t.icon)} ${esc(t.name)} <strong>(${count})</strong></span>
-              <button type="button" class="settings-edit-trade" data-settings-edit-trade="${esc(t.id)}" aria-label="${esc(t.name)} ट्रेड सुधारें या हटाएँ">✏️ सुधारें / हटाएँ</button>
+              <button type="button" class="settings-edit-trade" data-settings-edit-trade="${esc(t.id)}" aria-label="${esc(t.name)} ट्रेड सुधारें">✏️ सुधारें</button>
             </span>
           `;
         }).join('');

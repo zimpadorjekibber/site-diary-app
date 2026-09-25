@@ -4201,7 +4201,7 @@ body {
 .settings-edit-trade {
   flex: 0 0 auto;
   white-space: nowrap;
-  min-width: 132px;
+  min-width: 96px;
   min-height: 38px;
   border: 1px solid rgba(15, 118, 110, 0.26);
   border-radius: 12px;
