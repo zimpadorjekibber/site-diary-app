@@ -4193,11 +4193,14 @@ body {
   background: rgba(15, 23, 42, 0.063);
   border-color: rgba(15, 23, 42, 0.14);
   font-size: 0.86rem;
+  /* .filter-chip is nowrap; a long trade name then ran under the edit button. */
+  white-space: normal;
 }
-.settings-trade-name { min-width: 0; text-align: left; }
+.settings-trade-name { flex: 1 1 auto; min-width: 0; text-align: left; overflow-wrap: anywhere; line-height: 1.35; }
 .settings-trade-name strong { color: var(--amber-light); margin-left: 2px; }
 .settings-edit-trade {
   flex: 0 0 auto;
+  white-space: nowrap;
   min-width: 132px;
   min-height: 38px;
   border: 1px solid rgba(15, 118, 110, 0.26);
