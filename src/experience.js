@@ -17,10 +17,13 @@ export function installExperience(flow) {
   const home = document.getElementById('tab-home');
   const capture = document.createElement('section');
   capture.className = 'experience-capture flow-panel';
-  capture.innerHTML = '<div class="panel-heading"><h3 data-experience-label="capture"></h3></div>';
+  capture.innerHTML = '<div class="panel-heading"><h3 data-experience-label="capture"></h3></div><label class="voice-language"><span data-experience-label="voiceLanguage"></span><select id="voiceInputLanguage"><option value="hi-IN">हिन्दी</option><option value="en-IN">English</option></select></label>';
   capture.append(document.getElementById('quickEntryInput').closest('.voice-search-bar'));
   capture.append(document.getElementById('voiceTranscriptBox'));
   capture.append(document.getElementById('voiceStatusText'));
+  document.addEventListener('change', e => {
+    if (e.target.id === 'voiceInputLanguage') flow.store.updateSettings({speechLanguage:e.target.value});
+  });
   home.querySelector('.home-columns').before(capture);
   const timeline = document.getElementById('tab-timeline');
   const filterCard = document.createElement('section');
@@ -85,6 +88,7 @@ export function renderExperience(flow) {
     ['machine',t('JCB का काम','JCB work'),t('समय और घंटे का हिसाब','Time and hours'),'data-experience-native="btnOpenJcb"'],
   ];
   document.getElementById('dayJourney').innerHTML = `<div class="experience-heading"><div><p class="flow-eyebrow">${esc(store.activeProject().name)}</p><h2>${t('आज का हिसाब','Your day, at a glance')}</h2><p>${new Date(`${today}T12:00:00`).toLocaleDateString(flow.app.currentLang === 'en' ? 'en-IN' : 'hi-IN', {weekday:'long', day:'numeric', month:'long'})}</p></div><span class="experience-day-badge">${store.isDateMarkedInDiary(today) ? t('✓ दिन पूरा','✓ Day complete') : t('डायरी बाकी','Diary pending')}</span></div><section class="experience-total"><span>${t('आज कुल दिया / खर्च किया','Total recorded today')}</span><strong>${money(total)}</strong><div class="experience-total-split"><div><small>${t('कारीगर को दिया','Given to workers')}</small><b>${money(individual)}</b></div><div><small>${t('साइट / सांझा खर्च','Site / shared expenses')}</small><b>${money(total - individual)}</b></div></div></section><div class="experience-overview"><button type="button" data-flow="accounts"><small>${t('कुल देना बाकी','Total balance due')}</small><strong>${money(due)}</strong><span>${t('खाते देखें','View accounts')} →</span></button><button type="button" data-flow="attendance"><small>${t('आज की हाजिरी','Today’s attendance')}</small><strong>${summary.marked}<em> / ${summary.total}</em></strong><span>${summary.pending ? t(`${summary.pending} की हाजिरी बाकी`,`${summary.pending} pending`) : t('सब दर्ज हैं','All recorded')}</span></button></div><section class="experience-actions"><div class="panel-heading"><h3>${t('क्या दर्ज करना है?','What would you like to record?')}</h3></div><div class="experience-action-grid">${actions.map(([name,title,sub,attr]) => `<button type="button" ${attr}><span>${glyph(name)}</span><div><strong>${title}</strong><small>${sub}</small></div><b aria-hidden="true">↗</b></button>`).join('')}</div></section><button type="button" class="experience-progress" data-flow="${summary.total ? 'attendance' : 'worker'}"><div><strong>${summary.total ? t('हाजिरी पूरी करें','Finish attendance') : t('अपनी टीम जोड़ें','Add your team')}</strong><span>${summary.total ? t(`${summary.marked} दर्ज · ${summary.pending} बाकी`,`${summary.marked} recorded · ${summary.pending} pending`) : t('पहला कारीगर जोड़कर शुरू करें','Start by adding your first worker')}</span></div><div class="experience-progress-track"><i style="width:${percent}%"></i></div><b>→</b></button>`;
-  const labels = {capture:t('बोलकर या लिखकर एंट्री','Speak or type an entry'),reset:t('सभी रिकॉर्ड दिखाएँ','Clear filters · show all'),recovery:t('हटाए हुए रिकॉर्ड','Restore deleted records')};
+  const labels = {capture:t('बोलकर या लिखकर एंट्री','Speak or type an entry'),voiceLanguage:t('बोलने की भाषा','Spoken language'),reset:t('सभी रिकॉर्ड दिखाएँ','Clear filters · show all'),recovery:t('हटाए हुए रिकॉर्ड','Restore deleted records')};
+  document.getElementById('voiceInputLanguage').value = store.getSettings().speechLanguage || 'hi-IN';
   document.querySelectorAll('[data-experience-label]').forEach(el => el.textContent = labels[el.dataset.experienceLabel]);
 }

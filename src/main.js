@@ -5163,6 +5163,7 @@ class App {
           this.voiceManager.startListening(
             // On result
             (transcript, isFinal, parsedData, audioDataUrl) => {
+              if (!transcript.trim()) return;
               if (voiceTranscriptBox) voiceTranscriptBox.textContent = `"${transcript}"`;
               if (quickEntryInput) quickEntryInput.value = transcript;
               if (isFinal) {
@@ -5176,7 +5177,9 @@ class App {
             },
             // On status change
             (isListening, msg) => {
-              if (voiceStatus) voiceStatus.textContent = msg;
+              if (voiceStatus) { voiceStatus.textContent = msg; voiceStatus.style.display = 'block'; }
+              if (voiceTranscriptBox && !this.voiceManager.transcript && !isListening) voiceTranscriptBox.textContent = msg;
+              btnMic.setAttribute('aria-pressed', String(isListening));
               if (!isListening) {
                 btnMic.classList.remove('recording');
                 btnMic.textContent = '🎙️';

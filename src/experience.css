@@ -60,6 +60,11 @@
 .experience-capture input { min-height:44px; font-size:16px !important; color:var(--text-main) !important; }
 .experience-capture #btnQuickEntrySubmit { background:#176f62 !important; color:#fff !important; min-height:44px; }
 .experience-capture #btnVoiceMic { min-width:44px; min-height:44px; background:#e3efeb; color:#176f62; box-shadow:none; }
+.experience-capture .voice-search-content .form-input::placeholder { color:#657c89; opacity:1; }
+.experience-capture #voiceTranscriptBox { color:#264c5c; line-height:1.6; }
+.experience-capture #voiceStatusText { color:#526b77; font-size:.83rem; line-height:1.7; margin-top:10px; }
+.voice-language { display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:.85rem; margin-bottom:12px; color:var(--text-muted); }
+.voice-language select { min-height:44px; border:1px solid #d1dedf; border-radius:10px; padding:6px 12px; background:#fff; color:var(--text-main); }
 .record-filter-card { clear:both; padding:20px; border:1px solid var(--border-card); background:white; border-radius:20px; margin:18px 0; }
 .record-filter-card .timeline-controls-bar { margin:14px 0; }
 .record-filter-card .history-filters label { font-size:.85rem; }
