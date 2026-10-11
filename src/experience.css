@@ -59,6 +59,7 @@
 .experience-capture > div:not(.panel-heading) { background:#f4f7fa !important; padding:10px !important; border:1px solid #dce5ec !important; }
 .experience-capture input { min-height:44px; font-size:16px !important; color:var(--text-main) !important; }
 .experience-capture #btnQuickEntrySubmit { background:#176f62 !important; color:#fff !important; min-height:44px; }
+.experience-capture #btnVoiceMic { min-width:44px; min-height:44px; background:#e3efeb; color:#176f62; box-shadow:none; }
 .record-filter-card { clear:both; padding:20px; border:1px solid var(--border-card); background:white; border-radius:20px; margin:18px 0; }
 .record-filter-card .timeline-controls-bar { margin:14px 0; }
 .record-filter-card .history-filters label { font-size:.85rem; }

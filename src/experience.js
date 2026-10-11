@@ -18,8 +18,9 @@ export function installExperience(flow) {
   const capture = document.createElement('section');
   capture.className = 'experience-capture flow-panel';
   capture.innerHTML = '<div class="panel-heading"><h3 data-experience-label="capture"></h3></div>';
-  capture.append(document.getElementById('quickEntryInput').parentElement);
+  capture.append(document.getElementById('quickEntryInput').closest('.voice-search-bar'));
   capture.append(document.getElementById('voiceTranscriptBox'));
+  capture.append(document.getElementById('voiceStatusText'));
   home.querySelector('.home-columns').before(capture);
   const timeline = document.getElementById('tab-timeline');
   const filterCard = document.createElement('section');
