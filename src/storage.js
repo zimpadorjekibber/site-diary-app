@@ -978,9 +978,8 @@ export class Store {
   }
 
   // --- WORKERS ---
-  getWorkers(tradeId = null) {
-    if (!tradeId || tradeId === 'all') return this.activeProject().workers;
-    return this.activeProject().workers.filter(w => w.tradeId === tradeId);
+  getWorkers(tradeId = null, includeArchived = false) {
+    return this.activeProject().workers.filter(w => (includeArchived || !w.archivedAt) && (!tradeId || tradeId === 'all' || w.tradeId === tradeId));
   }
 
   getWorker(id) {
@@ -1031,22 +1030,47 @@ export class Store {
   updateWorker(id, updates) {
     const idx = this.activeProject().workers.findIndex(w => w.id === id);
     if (idx !== -1) {
-      const oldTradeId = this.activeProject().workers[idx].tradeId;
-      this.activeProject().workers[idx] = { ...this.activeProject().workers[idx], ...updates };
-
-      // If tradeId changed, also update all individual transactions for this worker so they belong to the new trade
-      if (updates.tradeId && updates.tradeId !== oldTradeId && this.activeProject().transactions) {
-        this.activeProject().transactions.forEach(tx => {
-          if (tx.workerId === id) {
-            tx.tradeId = updates.tradeId;
-          }
-        });
+      const oldWorker = this.activeProject().workers[idx];
+      // Freeze legacy attendance at its existing rate before changing the worker.
+      for (const records of Object.values(this.activeProject().haziri || {})) {
+        if (records[id]) records[id] = { ...this.attendanceRateSnapshot(oldWorker), ...records[id] };
       }
+      for (const tx of this.getTransactions()) {
+        if (tx.workerId === id && !tx.tradeId) tx.tradeId = oldWorker.tradeId;
+      }
+      this.activeProject().workers[idx] = { ...this.activeProject().workers[idx], ...updates };
 
       this.save();
       return this.activeProject().workers[idx];
     }
     return null;
+  }
+
+  archiveWorker(id) {
+    const worker = this.getWorker(id);
+    if (!worker) return false;
+    const previous = worker.archivedAt;
+    worker.archivedAt = Date.now();
+    if (!this.save()) { if (previous === undefined) delete worker.archivedAt; else worker.archivedAt = previous; return false; }
+    return true;
+  }
+
+  restoreWorker(id) {
+    const worker = this.getWorker(id);
+    if (!worker) return false;
+    const previous = worker.archivedAt;
+    delete worker.archivedAt;
+    if (!this.save()) { if (previous !== undefined) worker.archivedAt = previous; return false; }
+    return true;
+  }
+
+  attendanceRateSnapshot(worker) {
+    return { dailyRate: Number(worker?.dailyRate) || 0, otRate: (Number(worker?.dailyRate) || 0) / this.getOtHoursPerDay(), contractType: worker?.contractType || 'dihadi' };
+  }
+
+  getAttendanceEarnings(record, worker) {
+    if (!record || record.status <= 0 || (record.contractType || worker?.contractType) === 'theka') return 0;
+    return record.status * (record.dailyRate ?? worker?.dailyRate ?? 0) + (Number(record.otHours) || 0) * (record.otRate ?? ((worker?.dailyRate || 0) / this.getOtHoursPerDay()));
   }
 
   // Keeps the money history (it really happened) but stamps the name onto each
@@ -1367,8 +1391,26 @@ export class Store {
   }
 
   deleteTransaction(id) {
-    this.activeProject().transactions = this.activeProject().transactions.filter(t => t.id !== id);
-    this.save();
+    const tx = this.getTransaction(id);
+    if (!tx) return false;
+    const project = this.activeProject(), previous = project.transactions, deleted = project.deletedTransactions;
+    project.deletedTransactions = [{ ...tx, deletedAt: Date.now() }, ...(deleted || [])];
+    project.transactions = previous.filter(t => t.id !== id);
+    if (!this.save()) { project.transactions = previous; if (deleted === undefined) delete project.deletedTransactions; else project.deletedTransactions = deleted; return false; }
+    return true;
+  }
+
+  getDeletedTransactions() { return this.activeProject().deletedTransactions || []; }
+
+  restoreTransaction(id) {
+    const tx = this.getDeletedTransactions().find(t => t.id === id);
+    if (!tx || this.getTransaction(id)) return false;
+    const { deletedAt, ...restored } = tx;
+    const project = this.activeProject(), previous = project.transactions, deleted = project.deletedTransactions;
+    project.transactions = [restored, ...previous];
+    project.deletedTransactions = deleted.filter(t => t.id !== id);
+    if (!this.save()) { project.transactions = previous; project.deletedTransactions = deleted; return false; }
+    return true;
   }
 
   getTransaction(id) {
@@ -1405,7 +1447,9 @@ export class Store {
           date,
           status: rec.status,
           otHours: rec.otHours || 0,
-          reason: rec.reason || ''
+          reason: rec.reason || '',
+          earned: this.getAttendanceEarnings(rec, this.getWorker(workerId)),
+          contractType: rec.contractType || this.getWorker(workerId)?.contractType || 'dihadi'
         });
       }
     }
@@ -1427,6 +1471,8 @@ export class Store {
     const n = Number(status);
     const clean = n === 1 ? 1 : n === 0.5 ? 0.5 : 0;
     const record = {
+      ...this.attendanceRateSnapshot(this.getWorker(workerId)),
+      ...this.activeProject().haziri[date][workerId],
       status: clean, // 1.0 (full), 0.5 (half), 0 (absent)
       otHours: Number(otHours) || 0
     };
@@ -1434,6 +1480,7 @@ export class Store {
     // written before this field existed simply have no such key, and every
     // reader treats that as an absence with no reason — nothing to migrate.
     const why = cleanAbsenceReason(clean, reason);
+    delete record.reason;
     if (why) record.reason = why;
     this.activeProject().haziri[date][workerId] = record;
     if (!this.activeProject().haziriMeta) this.activeProject().haziriMeta = {};
@@ -1508,8 +1555,9 @@ export class Store {
     }
 
     const supplierTrades = new Set(this.getTrades().filter(t => t.isSupplier).map(t => t.id));
-    const workers = this.getWorkers().filter(worker =>
+    const workers = this.getWorkers(null, true).filter(worker =>
       !supplierTrades.has(worker.tradeId) &&
+      (!worker.archivedAt || days.some(d => this.getHaziri(d.dateStr)[worker.id]) || this.getTransactions().some(tx => tx.workerId === worker.id && tx.date.startsWith(`${year}-${String(month).padStart(2, '0')}`))) &&
       !(worker.isThekedar && worker.worksHimself === false)
     );
     const rows = workers.map(worker => {
@@ -1535,14 +1583,7 @@ export class Store {
       });
 
       const isTheka = worker.contractType === 'theka';
-      const otDivisor = this.getOtHoursPerDay();
-      let totalEarnedMonth = 0;
-      if (!isTheka) {
-        totalEarnedMonth = totalPresent * (worker.dailyRate || 0);
-        if (totalOtHours > 0) {
-          totalEarnedMonth += totalOtHours * ((worker.dailyRate || 0) / otDivisor);
-        }
-      }
+      const totalEarnedMonth = days.reduce((sum, d) => sum + this.getAttendanceEarnings(dailyStatuses[d.dateStr], worker), 0);
       // A theka worker earns one lump sum for the whole job, not that sum again
       // every month — so the monthly column stays 0 and the contract is settled
       // against lifetime payments below.
@@ -1689,6 +1730,14 @@ export class Store {
   }
 
   updateSettings(updates) {
+    if (updates.otHoursPerDay !== undefined && Number(updates.otHoursPerDay) !== this.getOtHoursPerDay()) {
+      for (const project of this.data.projects) for (const records of Object.values(project.haziri || {})) {
+        for (const [id, record] of Object.entries(records)) {
+          const worker = project.workers.find(w => w.id === id);
+          if (worker) records[id] = { ...this.attendanceRateSnapshot(worker), ...record };
+        }
+      }
+    }
     this.data.settings = { ...this.data.settings, ...updates };
     this.save();
     return this.data.settings;
@@ -1712,13 +1761,7 @@ export class Store {
       if (record) {
         if (record.status > 0) {
           totalHaziriDays += record.status;
-          if (!isTheka) {
-            totalEarned += record.status * (worker.dailyRate || 0);
-            if (record.otHours > 0) {
-              const hourlyRate = (worker.dailyRate || 0) / this.getOtHoursPerDay();
-              totalEarned += record.otHours * hourlyRate;
-            }
-          }
+          totalEarned += this.getAttendanceEarnings(record, worker);
         } else if (record.status === 0) {
           totalAbsentDays += 1;
           absentDates.push(date);
@@ -1727,7 +1770,7 @@ export class Store {
     });
 
     if (isTheka) {
-      totalEarned = getThekaTotal(worker);
+      totalEarned += getThekaTotal(worker);
     }
 
     // Everything charged to this worker by name — cash, recharge, diesel, material,

@@ -2362,8 +2362,8 @@ class App {
               <button type="button" class="btn-worker-mini btn-worker-edit" data-open-edit-worker="${w.id}" title="कारीगर की जानकारी बदलें">
                 ✏️ सुधारें
               </button>
-              <button type="button" class="btn-worker-mini btn-worker-delete" data-delete-worker-id="${w.id}" title="कारीगर हटाएं">
-                🗑️
+              <button type="button" class="btn-worker-mini btn-worker-delete" data-delete-worker-id="${w.id}" title="काम छोड़ दिया / Archive">
+                Archive
               </button>
             </div>
           </div>
@@ -3326,8 +3326,8 @@ class App {
         const tx = this.store.getTransaction(txId);
         if (!tx) return;
         const message = this.currentLang === 'en'
-          ? `Delete this entry of ${inr(tx.amount)} dated ${tx.date}?\n\nThis cannot be undone.`
-          : `${tx.date} की ${inr(tx.amount)} वाली एंट्री हटाएँ?\n\nयह वापस नहीं आएगी।`;
+          ? `Delete this entry of ${inr(tx.amount)} dated ${tx.date}?\n\nYou can restore it from deleted records.`
+          : `${tx.date} की ${inr(tx.amount)} वाली एंट्री हटाएँ?\n\nलेन-देन की एंट्री बाद में हटाए हुए रिकॉर्ड से वापस ला सकते हैं।`;
         if (confirm(message)) {
           this.store.deleteTransaction(txId);
           this.commit();
@@ -3508,8 +3508,8 @@ class App {
       if (delWBtn) {
         const workerId = delWBtn.getAttribute('data-delete-worker-id');
         const worker = this.store.getWorker(workerId);
-        if (worker && confirm(`क्या आप कारीगर "${worker.name}" को हटाना चाहते हैं?\n\nहटाने के बाद इस कारीगर का विवरण सूची से हट जाएगा।`)) {
-          this.store.deleteWorker(workerId);
+        if (worker && confirm(`क्या "${worker.name}" अब इस टीम में काम नहीं करते?\n\nकारीगर पुराने खातों में रहेगा। खाता और हाजिरी सुरक्षित रहेंगे।`)) {
+          this.store.archiveWorker(workerId);
           this.closeModals();
           this.populateSelects();
           this.commit();
@@ -3694,8 +3694,8 @@ class App {
       btnDelWorkerInside.addEventListener('click', () => {
         const workerId = document.getElementById('editWorkerId').value;
         const worker = this.store.getWorker(workerId);
-        if (worker && confirm(`क्या आप सच में कारीगर "${worker.name}" को हटाना चाहते हैं?`)) {
-          this.store.deleteWorker(workerId);
+        if (worker && confirm(`क्या "${worker.name}" अब इस टीम में काम नहीं करते?\n\nउनका पुराना हिसाब और हाजिरी सुरक्षित रहेगी।`)) {
+          this.store.archiveWorker(workerId);
           this.closeModals();
           this.populateSelects();
           this.commit();
@@ -5626,7 +5626,7 @@ class App {
                 ${t.type === 'cash' ? '💵 नकद' : (t.type === 'recharge' ? '📱 रिचार्ज' : t.type)}
               </span>
             </td>
-            <td>${t.note || '-'}</td>
+            <td>${esc(t.note || '-')}</td>
             <td style="text-align: right; font-weight: 700; color: #38bdf8;">₹${(t.amount || 0).toLocaleString('en-IN')}</td>
             <td style="text-align: center; white-space: nowrap;">
               <button class="btn-icon-action btn-edit-tx" data-edit-tx="${t.id}" title="सुधारें">✏️</button>
@@ -5654,19 +5654,12 @@ class App {
           const d = new Date(h.date);
           const dayName = isNaN(d.getTime()) ? '' : hindiDayNames[d.getDay()];
           let statusBadge = '<span class="tag-badge" style="background:rgba(239,68,68,0.2);color:#f87171;">🔴 गैरहाजिर (A)</span>';
-          let dayEarned = 0;
           if (h.status === 1.0) {
             statusBadge = '<span class="tag-badge" style="background:rgba(16,185,129,0.2);color:#34d399;">🟢 पूरा दिन (1.0)</span>';
-            dayEarned = worker.dailyRate || 0;
           } else if (h.status === 0.5) {
             statusBadge = '<span class="tag-badge" style="background:rgba(245,158,11,0.2);color:#fbbf24;">🟡 आधा दिन (0.5)</span>';
-            dayEarned = (worker.dailyRate || 0) * 0.5;
           }
-          if (h.otHours > 0) {
-            dayEarned += (h.otHours * ((worker.dailyRate || 0) / 8));
-          }
-
-          const earnedDisplay = ledger.isTheka ? 'ठेके में शामिल' : `₹${Math.round(dayEarned).toLocaleString('en-IN')}`;
+          const earnedDisplay = h.contractType === 'theka' ? 'ठेके में शामिल' : `₹${Math.round(h.earned).toLocaleString('en-IN')}`;
 
           return `
             <tr>

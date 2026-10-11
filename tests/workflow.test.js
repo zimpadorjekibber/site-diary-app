@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { attendanceSummary, attendanceWorkers, validatePayment } from '../src/workflow-model.js';
+
+test('quantity-only supplies can be recorded without inventing a cost', () => {
+  const draft={targetType:'group',tradeId:'mason',date:'2026-09-17',type:'ration',amount:0,rationItem:'Rice',quantity:'10 kg'};
+  assert.equal(validatePayment(draft,[],[{id:'mason'}],'2026-09-17'),null);
+  assert.equal(validatePayment({...draft,type:'cash'},[],[{id:'mason'}],'2026-09-17'),'amount');
+  assert.equal(validatePayment({...draft,quantity:''},[],[{id:'mason'}],'2026-09-17'),'amount');
+  assert.equal(validatePayment({...draft,type:'cylinder',rationItem:''},[],[{id:'mason'}],'2026-09-17'),null);
+});
 import { Store } from '../src/storage.js';
 
 test('pending attendance never counts as an absence or completed work', () => {

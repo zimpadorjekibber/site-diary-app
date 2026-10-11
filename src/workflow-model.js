@@ -40,7 +40,9 @@ export function attendanceWorkers(workers, trades) {
 }
 
 export function validatePayment(draft, workers, trades, today) {
-  if (!Number.isFinite(Number(draft.amount)) || Number(draft.amount) <= 0) return 'amount';
+  const amount = Number(draft.amount);
+  const quantityOnly = ['ration','cylinder','material'].includes(draft.type) && String(draft.quantity || '').trim() && (draft.type === 'cylinder' || String(draft.rationItem || '').trim());
+  if (!Number.isFinite(amount) || amount < 0 || (amount === 0 && !quantityOnly)) return 'amount';
   const date = new Date(`${draft.date}T12:00:00Z`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.date || '') || !Number.isFinite(date.getTime()) || date.toISOString().slice(0,10) !== draft.date || draft.date > today) return 'date';
   if (draft.targetType === 'individual' && !workers.some(w => w.id === draft.workerId)) return 'worker';

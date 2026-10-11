@@ -40,6 +40,9 @@ jobs:
       - name: Build web application
         run: npm run build
 
+      - name: Check ledger calculations and record recovery
+        run: node --test tests/*.test.js
+
       - name: Sync Capacitor Android
         run: npx cap sync android
 

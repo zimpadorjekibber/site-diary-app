@@ -1,5 +1,6 @@
 import { getTodayString, getTxTypeLabel } from './storage.js';
 import { attendanceSummary, attendanceWorkers, validatePayment, transactionHistory, filterRecipient } from './workflow-model.js';
+import { installExperience, renderExperience } from './experience.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money = n => `₹${Number(n || 0).toLocaleString('en-IN')}`;
@@ -19,6 +20,7 @@ export class Workflow {
     this.recipientMode = 'all';
     this.recipientId = '';
     this.installShell();
+    installExperience(this);
     this.bind();
   }
   t(hi, en) { return this.app.currentLang === 'en' ? en : hi; }
@@ -89,6 +91,7 @@ export class Workflow {
       input.placeholder = this.t('नाम या ट्रेड से खोजें…','Search by name or trade…'); input.setAttribute('aria-label', input.placeholder);
     }
     this.renderHome(); this.renderAccounts(); this.renderReview();
+    renderExperience(this);
     if (document.getElementById('modalHistory').classList.contains('open')) this.renderHistoryResults();
   }
   renderHistoryDirectory() {
@@ -96,12 +99,12 @@ export class Workflow {
     document.getElementById('timelineHistoryLinks').innerHTML = links;
     document.getElementById('historyDirectory').innerHTML = `<h3>${this.t('पुराना रिकॉर्ड देखें','View past records')}</h3><p>${this.t('किसे, किस दिन, कितना पैसा या सामान दिया — तारीख के अनुसार देखें।','See who received money or supplies, on which date, and how much.')}</p><div class="history-shortcuts">${links}</div><h4>${this.t('ट्रेड चुनें','Choose a trade')}</h4><div class="history-shortcuts">${this.store.getTrades().map(t => `<button type="button" class="btn-secondary" data-history-kind="trade" data-history-id="${esc(t.id)}">${esc(t.name)} · ${this.t('रिकॉर्ड देखें','View history')}</button>`).join('')}</div>`;
     document.querySelectorAll('#accountList .account-row').forEach(row => {
-      const id = row.querySelector('[data-flow-pay]')?.dataset.flowPay;
+      const id = row.querySelector('[data-open-statement]')?.dataset.openStatement;
       if (id) row.insertAdjacentHTML('beforeend', `<button type="button" class="btn-secondary account-history" data-history-kind="individual" data-history-id="${esc(id)}">${this.t('कब-कितना दिया देखें','View payment history')}</button>`);
     });
   }
   filterTimeline(txs) {
-    const people = this.recipientMode === 'trade' ? this.store.getTrades() : this.store.getWorkers();
+    const people = this.recipientMode === 'trade' ? this.store.getTrades() : this.store.getWorkers(null, true);
     const recipients = people.map(p => ({ id: p.id, name: p.name }));
     if (this.recipientMode === 'individual') for (const tx of this.store.getTransactions()) {
       if (tx.targetType !== 'group' && tx.workerId && !recipients.some(p => p.id === tx.workerId)) recipients.push({id: tx.workerId, name: (tx.workerName || this.t('पुराना कारीगर','Former worker')) + this.t(' (हटाया गया)',' (removed)')});
@@ -111,11 +114,11 @@ export class Workflow {
       this.recipientMode = 'all'; this.recipientId = '';
     }
     if (this.recipientId && !recipients.some(p => p.id === this.recipientId)) this.recipientId = '';
-    document.getElementById('timelineRecipientFilters').innerHTML = `<label>${this.t('किसका रिकॉर्ड देखें?','Whose records?')}<select id="timelineRecipientMode">${[['all',this.t('सभी — Individual और Trade','All — Individual and Trade')],['individual',this.t('Individual — कारीगर को दिया','Individual — given to a worker')],['trade',this.t('Trade — एक ट्रेड का पूरा खर्च','Trade — everything spent on one trade')]].map(([value,label]) => `<option value="${value}" ${value === this.recipientMode ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>${this.recipientMode === 'trade' ? this.t('ट्रेड चुनें','Choose trade') : this.t('कारीगर चुनें','Choose individual')}<select id="timelineRecipientId" ${this.recipientMode === 'all' ? 'disabled' : ''}><option value="">${this.recipientMode === 'trade' ? this.t('सभी ट्रेड','All trades') : this.t('सभी कारीगर','All individuals')}</option>${recipients.map(p => `<option value="${esc(p.id)}" ${p.id === this.recipientId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>`;
+    document.getElementById('timelineRecipientFilters').innerHTML = `<label>${this.t('किसका रिकॉर्ड देखें?','Whose records?')}<select id="timelineRecipientMode">${[['all',this.t('सभी रिकॉर्ड','All records')],['individual',this.t('कारीगर का रिकॉर्ड','Worker records')],['trade',this.t('ट्रेड / समूह का पूरा खर्च','Trade / group expenses')]].map(([value,label]) => `<option value="${value}" ${value === this.recipientMode ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>${this.recipientMode === 'trade' ? this.t('ट्रेड चुनें','Choose trade') : this.t('कारीगर चुनें','Choose individual')}<select id="timelineRecipientId" ${this.recipientMode === 'all' ? 'disabled' : ''}><option value="">${this.recipientMode === 'trade' ? this.t('सभी ट्रेड','All trades') : this.t('सभी कारीगर','All individuals')}</option>${recipients.map(p => `<option value="${esc(p.id)}" ${p.id === this.recipientId ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>`;
     return filterRecipient(txs, this.recipientMode, this.recipientId, tx => tx.tradeId || this.store.getWorker(tx.workerId)?.tradeId);
   }
   openHistory(targetType, recipientId) {
-    const people = targetType === 'trade' ? this.store.getTrades() : this.store.getWorkers();
+    const people = targetType === 'trade' ? this.store.getTrades() : this.store.getWorkers(null, true);
     // Preserve access to entries belonging to a worker removed from the roster.
     const recipients = people.map(p => ({ id: p.id, name: p.name }));
     if (targetType === 'individual') for (const tx of this.store.getTransactions()) {
@@ -241,13 +244,13 @@ export class Workflow {
   }
 
   renderAccounts() {
-    const ledgers = this.store.getWorkers().map(w=>this.store.getWorkerLedger(w.id));
+    const ledgers = this.store.getWorkers(null, true).map(w=>this.store.getWorkerLedger(w.id));
     const due = ledgers.reduce((n,l)=>n+Math.max(0,l.balanceDue),0);
     const advance = ledgers.reduce((n,l)=>n+Math.max(0,-l.balanceDue),0);
     document.getElementById('accountOverview').innerHTML = `<div class="flow-page-heading"><div><span class="flow-eyebrow">${this.t('टीम का पूरा हिसाब','YOUR TEAM’S ACCOUNTS')}</span><h2>${this.t('कारीगर खाता','Worker accounts')}</h2><p>${this.t('नाम खोजें। बकाया देखें। यहीं से भुगतान लिखें।','Find a person. See their balance. Record a payment.')}</p></div><button class="btn-primary" data-flow="worker">${this.t('+ कारीगर जोड़ें','+ Add worker')}</button></div><div class="account-metrics"><div><small>${this.t('कुल कारीगर / सप्लायर','Workers / suppliers')}</small><strong>${ledgers.length}</strong></div><div><small>${this.t('देना बाकी','Balance due')}</small><strong>${money(due)}</strong></div><div><small>${this.t('दिया हुआ अतिरिक्त / एडवांस','Extra paid / advance')}</small><strong>${money(advance)}</strong></div></div>`;
-    document.getElementById('accountFilters').innerHTML = [['all',this.t('सभी','All')],['due',this.t('बकाया','Due')],['advance',this.t('एडवांस','Advance')]].map(([v,l])=>`<button class="flow-filter ${this.accountFilter===v?'active':''}" data-account-filter="${v}" aria-pressed="${this.accountFilter===v}">${l}</button>`).join('');
-    const shown = ledgers.filter(l=>`${l.worker.name} ${this.store.getTrade(l.worker.tradeId).name}`.toLocaleLowerCase().includes(this.accountQuery.toLocaleLowerCase()) && (this.accountFilter==='all'||this.accountFilter==='due'&&l.balanceDue>0||this.accountFilter==='advance'&&l.balanceDue<0));
-    document.getElementById('accountList').innerHTML = shown.length ? shown.map(l=>`<article class="account-row"><span class="person-initial">${esc(l.worker.name.slice(0,1))}</span><div class="account-person"><button class="flow-worker-name" data-open-statement="${esc(l.worker.id)}">${esc(l.worker.name)}</button><small>${esc(this.store.getTrade(l.worker.tradeId).name)}</small></div><div class="account-balance"><strong>${money(Math.abs(l.balanceDue))}</strong><small>${l.balanceDue<0?this.t('एडवांस दिया','Advance paid'):this.t('देना बाकी','Due')}</small></div><button class="btn-secondary" data-flow-pay="${esc(l.worker.id)}">${this.t('भुगतान','Pay')}</button></article>`).join('') : `<div class="onboarding-empty"><h3>${this.t('कोई खाता नहीं मिला','No accounts found')}</h3><p>${this.t('खोज बदलें या टीम में नया कारीगर जोड़ें।','Change your search or add a worker to your team.')}</p><button class="btn-primary" data-flow="worker">${this.t('+ कारीगर जोड़ें','+ Add worker')}</button></div>`;
+    document.getElementById('accountFilters').innerHTML = [['all',this.t('टीम','Team')],['due',this.t('बकाया','Due')],['advance',this.t('एडवांस','Advance')],['archived',this.t('पुराने कारीगर','Archived')]].map(([v,l])=>`<button class="flow-filter ${this.accountFilter===v?'active':''}" data-account-filter="${v}" aria-pressed="${this.accountFilter===v}">${l}</button>`).join('');
+    const shown = ledgers.filter(l=>`${l.worker.name} ${this.store.getTrade(l.worker.tradeId).name}`.toLocaleLowerCase().includes(this.accountQuery.toLocaleLowerCase()) && (this.accountFilter==='all'&&!l.worker.archivedAt||this.accountFilter==='archived'&&!!l.worker.archivedAt||this.accountFilter==='due'&&l.balanceDue>0||this.accountFilter==='advance'&&l.balanceDue<0));
+    document.getElementById('accountList').innerHTML = shown.length ? shown.map(l=>`<article class="account-row"><span class="person-initial">${esc(l.worker.name.slice(0,1))}</span><div class="account-person"><button class="flow-worker-name" data-open-statement="${esc(l.worker.id)}">${esc(l.worker.name)}</button><small>${esc(this.store.getTrade(l.worker.tradeId).name)}</small></div><div class="account-balance"><strong>${money(Math.abs(l.balanceDue))}</strong><small>${l.balanceDue<0?this.t('एडवांस दिया','Advance paid'):this.t('देना बाकी','Due')}</small></div><button class="btn-secondary" ${l.worker.archivedAt?'data-restore-worker':'data-flow-pay'}="${esc(l.worker.id)}">${l.worker.archivedAt?this.t('टीम में वापस','Restore'):this.t('भुगतान','Pay')}</button></article>`).join('') : `<div class="onboarding-empty"><h3>${this.t('कोई खाता नहीं मिला','No accounts found')}</h3><p>${this.t('खोज बदलें या टीम में नया कारीगर जोड़ें।','Change your search or add a worker to your team.')}</p><button class="btn-primary" data-flow="worker">${this.t('+ कारीगर जोड़ें','+ Add worker')}</button></div>`;
     this.renderHistoryDirectory();
   }
   renderReview() {
@@ -256,32 +259,33 @@ export class Workflow {
     document.getElementById('dayReview').innerHTML = `<div class="flow-page-heading"><div><span class="flow-eyebrow">${this.t('दिन पूरा करने से पहले','BEFORE YOU FINISH')}</span><h2>${this.t('एक बार हिसाब देख लें।','Let’s wrap up the day.')}</h2><p>${this.t('हाजिरी जाँचें, खर्च मिलाएं और नीचे की पर्ची डायरी में लिख लें।','Check attendance, review expenses, then copy the slip into your diary.')}</p></div></div><div class="review-grid"><button data-flow="attendance" class="review-item ${s.pending?'needs-attention':''}"><span>${s.pending?'○':'✓'}</span><div><strong>${this.t('हाजिरी की जाँच','Attendance check')}</strong><small>${s.pending?this.t(`${s.pending} कारीगर बाकी — पूरा करें`,`${s.pending} workers pending — complete them`):this.t(`${s.marked} कारीगर दर्ज`,`${s.marked} workers recorded`)}</small></div>→</button><button data-flow="transactions" class="review-item"><span>₹</span><div><strong>${money(total)}</strong><small>${this.t(`${txs.length} खर्च / भुगतान एंट्री — देखें`,`${txs.length} expense / payment entries — review`)}</small></div>→</button></div>`;
   }
   openPayment(workerId = '') {
-    this.draft = {targetType:'individual',workerId,tradeId:'',type:'cash',amount:'',date:getTodayString(),note:''};
+    this.draft = {targetType:'individual',workerId,tradeId:'',type:'cash',amount:'',date:getTodayString(),note:'',rationItem:'',quantity:''};
     this.paymentStep = workerId ? 1 : 0;
     this.renderPayment(); document.getElementById('modalFlowPayment').classList.add('open');
   }
   renderPayment() {
     const d = this.draft, step = this.paymentStep;
     document.getElementById('flowPaymentTitle').textContent = this.t('खर्च / भुगतान दर्ज करें','Record an expense / payment');
-    document.getElementById('paymentSteps').innerHTML = `<ol class="payment-steps">${[this.t('किसके लिए','Recipient'),this.t('कितना','Amount'),this.t('जाँच और सेव','Review & save')].map((t,i)=>`<li class="${i===step?'active':i<step?'done':''}" ${i===step?'aria-current="step"':''}><span>${i<step?'✓':i+1}</span>${t}</li>`).join('')}</ol>`;
+    document.getElementById('paymentSteps').innerHTML = `<ol class="payment-steps">${[this.t('किसके लिए','Recipient'),this.t('रकम / सामान','Details'),this.t('जाँच और सेव','Review & save')].map((t,i)=>`<li class="${i===step?'active':i<step?'done':''}" ${i===step?'aria-current="step"':''}><span>${i<step?'✓':i+1}</span>${t}</li>`).join('')}</ol>`;
     const box = document.getElementById('paymentBody');
     if (step===0) {
       box.innerHTML = `<h4>${this.t('यह खर्च किसके नाम लिखना है?','Who is this payment for?')}</h4><div class="payment-targets"><button class="${d.targetType==='individual'?'selected':''}" data-payment-target="individual">${icon('team')}<strong>${this.t('एक कारीगर','A worker')}</strong><small>${this.t('नकद, एडवांस या निजी खर्च','Cash, advance or personal expense')}</small></button><button class="${d.targetType==='group'?'selected':''}" data-payment-target="group"><span>▦</span><strong>${this.t('साइट / पूरा ट्रेड','Site / whole trade')}</strong><small>${this.t('राशन, सामान या साइट खर्च','Kitchen, material or site expense')}</small></button></div><label class="form-label" for="flowRecipient">${d.targetType==='individual'?this.t('कारीगर चुनें','Choose a worker'):this.t('ट्रेड चुनें','Choose a trade')}</label><select class="form-select" id="flowRecipient"><option value="">${this.t('चुनें…','Choose…')}</option>${(d.targetType==='individual'?this.store.getWorkers():this.store.getTrades()).map(w=>`<option value="${esc(w.id)}" ${(d.targetType==='individual'?d.workerId:d.tradeId)===w.id?'selected':''}>${esc(w.name)}</option>`).join('')}</select>${d.targetType==='individual'?`<label class="form-label payment-search-label" for="paymentWorkerSearch">${this.t('नाम से जल्दी ढूँढें','Find a worker by name')}</label><input id="paymentWorkerSearch" class="form-input" type="search" placeholder="${this.t('कारीगर का नाम','Worker name')}" />`:''}<div class="payment-help">${this.t('नाम नहीं है? पहले टीम में कारीगर जोड़ें।','Name missing? Add the worker to your team first.')} <button class="flow-link" data-flow="paymentAddWorker">${this.t('+ जोड़ें','+ Add')}</button></div><p class="flow-error" id="paymentError" role="alert"></p><div class="modal-actions"><button class="btn-primary" data-payment-next>${this.t('आगे बढ़ें','Continue')} →</button></div>`;
     } else if (step===1) {
       const recipient = d.targetType==='individual'?this.store.getWorker(d.workerId):this.store.getTrade(d.tradeId);
-      box.innerHTML = `<div class="payment-recipient"><span class="person-initial">${esc(recipient?.name?.slice(0,1))}</span><div><small>${this.t('इनके नाम दर्ज होगा','Recording against')}</small><strong>${esc(recipient?.name)}</strong></div><button class="flow-link" data-payment-back>${this.t('बदलें','Change')}</button></div><form id="flowAmountForm"><label class="form-label" for="flowAmount">${this.t('कुल रकम (₹)','Total amount (₹)')}</label><input class="form-input flow-amount" id="flowAmount" type="number" inputmode="decimal" min="0.01" step="0.01" required value="${esc(d.amount)}" placeholder="0" /><div class="amount-presets">${[100,500,1000,2000].map(n=>`<button type="button" data-payment-amount="${n}">${money(n)}</button>`).join('')}</div><div class="payment-fields"><div><label class="form-label" for="flowType">${this.t('खर्च का प्रकार','Expense type')}</label><select id="flowType" class="form-select">${[['cash',this.t('नकद / पेशगी','Cash / advance')],['ration',this.t('राशन','Kitchen / ration')],['material',this.t('सामान','Material')],['diesel',this.t('डीजल','Diesel')],['recharge',this.t('रिचार्ज','Recharge')],['other',this.t('अन्य','Other')]].map(([v,l])=>`<option value="${v}" ${d.type===v?'selected':''}>${l}</option>`).join('')}</select></div><div><label class="form-label" for="flowDate">${this.t('तारीख','Date')}</label><input class="form-input" id="flowDate" type="date" required max="${getTodayString()}" value="${esc(d.date)}" /></div></div><label class="form-label" for="flowNote">${this.t('विवरण / सामान (वैकल्पिक)','Note / item (optional)')}</label><input class="form-input" id="flowNote" value="${esc(d.note)}" placeholder="${this.t('जैसे: चावल 10 किलो','e.g. Rice, 10 kg')}" /><p class="flow-error" id="paymentError" role="alert"></p><div class="modal-actions"><button type="button" class="btn-secondary" data-payment-back>${this.t('पीछे','Back')}</button><button type="submit" class="btn-primary">${this.t('जाँचें','Review')} →</button></div></form>`;
+      box.innerHTML = `<div class="payment-recipient"><span class="person-initial">${esc(recipient?.name?.slice(0,1))}</span><div><small>${this.t('इनके नाम दर्ज होगा','Recording against')}</small><strong>${esc(recipient?.name)}</strong></div><button class="flow-link" data-payment-back>${this.t('बदलें','Change')}</button></div><form id="flowAmountForm"><label class="form-label" for="flowAmount">${this.t('कुल रकम (₹)','Total amount (₹)')}</label><input class="form-input flow-amount" id="flowAmount" type="number" inputmode="decimal" min="0" step="0.01" required value="${esc(d.amount)}" placeholder="0" /><div class="amount-presets">${[100,500,1000,2000].map(n=>`<button type="button" data-payment-amount="${n}">${money(n)}</button>`).join('')}</div><div class="payment-fields"><div><label class="form-label" for="flowType">${this.t('खर्च का प्रकार','Expense type')}</label><select id="flowType" class="form-select">${[['cash',this.t('नकद / पेशगी','Cash / advance')],['ration',this.t('राशन','Kitchen / ration')],['cylinder',this.t('सिलेंडर','Cylinder')],['material',this.t('सामान','Material')],['diesel',this.t('डीजल','Diesel')],['recharge',this.t('रिचार्ज','Recharge')],['other',this.t('अन्य','Other')]].map(([v,l])=>`<option value="${v}" ${d.type===v?'selected':''}>${l}</option>`).join('')}</select></div><div><label class="form-label" for="flowDate">${this.t('तारीख','Date')}</label><input class="form-input" id="flowDate" type="date" required max="${getTodayString()}" value="${esc(d.date)}" /></div></div><div id="flowSupplyFields" class="payment-fields supply-fields" ${['ration','cylinder','material'].includes(d.type)?'':'hidden'}><p class="supply-hint">${this.t('सिर्फ सामान देना दर्ज करना है? रकम 0 भरें और सामान व मात्रा लिखें।','Recording supplies without a cost? Enter 0 and add the item and quantity.')}</p><div><label class="form-label" for="flowItem">${this.t('कौन सा सामान','Item name')}</label><input class="form-input" id="flowItem" value="${esc(d.rationItem)}" placeholder="${this.t('चावल, आटा, गैस…','Rice, flour, gas…')}" /></div><div><label class="form-label" for="flowQuantity">${this.t('कितनी मात्रा','Quantity')}</label><input class="form-input" id="flowQuantity" value="${esc(d.quantity)}" placeholder="${this.t('10 किलो / 1 सिलेंडर','10 kg / 1 cylinder')}" /></div></div><label class="form-label" for="flowNote">${this.t('नोट (वैकल्पिक)','Note (optional)')}</label><input class="form-input" id="flowNote" value="${esc(d.note)}" placeholder="${this.t('जैसे: चावल 10 किलो','e.g. Rice, 10 kg')}" /><p class="flow-error" id="paymentError" role="alert"></p><div class="modal-actions"><button type="button" class="btn-secondary" data-payment-back>${this.t('पीछे','Back')}</button><button type="submit" class="btn-primary">${this.t('जाँचें','Review')} →</button></div></form>`;
     } else {
       const worker = this.store.getWorker(d.workerId), recipient = d.targetType==='individual'?worker:this.store.getTrade(d.tradeId);
       const ledger = worker && d.targetType==='individual' ? this.store.getWorkerLedger(worker.id) : null;
-      box.innerHTML = `<div class="payment-review"><span class="flow-eyebrow">${this.t('सेव करने से पहले जाँच लें','CHECK BEFORE SAVING')}</span><h2>${money(d.amount)}</h2><strong>${esc(recipient?.name)}</strong><dl><div><dt>${this.t('तारीख','Date')}</dt><dd>${esc(d.date)}</dd></div><div><dt>${this.t('प्रकार','Type')}</dt><dd>${esc(this.paymentTypeLabel)}</dd></div><div><dt>${this.t('विवरण','Note')}</dt><dd>${esc(d.note || '—')}</dd></div>${ledger?`<div><dt>${this.t('इसके बाद शुद्ध बकाया','Balance after this entry')}</dt><dd>${money(ledger.balanceDue-Number(d.amount))}</dd></div>`:''}</dl><p>${this.t('यह हिसाब की एंट्री है। इससे बैंक से पैसा नहीं भेजा जाएगा।','This records a ledger entry. It does not transfer money.')}</p></div><p class="flow-error" id="paymentError" role="alert"></p><div class="modal-actions"><button class="btn-secondary" data-payment-back>${this.t('सुधारें','Edit')}</button><button class="btn-primary" data-payment-save>${this.t('✓ एंट्री सेव करें','✓ Save entry')}</button></div>`;
+      box.innerHTML = `<div class="payment-review"><span class="flow-eyebrow">${this.t('सेव करने से पहले जाँच लें','CHECK BEFORE SAVING')}</span><h2>${money(d.amount)}</h2><strong>${esc(recipient?.name)}</strong><dl><div><dt>${this.t('तारीख','Date')}</dt><dd>${esc(d.date)}</dd></div><div><dt>${this.t('प्रकार','Type')}</dt><dd>${esc(this.paymentTypeLabel)}</dd></div><div><dt>${this.t('विवरण','Note')}</dt><dd>${esc(d.note || '—')}</dd></div>${['ration','cylinder','material'].includes(d.type)?`<div><dt>${this.t('सामान / मात्रा','Item / quantity')}</dt><dd>${esc([d.rationItem,d.quantity].filter(Boolean).join(' · ') || '—')}</dd></div>`:''}${ledger?`<div><dt>${this.t('इसके बाद शुद्ध बकाया','Balance after this entry')}</dt><dd>${money(ledger.balanceDue-Number(d.amount))}</dd></div>`:''}</dl><p>${this.t('यह हिसाब की एंट्री है। इससे बैंक से पैसा नहीं भेजा जाएगा।','This records a ledger entry. It does not transfer money.')}</p></div><p class="flow-error" id="paymentError" role="alert"></p><div class="modal-actions"><button class="btn-secondary" data-payment-back>${this.t('सुधारें','Edit')}</button><button class="btn-primary" data-payment-save>${this.t('✓ एंट्री सेव करें','✓ Save entry')}</button></div>`;
     }
     const card = document.querySelector('#modalFlowPayment .modal-card');
     card.scrollTop = 0;
     if (document.getElementById('modalFlowPayment').classList.contains('open')) card.focus({preventScroll:true});
   }
   captureAmount() {
-    for (const [key,id] of [['amount','flowAmount'],['date','flowDate'],['note','flowNote'],['type','flowType']]) this.draft[key] = document.getElementById(id).value;
+    for (const [key,id] of [['amount','flowAmount'],['date','flowDate'],['note','flowNote'],['type','flowType'],['rationItem','flowItem'],['quantity','flowQuantity']]) this.draft[key] = document.getElementById(id).value.trim();
     this.paymentTypeLabel = document.getElementById('flowType').selectedOptions[0].textContent;
+    if (!['ration','cylinder','material'].includes(this.draft.type)) { this.draft.rationItem=''; this.draft.quantity=''; }
   }
   paymentError(message) { document.getElementById('paymentError').textContent = message; }
   bind() {
@@ -310,6 +314,7 @@ export class Workflow {
         this.renderHistoryResults();
       }
       if(e.target.id==='flowRecipient') this.draft[this.draft.targetType==='individual'?'workerId':'tradeId']=e.target.value;
+      if(e.target.id==='flowType') document.getElementById('flowSupplyFields').hidden = !['ration','cylinder','material'].includes(e.target.value);
     });
     document.addEventListener('submit',e=>{
       if(e.target.id!=='flowAmountForm') return;
@@ -320,6 +325,10 @@ export class Workflow {
     document.addEventListener('click', e => {
       const btn=e.target.closest('button'); if(!btn) return;
       const data=btn.dataset;
+      if(data.flowPay && this.store.getWorker(data.flowPay)?.archivedAt) {
+        this.app.showToast(this.t('भुगतान से पहले पुराने कारीगर को टीम में वापस लाएँ।','Restore this worker to the team before recording a payment.'));
+        return;
+      }
       if (data.historyKind) this.openHistory(data.historyKind, data.historyId);
       if (data.historyReset !== undefined && this.history) {
         for (const key of ['from', 'to', 'type']) {

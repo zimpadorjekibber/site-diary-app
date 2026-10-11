@@ -76,7 +76,7 @@ test('submitting does not disturb the marks, the reasons or the saved-at stamp',
   const savedAt = store.getHaziriSavedAt(DAY).savedAt;
 
   store.submitHaziri(DAY);
-  assert.deepEqual(store.getHaziri(DAY).w1, { status: 1, otHours: 2 });
+  assert.deepEqual(store.getHaziri(DAY).w1, { status: 1, otHours: 2, dailyRate: 600, otRate: 75, contractType: 'dihadi' });
   assert.equal(store.getHaziri(DAY).w2.reason, 'light nahi aayi');
   assert.equal(store.getHaziriSavedAt(DAY).savedAt, savedAt);
 });
