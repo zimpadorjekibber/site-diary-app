@@ -956,11 +956,11 @@ export class Store {
   // at a trade that no longer exists, so they showed up as "Unknown Trade" while
   // still being counted in every total.
   deleteTrade(id) {
-    const attached = this.getWorkers(id);
+    const attached = this.getWorkers(id, true);
     if (attached.length > 0) {
       return { ok: false, reason: 'has_workers', workers: attached };
     }
-    const transactions = (this.activeProject().transactions || []).filter(t => t.tradeId === id);
+    const transactions = [...this.getTransactions(), ...this.getDeletedTransactions()].filter(t => t.tradeId === id);
     if (transactions.length > 0) return { ok: false, reason: 'has_transactions', transactions };
     this.activeProject().trades = this.activeProject().trades.filter(t => t.id !== id);
     this.save();

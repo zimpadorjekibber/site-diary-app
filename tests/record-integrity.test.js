@@ -50,6 +50,18 @@ test('changing trade leaves previous payments in the original trade', () => {
   assert.equal(s.getWorker('w').tradeId,'painter');
 });
 
+test('trades referenced by archived workers or recoverable entries cannot be removed', () => {
+  const s=ledger();
+  s.archiveWorker('w');
+  assert.equal(s.deleteTrade('mason').reason,'has_workers');
+  s.addTransaction({date:'2026-09-20',tradeId:'painter',targetType:'group',type:'ration',amount:100});
+  const tx=s.getTransactions().find(t=>t.tradeId==='painter');
+  s.deleteTransaction(tx.id);
+  assert.equal(s.deleteTrade('painter').reason,'has_transactions');
+  assert.equal(s.restoreTransaction(tx.id),true);
+  assert.equal(s.getTrade('painter').name,'Painter');
+});
+
 test('archiving hides a worker from active attendance without losing the account or monthly history', () => {
   const s=ledger();
   s.archiveWorker('w');
