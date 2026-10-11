@@ -1,6 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Store } from '../src/storage.js';
+import { transactionRecipients } from '../src/workflow-model.js';
+
+test('editing a past payment keeps its recipient after archiving or changing trades', () => {
+  const workers=[{id:'old',name:'Former worker',tradeId:'painter',archivedAt:1},{id:'other',name:'Active worker',tradeId:'mason'}];
+  const choices=transactionRecipients(workers,'mason',{workerId:'old',tradeId:'mason'});
+  assert.equal(choices.find(w=>w.id==='old').name,'Former worker');
+  assert.equal(transactionRecipients(workers,'painter',{workerId:'other'})[0].id,'other');
+  assert.equal(transactionRecipients(workers,'mason',{workerId:'removed',workerName:'Saved name'}).find(w=>w.id==='removed').name,'Saved name');
+  assert.equal(transactionRecipients(workers,'mason',{workerId:'other'}).some(w=>w.id==='old'),false);
+});
 
 function ledger() {
   return new Store({persist:false, data:{projects:[{

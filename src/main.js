@@ -10,6 +10,7 @@ import { translations } from './i18n.js';
 import { LendingLock } from './lending-lock.js';
 import { initModalUX } from './modal-ux.js';
 import { Workflow } from './workflow.js';
+import { transactionRecipients } from './workflow-model.js';
 import { BackNav } from './back.js';
 
 /* Every list in this app is built with innerHTML from data a user typed — worker
@@ -3712,7 +3713,7 @@ class App {
         this.updateCylinderFields(true);
         const rationFields = document.getElementById('editRationFields');
         if (rationFields) {
-          rationFields.style.display = this.editTxType === 'ration' ? 'block' : 'none';
+          rationFields.style.display = ['ration', 'material'].includes(this.editTxType) ? 'block' : 'none';
         }
       });
     });
@@ -3754,8 +3755,8 @@ class App {
         const time = document.getElementById('editTxTime').value;
         const amount = Number(document.getElementById('editTxAmount').value) || 0;
         const note = document.getElementById('editTxNote').value;
-        const rationItem = this.editTxType === 'ration' ? document.getElementById('editTxRationItem').value : '';
-        let quantity = this.editTxType === 'ration' ? document.getElementById('editTxQuantity').value : '';
+        const rationItem = ['ration', 'material'].includes(this.editTxType) ? document.getElementById('editTxRationItem').value : '';
+        let quantity = ['ration', 'material'].includes(this.editTxType) ? document.getElementById('editTxQuantity').value : '';
         if (this.editTxType === 'cylinder') {
           const value = document.getElementById('editTxCylinderCount').value;
           const count = Number(value);
@@ -5843,7 +5844,7 @@ class App {
     const populateWorkerSelect = (tradeId, selectedWorkerId) => {
       const workerSelect = document.getElementById('editTxWorkerSelect');
       if (workerSelect) {
-        const workers = this.store.getWorkers(tradeId);
+        const workers = transactionRecipients(this.store.getWorkers(null, true), tradeId, tx);
         workerSelect.innerHTML = workers.map(w => `
           <option value="${w.id}" ${w.id === selectedWorkerId ? 'selected' : ''}>
             ${esc(w.name)} (${workerRoleLabel(w)})
@@ -5861,7 +5862,7 @@ class App {
     // Ration Fields
     const rationFields = document.getElementById('editRationFields');
     if (rationFields) {
-      rationFields.style.display = this.editTxType === 'ration' ? 'block' : 'none';
+      rationFields.style.display = ['ration', 'material'].includes(this.editTxType) ? 'block' : 'none';
     }
     const rationItemInput = document.getElementById('editTxRationItem');
     if (rationItemInput) rationItemInput.value = tx.rationItem || '';
