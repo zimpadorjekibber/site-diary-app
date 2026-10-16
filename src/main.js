@@ -170,7 +170,7 @@ class App {
     this.deviceId = getDeviceId();
     this.lastKnownRemoteStamp = 0;
     this.pendingRemoteData = null;
-    this.suppressNextSync = false;
+    this.applyingRemoteData = false;
     this.syncErrorMessage = null;
 
     // A write that cannot be persisted must reach the user, not just the console.
@@ -460,11 +460,21 @@ class App {
       }
     };
     this.store.save();
-    this.suppressNextSync = true; // rendering the result must not bounce it back
-    this.activeHaziriTradeId = null;   // the job may have changed under us
-    this.populateSelects();
-    this.renderProjectHeader();
-    this.renderAll();
+    /* Rendering the result must not bounce it back — but only while rendering.
+       This used to stay switched on afterwards, because nothing in the render
+       path syncs any more, so it ate the next real edit instead: that entry
+       never reached the cloud, and the next copy to arrive from there (another
+       phone, the MCP, or just reopening the app) replaced it. That is how a new
+       उधार entry vanished a while after it was saved. */
+    this.applyingRemoteData = true;
+    try {
+      this.activeHaziriTradeId = null;   // the job may have changed under us
+      this.populateSelects();
+      this.renderProjectHeader();
+      this.renderAll();
+    } finally {
+      this.applyingRemoteData = false;
+    }
     this.updateSyncIndicator('synced');
     this.showToast(this.currentLang === 'en'
       ? 'Updated from another device'
@@ -480,10 +490,7 @@ class App {
      changed, and is debounced so a burst of edits collapses into one write. */
   scheduleSync(reason = 'edit') {
     if (this.isCloudSyncBlocked()) return;
-    if (this.suppressNextSync) {
-      this.suppressNextSync = false;
-      return;
-    }
+    if (this.applyingRemoteData) return;
     const s = this.store.getSettings();
     if (!s.firebaseAutoSync || !isFirebaseReady()) return;
 
@@ -1527,13 +1534,20 @@ class App {
     if (title) title.textContent = this.lendingDirection === 'given' ? '📤 मैंने दिया' : '📥 मैंने लिया';
     const personLabel = document.getElementById('lendingPersonLabel');
     if (personLabel) {
-      personLabel.textContent = this.lendingDirection === 'given' ? 'किसको दिया? (नाम)' : 'किससे लिया? (नाम)';
+      personLabel.textContent = this.lendingDirection === 'given' ? 'किसको दिया?' : 'किससे लिया?';
     }
 
     ['lendingPerson', 'lendingPhone', 'lendingItem', 'lendingQty', 'lendingAmount', 'lendingNote']
       .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     const dateEl = document.getElementById('lendingDate');
     if (dateEl) dateEl.value = getTodayString();
+
+    // With nobody in the register yet there is nobody to pick, so the choice
+    // is not offered at all.
+    const hasPeople = this.renderLendingPersonChips() > 0;
+    const switcher = document.getElementById('lendingPersonModeSwitcher');
+    if (switcher) switcher.hidden = !hasPeople;
+    this.setLendingPersonMode(hasPeople ? 'existing' : 'new');
 
     this.clearLendingPhoto();
     this.renderLendingItemChips();
@@ -1565,6 +1579,38 @@ class App {
     box.innerHTML = names.map(n =>
       `<button type="button" class="suggest-chip" data-lend-item="${esc(n)}">${esc(n)}</button>`
     ).join('');
+  }
+
+  /** Returns how many people there are to pick from. */
+  renderLendingPersonChips() {
+    const box = document.getElementById('lendingPersonChips');
+    const people = this.store.getLendingPeople();
+    if (box) {
+      box.innerHTML = people.map(p =>
+        `<button type="button" class="suggest-chip" data-lend-person="${esc(p.name)}" data-lend-phone="${esc(p.phone)}">${esc(p.name)}</button>`
+      ).join('');
+    }
+    return people.length;
+  }
+
+  /* Both modes fill the same name box, so saving does not care which was used.
+     Switching clears it, so a name picked a moment ago cannot ride along. */
+  setLendingPersonMode(mode) {
+    this.lendingPersonMode = mode === 'new' ? 'new' : 'existing';
+    const isNew = this.lendingPersonMode === 'new';
+    document.querySelectorAll('#lendingPersonModeSwitcher .segment-btn').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-lend-person-mode') === this.lendingPersonMode);
+    });
+    const existingBox = document.getElementById('lendingExistingPerson');
+    const newBox = document.getElementById('lendingNewPerson');
+    if (existingBox) existingBox.hidden = isNew;
+    if (newBox) newBox.hidden = !isNew;
+    ['lendingPerson', 'lendingPhone'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    document.querySelectorAll('#lendingPersonChips .suggest-chip')
+      .forEach(c => c.classList.remove('is-picked'));
   }
 
   syncLendingKindFields() {
@@ -1618,6 +1664,21 @@ class App {
       const add = e.target.closest('[data-new-lending]');
       if (!this.lendingLock.unlocked) return;
       if (add) this.openLendingModal(add.getAttribute('data-new-lending'));
+
+      const personMode = e.target.closest('[data-lend-person-mode]');
+      if (personMode) this.setLendingPersonMode(personMode.getAttribute('data-lend-person-mode'));
+
+      // Picking a known person brings their number along; it stays editable,
+      // for someone whose number was never written down.
+      const pickPerson = e.target.closest('[data-lend-person]');
+      if (pickPerson) {
+        const name = document.getElementById('lendingPerson');
+        const phone = document.getElementById('lendingPhone');
+        if (name) name.value = pickPerson.getAttribute('data-lend-person');
+        if (phone) phone.value = pickPerson.getAttribute('data-lend-phone') || '';
+        document.querySelectorAll('#lendingPersonChips .suggest-chip')
+          .forEach(c => c.classList.toggle('is-picked', c === pickPerson));
+      }
 
       const pickItem = e.target.closest('[data-lend-item]');
       if (pickItem) {
@@ -1723,6 +1784,10 @@ class App {
 
     document.getElementById('btnSaveLending')?.addEventListener('click', () => {
       if (!this.lendingLock.unlocked) return;
+      if (this.lendingPersonMode === 'existing' && !document.getElementById('lendingPerson')?.value.trim()) {
+        alert('ऊपर सूची से नाम चुनें — या "➕ नया व्यक्ति" दबाकर नया नाम लिखें');
+        return;
+      }
       try {
         this.store.addLending({
           direction: this.lendingDirection,

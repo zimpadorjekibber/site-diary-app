@@ -756,8 +756,22 @@
         </div>
       </div>
 
+      <!-- Someone already in the register is picked, not typed again: retyping
+           a name invites a second spelling, and then one person reads as two. -->
       <div class="form-group">
-        <label class="form-label" for="lendingPerson" id="lendingPersonLabel">किसको दिया? (नाम)</label>
+        <label class="form-label" id="lendingPersonLabel">किसको दिया?</label>
+        <div class="segmented-control" id="lendingPersonModeSwitcher">
+          <button type="button" class="segment-btn active" data-lend-person-mode="existing">👤 पुराना व्यक्ति</button>
+          <button type="button" class="segment-btn" data-lend-person-mode="new">➕ नया व्यक्ति</button>
+        </div>
+      </div>
+
+      <div class="form-group" id="lendingExistingPerson">
+        <div class="suggest-chips" id="lendingPersonChips"></div>
+      </div>
+
+      <div class="form-group" id="lendingNewPerson">
+        <label class="form-label" for="lendingPerson">नाम:</label>
         <input type="text" id="lendingPerson" class="form-input" placeholder="जैसे: रामू काका" />
       </div>
 

@@ -4231,6 +4231,8 @@ body {
 .lending-password-dialog .form-label { margin-top: 16px; }
 .lending-password-error { color: #c62828; min-height: 1.5em; }
 #lendingPrivateContent[hidden], #lendingLocked[hidden] { display: none !important; }
+#lendingPersonModeSwitcher[hidden], #lendingExistingPerson[hidden], #lendingNewPerson[hidden] { display: none; }
+#lendingPersonChips { margin-top: 0; }
 
 /* Comfortable daily use: clear screen identity, reachable controls and sheets
    that stay within the keyboard's visible viewport on a phone. */

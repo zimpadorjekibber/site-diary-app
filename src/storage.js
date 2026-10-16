@@ -566,6 +566,24 @@ export class Store {
     return (this.data.lending || []).find(l => l.id === id) || null;
   }
 
+  /** Everyone already in the register, most recent first, so a repeat lender is
+   *  picked rather than typed again. Names match ignoring case and spaces at the
+   *  ends; the phone is the latest one given for that name. */
+  getLendingPeople() {
+    const people = new Map();
+    // The list is kept newest first (addLending unshifts).
+    (this.data.lending || []).forEach(l => {
+      const name = String(l.personName || '').trim();
+      if (!name) return;
+      const key = name.toLowerCase();
+      const phone = String(l.phone || '').trim();
+      const known = people.get(key);
+      if (!known) people.set(key, { name, phone });
+      else if (!known.phone && phone) known.phone = phone;
+    });
+    return [...people.values()];
+  }
+
   /**
    * @param {'given'|'taken'} direction  given = I lent it out, taken = I borrowed it.
    * @param {'item'|'money'} kind
